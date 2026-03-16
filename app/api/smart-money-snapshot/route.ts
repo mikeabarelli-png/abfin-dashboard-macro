@@ -40,6 +40,7 @@ type SnapshotPayload = {
 
 const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
 const ALPHA_BASE = "https://www.alphavantage.co/query";
+const MASSIVE_BASE = "https://api.polygon.io";
 
 const FRED_SERIES = {
   sp500: "SP500",
@@ -61,9 +62,7 @@ function toNumber(value: unknown): number | null {
 
 async function fetchJson(url: string) {
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
@@ -132,6 +131,51 @@ async function alphaQuote(symbol: string, key: string) {
   return toNumber(data?.["Global Quote"]?.["05. price"]);
 }
 
+// Massive stocks single-ticker snapshot:
+// GET /v2/snapshot/locale/us/markets/stocks/tickers/{stocksTicker}
+async function massiveStockSnapshot(key: string, ticker: string) {
+  const url =
+    `${MASSIVE_BASE}/v2/snapshot/locale/us/markets/stocks/tickers/${encodeURIComponent(
+      ticker,
+    )}?apiKey=${encodeURIComponent(key)}`;
+
+  const data = await fetchJson(url);
+
+  return (
+    toNumber(data?.ticker?.lastTrade?.p) ??
+    toNumber(data?.ticker?.day?.c) ??
+    toNumber(data?.ticker?.prevDay?.c)
+  );
+}
+
+// Massive indices snapshot collection:
+// GET /v3/snapshot/indices
+async function massiveIndicesSnapshot(key: string, tickers: string[]) {
+  const url =
+    `${MASSIVE_BASE}/v3/snapshot/indices` +
+    `?ticker.any_of=${encodeURIComponent(tickers.join(","))}` +
+    `&apiKey=${encodeURIComponent(key)}`;
+
+  const data = await fetchJson(url);
+
+  const results = Array.isArray(data?.results) ? data.results : [];
+  const map = new Map<string, number>();
+
+  for (const row of results) {
+    const ticker = row?.ticker;
+    const value =
+      toNumber(row?.value) ??
+      toNumber(row?.session?.close) ??
+      toNumber(row?.session?.value);
+
+    if (ticker && value !== null) {
+      map.set(ticker, value);
+    }
+  }
+
+  return map;
+}
+
 function movingAverage(values: number[], period: number) {
   if (values.length < period) return null;
   const slice = values.slice(0, period);
@@ -141,7 +185,7 @@ function movingAverage(values: number[], period: number) {
 export async function GET() {
   const fredKey = process.env.FRED_API_KEY;
   const alphaKey = process.env.ALPHA_VANTAGE_API_KEY;
-  const polygonKey = process.env.POLYGON_API_KEY;
+  const massiveKey = process.env.POLYGON_API_KEY;
 
   if (!fredKey || !alphaKey) {
     return NextResponse.json(
@@ -168,6 +212,8 @@ export async function GET() {
     fciResult,
     vtiDailyResult,
     vtiQuoteResult,
+    massiveVtiResult,
+    massiveIndicesResult,
   ] = await Promise.allSettled([
     fredSeries(FRED_SERIES.sp500, fredKey, 250),
     fredLatest(FRED_SERIES.tenYear, fredKey),
@@ -178,6 +224,10 @@ export async function GET() {
     fredLatest(FRED_SERIES.fci, fredKey),
     alphaDaily("VTI", alphaKey),
     alphaQuote("VTI", alphaKey),
+    massiveKey ? massiveStockSnapshot(massiveKey, "VTI") : Promise.resolve(null),
+    massiveKey
+      ? massiveIndicesSnapshot(massiveKey, ["I:SPX", "I:VIX"])
+      : Promise.resolve(new Map<string, number>()),
   ]);
 
   const spxSeries =
@@ -188,39 +238,23 @@ export async function GET() {
 
   const tenYear =
     tenYearResult.status === "fulfilled" ? tenYearResult.value : null;
-  if (tenYearResult.status === "rejected") {
-    diagnostics.push(`10Y failed: ${String(tenYearResult.reason)}`);
-  }
-
   const twoYear =
     twoYearResult.status === "fulfilled" ? twoYearResult.value : null;
-  if (twoYearResult.status === "rejected") {
-    diagnostics.push(`2Y failed: ${String(twoYearResult.reason)}`);
-  }
-
   const real10 =
     real10Result.status === "fulfilled" ? real10Result.value : null;
-  if (real10Result.status === "rejected") {
-    diagnostics.push(`Real 10Y failed: ${String(real10Result.reason)}`);
-  }
-
   const hy =
     hyResult.status === "fulfilled" ? hyResult.value : null;
-  if (hyResult.status === "rejected") {
-    diagnostics.push(`HY spread failed: ${String(hyResult.reason)}`);
-  }
-
   const dxy =
     dxyResult.status === "fulfilled" ? dxyResult.value : null;
-  if (dxyResult.status === "rejected") {
-    diagnostics.push(`DXY failed: ${String(dxyResult.reason)}`);
-  }
-
   const fci =
     fciResult.status === "fulfilled" ? fciResult.value : null;
-  if (fciResult.status === "rejected") {
-    diagnostics.push(`FCI failed: ${String(fciResult.reason)}`);
-  }
+
+  if (tenYearResult.status === "rejected") diagnostics.push(`10Y failed: ${String(tenYearResult.reason)}`);
+  if (twoYearResult.status === "rejected") diagnostics.push(`2Y failed: ${String(twoYearResult.reason)}`);
+  if (real10Result.status === "rejected") diagnostics.push(`Real 10Y failed: ${String(real10Result.reason)}`);
+  if (hyResult.status === "rejected") diagnostics.push(`HY spread failed: ${String(hyResult.reason)}`);
+  if (dxyResult.status === "rejected") diagnostics.push(`DXY failed: ${String(dxyResult.reason)}`);
+  if (fciResult.status === "rejected") diagnostics.push(`FCI failed: ${String(fciResult.reason)}`);
 
   const vtiDaily =
     vtiDailyResult.status === "fulfilled" ? vtiDailyResult.value : [];
@@ -234,8 +268,24 @@ export async function GET() {
     diagnostics.push(`VTI quote failed: ${String(vtiQuoteResult.reason)}`);
   }
 
+  const massiveVti =
+    massiveVtiResult.status === "fulfilled" ? massiveVtiResult.value : null;
+  if (massiveVtiResult.status === "rejected") {
+    diagnostics.push(`Massive VTI failed: ${String(massiveVtiResult.reason)}`);
+  }
+
+  const massiveIndices =
+    massiveIndicesResult.status === "fulfilled"
+      ? massiveIndicesResult.value
+      : new Map<string, number>();
+  if (massiveIndicesResult.status === "rejected") {
+    diagnostics.push(`Massive indices failed: ${String(massiveIndicesResult.reason)}`);
+  }
+
+  // SPX current + DMA
   if (spxSeries.length > 0) {
-    metrics.spx_price = Number(spxSeries[0].toFixed(2));
+    const spxCurrent = massiveIndices.get("I:SPX") ?? spxSeries[0];
+    metrics.spx_price = Number(spxCurrent.toFixed(2));
 
     const ma20 = movingAverage(spxSeries, 20);
     const ma50 = movingAverage(spxSeries, 50);
@@ -248,8 +298,10 @@ export async function GET() {
     if (ma200 !== null) metrics.spx_200dma = { level: ma200 };
   }
 
+  // VTI current + DMA
   if (vtiDaily.length > 0) {
-    metrics.vti_price = Number((vtiQuote ?? vtiDaily[0]).toFixed(2));
+    const vtiCurrent = massiveVti ?? vtiQuote ?? vtiDaily[0];
+    metrics.vti_price = Number(vtiCurrent.toFixed(2));
 
     const v20 = movingAverage(vtiDaily, 20);
     const v50 = movingAverage(vtiDaily, 50);
@@ -262,35 +314,32 @@ export async function GET() {
     if (v200 !== null) metrics.vti_200dma = { level: v200 };
   }
 
+  // VIX realtime if Massive returns it
+  const vixCurrent = massiveIndices.get("I:VIX");
+  if (vixCurrent !== undefined) {
+    metrics.vix = Number(vixCurrent.toFixed(2));
+  }
+
+  // Macro
   if (tenYear !== null && twoYear !== null) {
     metrics.yield_curve_10y_2y = Number((tenYear - twoYear).toFixed(2));
   }
-
   if (real10 !== null) {
     metrics.real_10y_yield = Number(real10.toFixed(2));
   }
-
   if (hy !== null) {
     metrics.hy_spread = Number(hy.toFixed(2));
   }
-
   if (dxy !== null) {
     metrics.dxy = Number(dxy.toFixed(2));
   }
-
   if (fci !== null) {
     metrics.fci = Number(fci.toFixed(2));
   }
 
-  if (polygonKey) {
-    diagnostics.push(
-      "POLYGON_API_KEY is set, but realtime Massive endpoints are temporarily disabled until we swap in the correct snapshot URLs."
-    );
-  }
-
   return NextResponse.json({
     asOf: new Date().toISOString(),
-    source: "LIVE_DAILY_MIXED",
+    source: massiveKey ? "LIVE_RT" : "LIVE_DAILY_MIXED",
     status: "Connected",
     metrics,
     diagnostics,
