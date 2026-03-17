@@ -15,8 +15,18 @@ export default function Page() {
 
     const fetchMarket = async () => {
       try {
-        const res = await fetch("/api/market", { cache: "no-store" });
-        const json = await res.json();
+        const res = await fetch(`/api/market?ts=${Date.now()}`, {
+          cache: "no-store",
+        });
+
+        const text = await res.text();
+
+        let json: AnyObj;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          throw new Error(`API returned non-JSON: ${text.slice(0, 120)}`);
+        }
 
         if (!mounted) return;
 
@@ -68,8 +78,6 @@ export default function Page() {
     return null;
   };
 
-  const hasLive = !!marketData && !feedError;
-
   const spxPrice = getNum(
     metrics.spx_price,
     metrics.spx,
@@ -77,42 +85,43 @@ export default function Page() {
     marketData?.spx
   );
 
-  const vixValue = getNum(
-    metrics.vix,
-    marketData?.vix
-  );
+  const vixValue = getNum(metrics.vix, marketData?.vix);
 
-  const spx20 = getNum(
-    metrics?.spx_20dma?.level,
-    metrics?.spx_20dma,
-    metrics?.dma20,
-    marketData?.spx_20dma?.level,
-    marketData?.spx_20dma
-  ) ?? 6822.68;
+  const spx20 =
+    getNum(
+      metrics?.spx_20dma?.level,
+      metrics?.spx_20dma,
+      metrics?.dma20,
+      marketData?.spx_20dma?.level,
+      marketData?.spx_20dma
+    ) ?? 6822.68;
 
-  const spx50 = getNum(
-    metrics?.spx_50dma?.level,
-    metrics?.spx_50dma,
-    metrics?.dma50,
-    marketData?.spx_50dma?.level,
-    marketData?.spx_50dma
-  ) ?? 6881.21;
+  const spx50 =
+    getNum(
+      metrics?.spx_50dma?.level,
+      metrics?.spx_50dma,
+      metrics?.dma50,
+      marketData?.spx_50dma?.level,
+      marketData?.spx_50dma
+    ) ?? 6881.21;
 
-  const spx100 = getNum(
-    metrics?.spx_100dma?.level,
-    metrics?.spx_100dma,
-    metrics?.dma100,
-    marketData?.spx_100dma?.level,
-    marketData?.spx_100dma
-  ) ?? 6841.88;
+  const spx100 =
+    getNum(
+      metrics?.spx_100dma?.level,
+      metrics?.spx_100dma,
+      metrics?.dma100,
+      marketData?.spx_100dma?.level,
+      marketData?.spx_100dma
+    ) ?? 6841.88;
 
-  const spx200 = getNum(
-    metrics?.spx_200dma?.level,
-    metrics?.spx_200dma,
-    metrics?.dma200,
-    marketData?.spx_200dma?.level,
-    marketData?.spx_200dma
-  ) ?? 6608.12;
+  const spx200 =
+    getNum(
+      metrics?.spx_200dma?.level,
+      metrics?.spx_200dma,
+      metrics?.dma200,
+      marketData?.spx_200dma?.level,
+      marketData?.spx_200dma
+    ) ?? 6608.12;
 
   const spxDailyPct = getNum(
     metrics?.spx_change_pct,
@@ -121,40 +130,45 @@ export default function Page() {
     marketData?.spx_change_pct
   );
 
-  const spxYtd = getNum(
-    metrics?.spx_ytd_pct,
-    metrics?.spx_ytd,
-    marketData?.spx_ytd_pct
-  ) ?? -2.13;
+  const spxYtd =
+    getNum(
+      metrics?.spx_ytd_pct,
+      metrics?.spx_ytd,
+      marketData?.spx_ytd_pct
+    ) ?? -2.13;
 
-  const spxTrend = getArr(
-    metrics?.spx_trend_14d,
-    metrics?.spx_14d,
-    metrics?.spx_history_14d,
-    marketData?.spx_trend_14d,
-    marketData?.spx_14d
-  ) ?? [
-    6946.13, 6908.86, 6878.88, 6881.62, 6816.63, 6869.5, 6830.71, 6740.02,
-    6795.99, 6781.48, 6775.8, 6672.62, 6632.19, 6699.38,
-  ];
+  const spxTrend =
+    getArr(
+      metrics?.spx_trend_14d,
+      metrics?.spx_14d,
+      metrics?.spx_history_14d,
+      marketData?.spx_trend_14d,
+      marketData?.spx_14d
+    ) ?? [
+      6946.13, 6908.86, 6878.88, 6881.62, 6816.63, 6869.5, 6830.71, 6740.02,
+      6795.99, 6781.48, 6775.8, 6672.62, 6632.19, 6699.38,
+    ];
 
-  const hySpread = getNum(
-    metrics?.hy_spread,
-    metrics?.high_yield_spread,
-    marketData?.hy_spread
-  ) ?? 3.28;
+  const hySpread =
+    getNum(
+      metrics?.hy_spread,
+      metrics?.high_yield_spread,
+      marketData?.hy_spread
+    ) ?? 3.28;
 
-  const yieldCurve = getNum(
-    metrics?.yield_curve_10y_2y,
-    metrics?.yield_curve,
-    marketData?.yield_curve_10y_2y
-  ) ?? 0.55;
+  const yieldCurve =
+    getNum(
+      metrics?.yield_curve_10y_2y,
+      metrics?.yield_curve,
+      marketData?.yield_curve_10y_2y
+    ) ?? 0.55;
 
-  const real10y = getNum(
-    metrics?.real_10y,
-    metrics?.real_10yr,
-    marketData?.real_10y
-  ) ?? 1.92;
+  const real10y =
+    getNum(
+      metrics?.real_10y,
+      metrics?.real_10yr,
+      marketData?.real_10y
+    ) ?? 1.92;
 
   const fmtWhole = (n: number) => Math.round(n).toLocaleString();
   const fmt1 = (n: number) => n.toFixed(1);
@@ -466,9 +480,7 @@ export default function Page() {
                     </div>
                   </div>
 
-                  {tile.label === "VIX" ? (
-                    <div className="hint">Double-click for detail</div>
-                  ) : null}
+                  {tile.label === "VIX" ? <div className="hint">Double-click for detail</div> : null}
                 </button>
               ))}
             </div>
@@ -631,16 +643,8 @@ export default function Page() {
               font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             }
 
-            .pageShell {
-              min-height: 100vh;
-              background: #0b0b2a;
-            }
-
-            .frame {
-              max-width: 1500px;
-              margin: 0 auto;
-              padding: 16px;
-            }
+            .pageShell { min-height: 100vh; background: #0b0b2a; }
+            .frame { max-width: 1500px; margin: 0 auto; padding: 16px; }
 
             .topBar {
               display: flex;
@@ -735,9 +739,7 @@ export default function Page() {
               gap: 8px;
             }
 
-            .stressGrid {
-              margin-top: 10px;
-            }
+            .stressGrid { margin-top: 10px; }
 
             .tile {
               background: #050a35;
@@ -783,9 +785,7 @@ export default function Page() {
               color: #fff;
             }
 
-            .stressValue {
-              margin-top: 10px;
-            }
+            .stressValue { margin-top: 10px; }
 
             .sparkWrap {
               margin-top: 6px;
@@ -861,9 +861,7 @@ export default function Page() {
               color: #fff8dc;
             }
 
-            .meterWrap {
-              margin-top: 12px;
-            }
+            .meterWrap { margin-top: 12px; }
 
             .meterTrack {
               position: relative;
@@ -1002,13 +1000,9 @@ export default function Page() {
               color: #e2e8f0;
             }
 
-            .bodyCopyRight {
-              text-align: right;
-            }
+            .bodyCopyRight { text-align: right; }
 
-            .vixBandWrap {
-              margin-top: 20px;
-            }
+            .vixBandWrap { margin-top: 20px; }
 
             .vixBandTrack {
               position: relative;
@@ -1159,18 +1153,11 @@ export default function Page() {
               padding: 16px;
             }
 
-            .actionHead {
-              color: #fbbf24;
-            }
-
-            .actionCopy {
-              color: #ecfdf5;
-            }
+            .actionHead { color: #fbbf24; }
+            .actionCopy { color: #ecfdf5; }
 
             @media (max-width: 1100px) {
-              .modalGrid {
-                grid-template-columns: 1fr;
-              }
+              .modalGrid { grid-template-columns: 1fr; }
             }
 
             @media (max-width: 900px) {
@@ -1187,9 +1174,7 @@ export default function Page() {
                 align-items: flex-start;
               }
 
-              .damage {
-                white-space: normal;
-              }
+              .damage { white-space: normal; }
 
               .trendGrid,
               .stressGrid {
