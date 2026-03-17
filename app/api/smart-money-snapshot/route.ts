@@ -42,7 +42,6 @@ type SnapshotPayload = {
 };
 
 const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
-const YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote";
 const YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart";
 
 const FRED_SERIES = {
@@ -95,44 +94,32 @@ async function fredLatest(series: string, key: string) {
   return values[0] ?? null;
 }
 
-async function yahooQuotes(symbols: string[]) {
-  const url =
-    `${YAHOO_QUOTE_URL}?symbols=${encodeURIComponent(symbols.join(","))}`;
-
-  const data = await fetchJson(url);
-  const rows = data?.quoteResponse?.result ?? [];
-
-  const map = new Map<string, number>();
-
-  for (const row of rows) {
-    const symbol = row?.symbol;
-    const price =
-      toNumber(row?.regularMarketPrice) ??
-      toNumber(row?.postMarketPrice) ??
-      toNumber(row?.preMarketPrice);
-
-    if (symbol && price !== null) {
-      map.set(symbol, price);
-    }
-  }
-
-  return map;
-}
-
-async function yahooHistory(symbol: string) {
+async function yahooChart(symbol: string, range = "1y", interval = "1d") {
   const url =
     `${YAHOO_CHART_URL}/${encodeURIComponent(symbol)}` +
-    `?range=1y&interval=1d&includePrePost=false`;
+    `?range=${encodeURIComponent(range)}` +
+    `&interval=${encodeURIComponent(interval)}` +
+    `&includePrePost=false`;
 
   const data = await fetchJson(url);
-
   const result = data?.chart?.result?.[0];
-  const closes = result?.indicators?.quote?.[0]?.close ?? [];
 
-  return closes
+  if (!result) {
+    throw new Error(`Missing chart result for ${symbol}`);
+  }
+
+  const metaPrice =
+    toNumber(result?.meta?.regularMarketPrice) ??
+    toNumber(result?.meta?.previousClose);
+
+  const closes = (result?.indicators?.quote?.[0]?.close ?? [])
     .map((v: unknown) => toNumber(v))
-    .filter((v: number | null): v is number => v !== null)
-    .reverse();
+    .filter((v: number | null): v is number => v !== null);
+
+  return {
+    price: metaPrice,
+    closes,
+  };
 }
 
 function movingAverage(values: number[], period: number) {
@@ -171,18 +158,18 @@ export async function GET() {
   const metrics: SnapshotMetrics = {};
 
   const [
-    yahooQuoteResult,
-    spxHistoryResult,
-    vtiHistoryResult,
+    spxChartResult,
+    vixChartResult,
+    vtiChartResult,
     tenYearResult,
     twoYearResult,
     real10Result,
     hyResult,
     fciResult,
   ] = await Promise.allSettled([
-    yahooQuotes(["^GSPC", "^VIX", "VTI"]),
-    yahooHistory("^GSPC"),
-    yahooHistory("VTI"),
+    yahooChart("^GSPC", "1y", "1d"),
+    yahooChart("^VIX", "5d", "1d"),
+    yahooChart("VTI", "1y", "1d"),
     fredLatest(FRED_SERIES.tenYear, fredKey),
     fredLatest(FRED_SERIES.twoYear, fredKey),
     fredLatest(FRED_SERIES.realTenYear, fredKey),
@@ -190,22 +177,22 @@ export async function GET() {
     fredLatest(FRED_SERIES.fci, fredKey),
   ]);
 
-  const quoteMap =
-    yahooQuoteResult.status === "fulfilled" ? yahooQuoteResult.value : new Map<string, number>();
-  if (yahooQuoteResult.status === "rejected") {
-    diagnostics.push(`Yahoo quotes failed: ${String(yahooQuoteResult.reason)}`);
+  const spxChart =
+    spxChartResult.status === "fulfilled" ? spxChartResult.value : null;
+  if (spxChartResult.status === "rejected") {
+    diagnostics.push(`Yahoo SPX chart failed: ${String(spxChartResult.reason)}`);
   }
 
-  const spxHistory =
-    spxHistoryResult.status === "fulfilled" ? spxHistoryResult.value : [];
-  if (spxHistoryResult.status === "rejected") {
-    diagnostics.push(`Yahoo SPX history failed: ${String(spxHistoryResult.reason)}`);
+  const vixChart =
+    vixChartResult.status === "fulfilled" ? vixChartResult.value : null;
+  if (vixChartResult.status === "rejected") {
+    diagnostics.push(`Yahoo VIX chart failed: ${String(vixChartResult.reason)}`);
   }
 
-  const vtiHistory =
-    vtiHistoryResult.status === "fulfilled" ? vtiHistoryResult.value : [];
-  if (vtiHistoryResult.status === "rejected") {
-    diagnostics.push(`Yahoo VTI history failed: ${String(vtiHistoryResult.reason)}`);
+  const vtiChart =
+    vtiChartResult.status === "fulfilled" ? vtiChartResult.value : null;
+  if (vtiChartResult.status === "rejected") {
+    diagnostics.push(`Yahoo VTI chart failed: ${String(vtiChartResult.reason)}`);
   }
 
   const tenYear =
@@ -238,27 +225,14 @@ export async function GET() {
     diagnostics.push(`FCI failed: ${String(fciResult.reason)}`);
   }
 
-  const spxPrice = quoteMap.get("^GSPC");
-  const vixPrice = quoteMap.get("^VIX");
-  const vtiPrice = quoteMap.get("VTI");
-
-  if (spxPrice !== undefined) {
-    metrics.spx_price = Number(spxPrice.toFixed(2));
+  if (spxChart?.price != null) {
+    metrics.spx_price = Number(spxChart.price.toFixed(2));
   }
-
-  if (vixPrice !== undefined) {
-    metrics.vix = Number(vixPrice.toFixed(2));
-  }
-
-  if (vtiPrice !== undefined) {
-    metrics.vti_price = Number(vtiPrice.toFixed(2));
-  }
-
-  if (spxHistory.length > 0) {
-    const ma20 = movingAverage(spxHistory, 20);
-    const ma50 = movingAverage(spxHistory, 50);
-    const ma100 = movingAverage(spxHistory, 100);
-    const ma200 = movingAverage(spxHistory, 200);
+  if (spxChart?.closes?.length) {
+    const ma20 = movingAverage(spxChart.closes, 20);
+    const ma50 = movingAverage(spxChart.closes, 50);
+    const ma100 = movingAverage(spxChart.closes, 100);
+    const ma200 = movingAverage(spxChart.closes, 200);
 
     if (ma20 !== null) metrics.spx_20dma = { level: ma20 };
     if (ma50 !== null) metrics.spx_50dma = { level: ma50 };
@@ -266,11 +240,18 @@ export async function GET() {
     if (ma200 !== null) metrics.spx_200dma = { level: ma200 };
   }
 
-  if (vtiHistory.length > 0) {
-    const ma20 = movingAverage(vtiHistory, 20);
-    const ma50 = movingAverage(vtiHistory, 50);
-    const ma100 = movingAverage(vtiHistory, 100);
-    const ma200 = movingAverage(vtiHistory, 200);
+  if (vixChart?.price != null) {
+    metrics.vix = Number(vixChart.price.toFixed(2));
+  }
+
+  if (vtiChart?.price != null) {
+    metrics.vti_price = Number(vtiChart.price.toFixed(2));
+  }
+  if (vtiChart?.closes?.length) {
+    const ma20 = movingAverage(vtiChart.closes, 20);
+    const ma50 = movingAverage(vtiChart.closes, 50);
+    const ma100 = movingAverage(vtiChart.closes, 100);
+    const ma200 = movingAverage(vtiChart.closes, 200);
 
     if (ma20 !== null) metrics.vti_20dma = { level: ma20 };
     if (ma50 !== null) metrics.vti_50dma = { level: ma50 };
