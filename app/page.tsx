@@ -15,7 +15,7 @@ export default function Page() {
 
     const fetchMarket = async () => {
       try {
-        const res = await fetch(`/api/market?ts=${Date.now()}`, {
+        const res = await fetch(`/api/smart-money-snapshot?ts=${Date.now()}`, {
           cache: "no-store",
         });
 
