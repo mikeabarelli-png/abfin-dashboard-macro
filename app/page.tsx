@@ -8,6 +8,7 @@ export default function Page() {
   const [showVixModal, setShowVixModal] = useState(false);
   const [marketData, setMarketData] = useState<AnyObj | null>(null);
   const [lastUpdated, setLastUpdated] = useState("");
+  const [feedError, setFeedError] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -15,13 +16,21 @@ export default function Page() {
     const fetchMarket = async () => {
       try {
         const res = await fetch("/api/market", { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
+
         if (!mounted) return;
+
+        if (!res.ok || json?.ok === false) {
+          setFeedError(json?.detail || json?.error || `HTTP ${res.status}`);
+          return;
+        }
+
         setMarketData(json);
+        setFeedError("");
         setLastUpdated(new Date().toLocaleTimeString());
-      } catch (err) {
-        console.error("Failed to fetch /api/market", err);
+      } catch (err: any) {
+        if (!mounted) return;
+        setFeedError(err?.message || "Unknown fetch error");
       }
     };
 
@@ -59,118 +68,111 @@ export default function Page() {
     return null;
   };
 
-  const spxPrice =
-    getNum(
-      metrics.spx_price,
-      metrics.spx,
-      marketData?.spx_price,
-      marketData?.spx
-    ) ?? 6699.38;
+  const hasLive = !!marketData && !feedError;
 
-  const vixValue =
-    getNum(
-      metrics.vix,
-      marketData?.vix
-    ) ?? 23.5;
+  const spxPrice = getNum(
+    metrics.spx_price,
+    metrics.spx,
+    marketData?.spx_price,
+    marketData?.spx
+  );
 
-  const spx20 =
-    getNum(
-      metrics?.spx_20dma?.level,
-      metrics?.spx_20dma,
-      metrics?.dma20,
-      marketData?.spx_20dma?.level,
-      marketData?.spx_20dma
-    ) ?? 6822.68;
+  const vixValue = getNum(
+    metrics.vix,
+    marketData?.vix
+  );
 
-  const spx50 =
-    getNum(
-      metrics?.spx_50dma?.level,
-      metrics?.spx_50dma,
-      metrics?.dma50,
-      marketData?.spx_50dma?.level,
-      marketData?.spx_50dma
-    ) ?? 6881.21;
+  const spx20 = getNum(
+    metrics?.spx_20dma?.level,
+    metrics?.spx_20dma,
+    metrics?.dma20,
+    marketData?.spx_20dma?.level,
+    marketData?.spx_20dma
+  ) ?? 6822.68;
 
-  const spx100 =
-    getNum(
-      metrics?.spx_100dma?.level,
-      metrics?.spx_100dma,
-      metrics?.dma100,
-      marketData?.spx_100dma?.level,
-      marketData?.spx_100dma
-    ) ?? 6841.88;
+  const spx50 = getNum(
+    metrics?.spx_50dma?.level,
+    metrics?.spx_50dma,
+    metrics?.dma50,
+    marketData?.spx_50dma?.level,
+    marketData?.spx_50dma
+  ) ?? 6881.21;
 
-  const spx200 =
-    getNum(
-      metrics?.spx_200dma?.level,
-      metrics?.spx_200dma,
-      metrics?.dma200,
-      marketData?.spx_200dma?.level,
-      marketData?.spx_200dma
-    ) ?? 6608.12;
+  const spx100 = getNum(
+    metrics?.spx_100dma?.level,
+    metrics?.spx_100dma,
+    metrics?.dma100,
+    marketData?.spx_100dma?.level,
+    marketData?.spx_100dma
+  ) ?? 6841.88;
 
-  const spxDailyPct =
-    getNum(
-      metrics?.spx_change_pct,
-      metrics?.spx_daily_change_pct,
-      metrics?.spx_day_pct,
-      marketData?.spx_change_pct
-    ) ?? -0.6;
+  const spx200 = getNum(
+    metrics?.spx_200dma?.level,
+    metrics?.spx_200dma,
+    metrics?.dma200,
+    marketData?.spx_200dma?.level,
+    marketData?.spx_200dma
+  ) ?? 6608.12;
 
-  const spxYtd =
-    getNum(
-      metrics?.spx_ytd_pct,
-      metrics?.spx_ytd,
-      marketData?.spx_ytd_pct
-    ) ?? -2.13;
+  const spxDailyPct = getNum(
+    metrics?.spx_change_pct,
+    metrics?.spx_daily_change_pct,
+    metrics?.spx_day_pct,
+    marketData?.spx_change_pct
+  );
 
-  const spxTrend =
-    getArr(
-      metrics?.spx_trend_14d,
-      metrics?.spx_14d,
-      metrics?.spx_history_14d,
-      marketData?.spx_trend_14d,
-      marketData?.spx_14d
-    ) ?? [
-      6946.13, 6908.86, 6878.88, 6881.62, 6816.63, 6869.5, 6830.71, 6740.02,
-      6795.99, 6781.48, 6775.8, 6672.62, 6632.19, 6699.38,
-    ];
+  const spxYtd = getNum(
+    metrics?.spx_ytd_pct,
+    metrics?.spx_ytd,
+    marketData?.spx_ytd_pct
+  ) ?? -2.13;
 
-  const hySpread =
-    getNum(
-      metrics?.hy_spread,
-      metrics?.high_yield_spread,
-      marketData?.hy_spread
-    ) ?? 3.28;
+  const spxTrend = getArr(
+    metrics?.spx_trend_14d,
+    metrics?.spx_14d,
+    metrics?.spx_history_14d,
+    marketData?.spx_trend_14d,
+    marketData?.spx_14d
+  ) ?? [
+    6946.13, 6908.86, 6878.88, 6881.62, 6816.63, 6869.5, 6830.71, 6740.02,
+    6795.99, 6781.48, 6775.8, 6672.62, 6632.19, 6699.38,
+  ];
 
-  const yieldCurve =
-    getNum(
-      metrics?.yield_curve_10y_2y,
-      metrics?.yield_curve,
-      marketData?.yield_curve_10y_2y
-    ) ?? 0.55;
+  const hySpread = getNum(
+    metrics?.hy_spread,
+    metrics?.high_yield_spread,
+    marketData?.hy_spread
+  ) ?? 3.28;
 
-  const real10y =
-    getNum(
-      metrics?.real_10y,
-      metrics?.real_10yr,
-      marketData?.real_10y
-    ) ?? 1.92;
+  const yieldCurve = getNum(
+    metrics?.yield_curve_10y_2y,
+    metrics?.yield_curve,
+    marketData?.yield_curve_10y_2y
+  ) ?? 0.55;
+
+  const real10y = getNum(
+    metrics?.real_10y,
+    metrics?.real_10yr,
+    marketData?.real_10y
+  ) ?? 1.92;
 
   const fmtWhole = (n: number) => Math.round(n).toLocaleString();
   const fmt1 = (n: number) => n.toFixed(1);
   const fmt2 = (n: number) => n.toFixed(2);
   const fmtSigned1 = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
 
-  const spxVs = (level: number) => ((spxPrice - level) / level) * 100;
+  const spxVs = (level: number) =>
+    spxPrice == null ? null : ((spxPrice - level) / level) * 100;
 
-  const dmaState = (pct: number, isLong = false) => {
+  const dmaState = (pct: number | null, isLong = false) => {
+    if (pct == null) return "Loading";
     if (pct < 0) return "Broken Below";
     if (isLong && pct <= 2) return "Testing Support";
     return "Holding Above";
   };
 
-  const dmaTone = (pct: number, isLong = false) => {
+  const dmaTone = (pct: number | null, isLong = false) => {
+    if (pct == null) return "neutral";
     if (pct < 0) return "danger";
     if (isLong && pct <= 2) return "warning";
     return "healthy";
@@ -180,10 +182,13 @@ export default function Page() {
     () => [
       {
         label: "S&P 500",
-        value: fmtWhole(spxPrice),
-        subline: `${spxDailyPct >= 0 ? "▲" : "▼"} ${Math.abs(spxDailyPct).toFixed(1)}% today`,
+        value: spxPrice != null ? fmtWhole(spxPrice) : "—",
+        subline:
+          spxDailyPct != null
+            ? `${spxDailyPct >= 0 ? "▲" : "▼"} ${Math.abs(spxDailyPct).toFixed(1)}% today`
+            : "Waiting for live price",
         ytd: `${spxYtd > 0 ? "+" : ""}${spxYtd.toFixed(2)}% YTD`,
-        tone: spxDailyPct >= 0 ? "healthy" : "danger",
+        tone: spxDailyPct != null ? (spxDailyPct >= 0 ? "healthy" : "danger") : "neutral",
         kind: "spx",
         trend: spxTrend,
       },
@@ -191,7 +196,10 @@ export default function Page() {
         label: "20-DMA",
         value: fmtWhole(spx20),
         status: dmaState(spxVs(spx20)),
-        subline: `SPX ${fmtSigned1(spxVs(spx20))} ${spxVs(spx20) >= 0 ? "above" : "below"}`,
+        subline:
+          spxVs(spx20) != null
+            ? `SPX ${fmtSigned1(spxVs(spx20)!)} ${spxVs(spx20)! >= 0 ? "above" : "below"}`
+            : "Waiting for live price",
         tone: dmaTone(spxVs(spx20)),
         kind: "ma",
       },
@@ -199,7 +207,10 @@ export default function Page() {
         label: "50-DMA",
         value: fmtWhole(spx50),
         status: dmaState(spxVs(spx50)),
-        subline: `SPX ${fmtSigned1(spxVs(spx50))} ${spxVs(spx50) >= 0 ? "above" : "below"}`,
+        subline:
+          spxVs(spx50) != null
+            ? `SPX ${fmtSigned1(spxVs(spx50)!)} ${spxVs(spx50)! >= 0 ? "above" : "below"}`
+            : "Waiting for live price",
         tone: dmaTone(spxVs(spx50)),
         kind: "ma",
       },
@@ -207,7 +218,10 @@ export default function Page() {
         label: "100-DMA",
         value: fmtWhole(spx100),
         status: dmaState(spxVs(spx100)),
-        subline: `SPX ${fmtSigned1(spxVs(spx100))} ${spxVs(spx100) >= 0 ? "above" : "below"}`,
+        subline:
+          spxVs(spx100) != null
+            ? `SPX ${fmtSigned1(spxVs(spx100)!)} ${spxVs(spx100)! >= 0 ? "above" : "below"}`
+            : "Waiting for live price",
         tone: dmaTone(spxVs(spx100)),
         kind: "ma",
       },
@@ -215,7 +229,10 @@ export default function Page() {
         label: "200-DMA",
         value: fmtWhole(spx200),
         status: dmaState(spxVs(spx200), true),
-        subline: `SPX ${fmtSigned1(spxVs(spx200))} ${spxVs(spx200) >= 0 ? "above" : "below"}`,
+        subline:
+          spxVs(spx200) != null
+            ? `SPX ${fmtSigned1(spxVs(spx200)!)} ${spxVs(spx200)! >= 0 ? "above" : "below"}`
+            : "Waiting for live price",
         tone: dmaTone(spxVs(spx200), true),
         kind: "ma",
       },
@@ -227,11 +244,12 @@ export default function Page() {
     () => [
       {
         label: "VIX",
-        value: fmt1(vixValue),
-        subline: vixValue >= 30 ? "Stress" : vixValue >= 20 ? "Warning" : "Normal",
+        value: vixValue != null ? fmt1(vixValue) : "—",
+        subline:
+          vixValue == null ? "Awaiting feed" : vixValue >= 30 ? "Stress" : vixValue >= 20 ? "Warning" : "Normal",
         scale: [0, 30, 100],
-        pos: Math.min((vixValue / 100) * 100, 100),
-        tone: vixValue >= 30 ? "danger" : vixValue >= 20 ? "warning" : "healthy",
+        pos: vixValue != null ? Math.min((vixValue / 100) * 100, 100) : 0,
+        tone: vixValue == null ? "neutral" : vixValue >= 30 ? "danger" : vixValue >= 20 ? "warning" : "healthy",
       },
       {
         label: "VIX / VXV",
@@ -290,7 +308,7 @@ export default function Page() {
 
   const vixPercentile = 90;
   const vixContextMax = 40;
-  const vixBarPos = Math.min((vixValue / vixContextMax) * 100, 100);
+  const vixBarPos = Math.min(((vixValue ?? 0) / vixContextMax) * 100, 100);
 
   const sparkline = (points: number[]) => {
     const w = 120;
@@ -324,6 +342,7 @@ export default function Page() {
   const badgeClass = (tone: string) => {
     if (tone === "warning") return "badge badge-warning";
     if (tone === "healthy") return "badge badge-healthy";
+    if (tone === "neutral") return "badge badge-neutral";
     return "badge badge-danger";
   };
 
@@ -349,9 +368,17 @@ export default function Page() {
             <h1 className="title">Prospect Market Dashboard</h1>
             <div className="meta">
               <div>Source: LIVE_YAHOO_FRED</div>
-              <div>{lastUpdated ? `Refreshed ${lastUpdated}` : "Loading live feed..."}</div>
+              <div>
+                {feedError
+                  ? "Live feed error"
+                  : lastUpdated
+                  ? `Refreshed ${lastUpdated}`
+                  : "Loading live feed..."}
+              </div>
             </div>
           </div>
+
+          {feedError ? <div className="errorBar">Live feed error: {feedError}</div> : null}
 
           <div className="connected">Connected</div>
 
@@ -399,8 +426,11 @@ export default function Page() {
             <div className="alertBox">
               <div className="alertTitle">200-DMA Proximity Alert — Immediate Watch</div>
               <div className="alertBody">
-                S&amp;P 500 is only {Math.abs(spxVs(spx200)).toFixed(1)}%{" "}
-                {spxVs(spx200) >= 0 ? "above" : "below"} its 200-DMA ({fmtWhole(spx200)}).
+                {spxPrice == null
+                  ? "Waiting for live S&P 500 price..."
+                  : `S&P 500 is only ${Math.abs(((spxPrice - spx200) / spx200) * 100).toFixed(1)}% ${
+                      spxPrice >= spx200 ? "above" : "below"
+                    } its 200-DMA (${fmtWhole(spx200)}).`}
               </div>
             </div>
           </section>
@@ -462,12 +492,18 @@ export default function Page() {
             <div className="modalGrid">
               <div className="modalCard">
                 <div className="smallHead">Current Read</div>
-                <div className="bigValue">{fmt1(vixValue)}</div>
+                <div className="bigValue">{vixValue != null ? fmt1(vixValue) : "—"}</div>
                 <div className="status status-warning">
-                  {vixValue >= 30 ? "Stress" : vixValue >= 20 ? "Elevated" : "Normal"}
+                  {vixValue == null ? "Awaiting feed" : vixValue >= 30 ? "Stress" : vixValue >= 20 ? "Elevated" : "Normal"}
                 </div>
                 <div className="bodyCopy">
-                  {vixValue >= 30 ? "High stress regime" : vixValue >= 20 ? "Elevated but not panic" : "Calm to normal"}
+                  {vixValue == null
+                    ? "No live VIX value available."
+                    : vixValue >= 30
+                    ? "High stress regime"
+                    : vixValue >= 20
+                    ? "Elevated but not panic"
+                    : "Calm to normal"}
                 </div>
 
                 <div className="vixBandWrap">
@@ -555,9 +591,11 @@ export default function Page() {
                       <div className="historyNote">Yen carry unwind — resolved in 2 weeks</div>
                     </div>
                     <div className="historyRow historyRowActive">
-                      <div className="historyNum historyNumActive">{fmt1(vixValue)}</div>
+                      <div className="historyNum historyNumActive">{vixValue != null ? fmt1(vixValue) : "—"}</div>
                       <div>Today</div>
-                      <div className="historyNote">Elevated but below danger zone</div>
+                      <div className="historyNote">
+                        {vixValue != null && vixValue >= 30 ? "High stress / danger zone" : "Elevated but below danger zone"}
+                      </div>
                     </div>
                     <div className="historyRow">
                       <div className="historyNum">20</div>
@@ -570,7 +608,7 @@ export default function Page() {
                 <div className="actionCard">
                   <div className="smallHead actionHead">Your Action</div>
                   <div className="bodyCopy actionCopy">
-                    {vixValue < 30
+                    {vixValue != null && vixValue < 30
                       ? "VIX is below 30. No dividend reinvestment restriction. Continue normal plan, but do not treat the tape as calm."
                       : "VIX is above 30. Pause all-new-equity-buying and treat volatility as a real portfolio constraint."}
                   </div>
@@ -627,6 +665,17 @@ export default function Page() {
               font-weight: 600;
               line-height: 1.35;
               color: #e2e8f0;
+            }
+
+            .errorBar {
+              margin-bottom: 12px;
+              border: 1px solid rgba(255, 79, 114, 0.5);
+              background: rgba(127, 29, 29, 0.45);
+              color: #fecdd3;
+              border-radius: 12px;
+              padding: 10px 14px;
+              font-size: 12px;
+              font-weight: 600;
             }
 
             .connected {
@@ -787,6 +836,7 @@ export default function Page() {
             .badge-danger { background: #ff4f72; color: #fff; }
             .badge-warning { background: #f6bf34; color: #111827; }
             .badge-healthy { background: #22c55e; color: #fff; }
+            .badge-neutral { background: #64748b; color: #fff; }
 
             .alertBox {
               margin-top: 14px;
@@ -1118,11 +1168,6 @@ export default function Page() {
             }
 
             @media (max-width: 1100px) {
-              .trendGrid,
-              .stressGrid {
-                grid-template-columns: repeat(5, minmax(0, 1fr));
-              }
-
               .modalGrid {
                 grid-template-columns: 1fr;
               }
