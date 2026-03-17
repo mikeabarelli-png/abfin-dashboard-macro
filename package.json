@@ -11,7 +11,8 @@
     "next": "^15.5.12",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "yahoo-finance2": "^3.13.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
