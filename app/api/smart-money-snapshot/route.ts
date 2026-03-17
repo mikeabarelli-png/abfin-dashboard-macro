@@ -23,11 +23,14 @@ type SnapshotMetrics = {
   hy_spread?: number | null;
   yield_curve_10y_2y?: number | null;
   real_10y_yield?: number | null;
-  dxy?: number | null;
   fci?: number | null;
 
-  small_large?: number | null;
-  financials_ratio?: number | null;
+  valuation_composite_sigma?: number | null;
+  buffet_indicator_sigma?: number | null;
+  cape_sigma?: number | null;
+  price_sales_sigma?: number | null;
+  mean_reversion_sigma?: number | null;
+  earnings_yield_gap_sigma?: number | null;
 };
 
 type SnapshotPayload = {
@@ -39,16 +42,14 @@ type SnapshotPayload = {
 };
 
 const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
-const ALPHA_BASE = "https://www.alphavantage.co/query";
-const MASSIVE_BASE = "https://api.polygon.io";
+const YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote";
+const YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart";
 
 const FRED_SERIES = {
-  sp500: "SP500",
   tenYear: "DGS10",
   twoYear: "DGS2",
   realTenYear: "DFII10",
   hySpread: "BAMLH0A0HYM2",
-  dollar: "DTWEXBGS",
   fci: "NFCI",
 };
 
@@ -61,18 +62,26 @@ function toNumber(value: unknown): number | null {
 }
 
 async function fetchJson(url: string) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "Mozilla/5.0",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+
   return res.json();
 }
 
-async function fredSeries(series: string, key: string, limit = 250) {
+async function fredSeries(series: string, key: string, limit = 20) {
   const url =
-    `${FRED_BASE}?series_id=${series}` +
-    `&api_key=${key}` +
-    `&file_type=json` +
-    `&sort_order=desc` +
-    `&limit=${limit}`;
+    `${FRED_BASE}?series_id=${encodeURIComponent(series)}` +
+    `&api_key=${encodeURIComponent(key)}` +
+    `&file_type=json&sort_order=desc&limit=${limit}`;
 
   const data = await fetchJson(url);
 
@@ -86,113 +95,72 @@ async function fredLatest(series: string, key: string) {
   return values[0] ?? null;
 }
 
-async function alphaDaily(symbol: string, key: string) {
+async function yahooQuotes(symbols: string[]) {
   const url =
-    `${ALPHA_BASE}?function=TIME_SERIES_DAILY_ADJUSTED` +
-    `&symbol=${encodeURIComponent(symbol)}` +
-    `&outputsize=full` +
-    `&apikey=${encodeURIComponent(key)}`;
+    `${YAHOO_QUOTE_URL}?symbols=${encodeURIComponent(symbols.join(","))}`;
 
   const data = await fetchJson(url);
+  const rows = data?.quoteResponse?.result ?? [];
 
-  if (typeof data.Note === "string") {
-    throw new Error(`Alpha throttled: ${data.Note}`);
-  }
-  if (typeof data["Error Message"] === "string") {
-    throw new Error(`Alpha error: ${data["Error Message"]}`);
-  }
-
-  const series = data["Time Series (Daily)"];
-  if (!series) {
-    throw new Error(`Missing daily series for ${symbol}`);
-  }
-
-  return Object.entries(series)
-    .sort(([a], [b]) => (a < b ? 1 : -1))
-    .map(([, row]: any) => toNumber(row["5. adjusted close"] ?? row["4. close"]))
-    .filter((v: number | null): v is number => v !== null);
-}
-
-async function alphaQuote(symbol: string, key: string) {
-  const url =
-    `${ALPHA_BASE}?function=GLOBAL_QUOTE` +
-    `&symbol=${encodeURIComponent(symbol)}` +
-    `&apikey=${encodeURIComponent(key)}`;
-
-  const data = await fetchJson(url);
-
-  if (typeof data.Note === "string") {
-    throw new Error(`Alpha throttled: ${data.Note}`);
-  }
-  if (typeof data["Error Message"] === "string") {
-    throw new Error(`Alpha error: ${data["Error Message"]}`);
-  }
-
-  return toNumber(data?.["Global Quote"]?.["05. price"]);
-}
-
-// Massive stocks single-ticker snapshot:
-// GET /v2/snapshot/locale/us/markets/stocks/tickers/{stocksTicker}
-async function massiveStockSnapshot(key: string, ticker: string) {
-  const url =
-    `${MASSIVE_BASE}/v2/snapshot/locale/us/markets/stocks/tickers/${encodeURIComponent(
-      ticker,
-    )}?apiKey=${encodeURIComponent(key)}`;
-
-  const data = await fetchJson(url);
-
-  return (
-    toNumber(data?.ticker?.lastTrade?.p) ??
-    toNumber(data?.ticker?.day?.c) ??
-    toNumber(data?.ticker?.prevDay?.c)
-  );
-}
-
-// Massive indices snapshot collection:
-// GET /v3/snapshot/indices
-async function massiveIndicesSnapshot(key: string, tickers: string[]) {
-  const url =
-    `${MASSIVE_BASE}/v3/snapshot/indices` +
-    `?ticker.any_of=${encodeURIComponent(tickers.join(","))}` +
-    `&apiKey=${encodeURIComponent(key)}`;
-
-  const data = await fetchJson(url);
-
-  const results = Array.isArray(data?.results) ? data.results : [];
   const map = new Map<string, number>();
 
-  for (const row of results) {
-    const ticker = row?.ticker;
-    const value =
-      toNumber(row?.value) ??
-      toNumber(row?.session?.close) ??
-      toNumber(row?.session?.value);
+  for (const row of rows) {
+    const symbol = row?.symbol;
+    const price =
+      toNumber(row?.regularMarketPrice) ??
+      toNumber(row?.postMarketPrice) ??
+      toNumber(row?.preMarketPrice);
 
-    if (ticker && value !== null) {
-      map.set(ticker, value);
+    if (symbol && price !== null) {
+      map.set(symbol, price);
     }
   }
 
   return map;
 }
 
+async function yahooHistory(symbol: string) {
+  const url =
+    `${YAHOO_CHART_URL}/${encodeURIComponent(symbol)}` +
+    `?range=1y&interval=1d&includePrePost=false`;
+
+  const data = await fetchJson(url);
+
+  const result = data?.chart?.result?.[0];
+  const closes = result?.indicators?.quote?.[0]?.close ?? [];
+
+  return closes
+    .map((v: unknown) => toNumber(v))
+    .filter((v: number | null): v is number => v !== null)
+    .reverse();
+}
+
 function movingAverage(values: number[], period: number) {
   if (values.length < period) return null;
-  const slice = values.slice(0, period);
+  const slice = values.slice(values.length - period);
   return Number((slice.reduce((a, b) => a + b, 0) / period).toFixed(2));
+}
+
+function parseValuationSnapshot(): Partial<SnapshotMetrics> {
+  const raw = process.env.VALUATION_SNAPSHOT_JSON;
+  if (!raw) return {};
+
+  try {
+    return JSON.parse(raw) as Partial<SnapshotMetrics>;
+  } catch {
+    return {};
+  }
 }
 
 export async function GET() {
   const fredKey = process.env.FRED_API_KEY;
-  const alphaKey = process.env.ALPHA_VANTAGE_API_KEY;
-  const massiveKey = process.env.POLYGON_API_KEY;
 
-  if (!fredKey || !alphaKey) {
+  if (!fredKey) {
     return NextResponse.json(
       {
         asOf: new Date().toISOString(),
         source: "CONFIG_ERROR",
-        status: "Missing FRED_API_KEY or ALPHA_VANTAGE_API_KEY",
+        status: "Missing FRED_API_KEY",
         metrics: {},
       } satisfies SnapshotPayload,
       { status: 500 },
@@ -203,94 +171,94 @@ export async function GET() {
   const metrics: SnapshotMetrics = {};
 
   const [
-    spxSeriesResult,
+    yahooQuoteResult,
+    spxHistoryResult,
+    vtiHistoryResult,
     tenYearResult,
     twoYearResult,
     real10Result,
     hyResult,
-    dxyResult,
     fciResult,
-    vtiDailyResult,
-    vtiQuoteResult,
-    massiveVtiResult,
-    massiveIndicesResult,
   ] = await Promise.allSettled([
-    fredSeries(FRED_SERIES.sp500, fredKey, 250),
+    yahooQuotes(["^GSPC", "^VIX", "VTI"]),
+    yahooHistory("^GSPC"),
+    yahooHistory("VTI"),
     fredLatest(FRED_SERIES.tenYear, fredKey),
     fredLatest(FRED_SERIES.twoYear, fredKey),
     fredLatest(FRED_SERIES.realTenYear, fredKey),
     fredLatest(FRED_SERIES.hySpread, fredKey),
-    fredLatest(FRED_SERIES.dollar, fredKey),
     fredLatest(FRED_SERIES.fci, fredKey),
-    alphaDaily("VTI", alphaKey),
-    alphaQuote("VTI", alphaKey),
-    massiveKey ? massiveStockSnapshot(massiveKey, "VTI") : Promise.resolve(null),
-    massiveKey
-      ? massiveIndicesSnapshot(massiveKey, ["I:SPX", "I:VIX"])
-      : Promise.resolve(new Map<string, number>()),
   ]);
 
-  const spxSeries =
-    spxSeriesResult.status === "fulfilled" ? spxSeriesResult.value : [];
-  if (spxSeriesResult.status === "rejected") {
-    diagnostics.push(`SP500 series failed: ${String(spxSeriesResult.reason)}`);
+  const quoteMap =
+    yahooQuoteResult.status === "fulfilled" ? yahooQuoteResult.value : new Map<string, number>();
+  if (yahooQuoteResult.status === "rejected") {
+    diagnostics.push(`Yahoo quotes failed: ${String(yahooQuoteResult.reason)}`);
+  }
+
+  const spxHistory =
+    spxHistoryResult.status === "fulfilled" ? spxHistoryResult.value : [];
+  if (spxHistoryResult.status === "rejected") {
+    diagnostics.push(`Yahoo SPX history failed: ${String(spxHistoryResult.reason)}`);
+  }
+
+  const vtiHistory =
+    vtiHistoryResult.status === "fulfilled" ? vtiHistoryResult.value : [];
+  if (vtiHistoryResult.status === "rejected") {
+    diagnostics.push(`Yahoo VTI history failed: ${String(vtiHistoryResult.reason)}`);
   }
 
   const tenYear =
     tenYearResult.status === "fulfilled" ? tenYearResult.value : null;
+  if (tenYearResult.status === "rejected") {
+    diagnostics.push(`10Y failed: ${String(tenYearResult.reason)}`);
+  }
+
   const twoYear =
     twoYearResult.status === "fulfilled" ? twoYearResult.value : null;
+  if (twoYearResult.status === "rejected") {
+    diagnostics.push(`2Y failed: ${String(twoYearResult.reason)}`);
+  }
+
   const real10 =
     real10Result.status === "fulfilled" ? real10Result.value : null;
+  if (real10Result.status === "rejected") {
+    diagnostics.push(`Real 10Y failed: ${String(real10Result.reason)}`);
+  }
+
   const hy =
     hyResult.status === "fulfilled" ? hyResult.value : null;
-  const dxy =
-    dxyResult.status === "fulfilled" ? dxyResult.value : null;
+  if (hyResult.status === "rejected") {
+    diagnostics.push(`HY spread failed: ${String(hyResult.reason)}`);
+  }
+
   const fci =
     fciResult.status === "fulfilled" ? fciResult.value : null;
-
-  if (tenYearResult.status === "rejected") diagnostics.push(`10Y failed: ${String(tenYearResult.reason)}`);
-  if (twoYearResult.status === "rejected") diagnostics.push(`2Y failed: ${String(twoYearResult.reason)}`);
-  if (real10Result.status === "rejected") diagnostics.push(`Real 10Y failed: ${String(real10Result.reason)}`);
-  if (hyResult.status === "rejected") diagnostics.push(`HY spread failed: ${String(hyResult.reason)}`);
-  if (dxyResult.status === "rejected") diagnostics.push(`DXY failed: ${String(dxyResult.reason)}`);
-  if (fciResult.status === "rejected") diagnostics.push(`FCI failed: ${String(fciResult.reason)}`);
-
-  const vtiDaily =
-    vtiDailyResult.status === "fulfilled" ? vtiDailyResult.value : [];
-  if (vtiDailyResult.status === "rejected") {
-    diagnostics.push(`VTI daily failed: ${String(vtiDailyResult.reason)}`);
+  if (fciResult.status === "rejected") {
+    diagnostics.push(`FCI failed: ${String(fciResult.reason)}`);
   }
 
-  const vtiQuote =
-    vtiQuoteResult.status === "fulfilled" ? vtiQuoteResult.value : null;
-  if (vtiQuoteResult.status === "rejected") {
-    diagnostics.push(`VTI quote failed: ${String(vtiQuoteResult.reason)}`);
+  const spxPrice = quoteMap.get("^GSPC");
+  const vixPrice = quoteMap.get("^VIX");
+  const vtiPrice = quoteMap.get("VTI");
+
+  if (spxPrice !== undefined) {
+    metrics.spx_price = Number(spxPrice.toFixed(2));
   }
 
-  const massiveVti =
-    massiveVtiResult.status === "fulfilled" ? massiveVtiResult.value : null;
-  if (massiveVtiResult.status === "rejected") {
-    diagnostics.push(`Massive VTI failed: ${String(massiveVtiResult.reason)}`);
+  if (vixPrice !== undefined) {
+    metrics.vix = Number(vixPrice.toFixed(2));
   }
 
-  const massiveIndices =
-    massiveIndicesResult.status === "fulfilled"
-      ? massiveIndicesResult.value
-      : new Map<string, number>();
-  if (massiveIndicesResult.status === "rejected") {
-    diagnostics.push(`Massive indices failed: ${String(massiveIndicesResult.reason)}`);
+  if (vtiPrice !== undefined) {
+    metrics.vti_price = Number(vtiPrice.toFixed(2));
   }
 
-  // SPX current + DMA
-  if (spxSeries.length > 0) {
-    const spxCurrent = massiveIndices.get("I:SPX") ?? spxSeries[0];
-    metrics.spx_price = Number(spxCurrent.toFixed(2));
-
-    const ma20 = movingAverage(spxSeries, 20);
-    const ma50 = movingAverage(spxSeries, 50);
-    const ma100 = movingAverage(spxSeries, 100);
-    const ma200 = movingAverage(spxSeries, 200);
+  if (spxHistory.length > 0) {
+    const ma20 = movingAverage(spxHistory, 20);
+    const ma50 = movingAverage(spxHistory, 50);
+    const ma100 = movingAverage(spxHistory, 100);
+    const ma200 = movingAverage(spxHistory, 200);
 
     if (ma20 !== null) metrics.spx_20dma = { level: ma20 };
     if (ma50 !== null) metrics.spx_50dma = { level: ma50 };
@@ -298,48 +266,39 @@ export async function GET() {
     if (ma200 !== null) metrics.spx_200dma = { level: ma200 };
   }
 
-  // VTI current + DMA
-  if (vtiDaily.length > 0) {
-    const vtiCurrent = massiveVti ?? vtiQuote ?? vtiDaily[0];
-    metrics.vti_price = Number(vtiCurrent.toFixed(2));
+  if (vtiHistory.length > 0) {
+    const ma20 = movingAverage(vtiHistory, 20);
+    const ma50 = movingAverage(vtiHistory, 50);
+    const ma100 = movingAverage(vtiHistory, 100);
+    const ma200 = movingAverage(vtiHistory, 200);
 
-    const v20 = movingAverage(vtiDaily, 20);
-    const v50 = movingAverage(vtiDaily, 50);
-    const v100 = movingAverage(vtiDaily, 100);
-    const v200 = movingAverage(vtiDaily, 200);
-
-    if (v20 !== null) metrics.vti_20dma = { level: v20 };
-    if (v50 !== null) metrics.vti_50dma = { level: v50 };
-    if (v100 !== null) metrics.vti_100dma = { level: v100 };
-    if (v200 !== null) metrics.vti_200dma = { level: v200 };
+    if (ma20 !== null) metrics.vti_20dma = { level: ma20 };
+    if (ma50 !== null) metrics.vti_50dma = { level: ma50 };
+    if (ma100 !== null) metrics.vti_100dma = { level: ma100 };
+    if (ma200 !== null) metrics.vti_200dma = { level: ma200 };
   }
 
-  // VIX realtime if Massive returns it
-  const vixCurrent = massiveIndices.get("I:VIX");
-  if (vixCurrent !== undefined) {
-    metrics.vix = Number(vixCurrent.toFixed(2));
-  }
-
-  // Macro
   if (tenYear !== null && twoYear !== null) {
     metrics.yield_curve_10y_2y = Number((tenYear - twoYear).toFixed(2));
   }
+
   if (real10 !== null) {
     metrics.real_10y_yield = Number(real10.toFixed(2));
   }
+
   if (hy !== null) {
     metrics.hy_spread = Number(hy.toFixed(2));
   }
-  if (dxy !== null) {
-    metrics.dxy = Number(dxy.toFixed(2));
-  }
+
   if (fci !== null) {
     metrics.fci = Number(fci.toFixed(2));
   }
 
+  Object.assign(metrics, parseValuationSnapshot());
+
   return NextResponse.json({
     asOf: new Date().toISOString(),
-    source: massiveKey ? "LIVE_RT" : "LIVE_DAILY_MIXED",
+    source: "LIVE_YAHOO_FRED",
     status: "Connected",
     metrics,
     diagnostics,
