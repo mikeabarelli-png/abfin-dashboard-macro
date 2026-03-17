@@ -213,7 +213,9 @@ export default function Page() {
 
                   <div
                     className={
-                      tile.kind === "spx" ? "tileSubline tileSublineSpx" : statusClass(tile.tone)
+                      tile.kind === "spx"
+                        ? "tileSubline tileSublineSpx"
+                        : statusClass(tile.tone)
                     }
                     style={tile.kind === "spx" ? undefined : { marginTop: 10 }}
                   >
@@ -224,7 +226,9 @@ export default function Page() {
             </div>
 
             <div className="alertBox">
-              <div className="alertTitle">200-DMA Proximity Alert — Immediate Watch</div>
+              <div className="alertTitle">
+                200-DMA Proximity Alert — Immediate Watch
+              </div>
               <div className="alertBody">
                 S&amp;P 500 is only 1.4% above its 200-DMA (6,608).
               </div>
@@ -264,356 +268,351 @@ export default function Page() {
         </div>
       </div>
 
-      <style jsx global>{`
-        * {
-          box-sizing: border-box;
-        }
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            * {
+              box-sizing: border-box;
+            }
 
-        html,
-        body {
-          margin: 0;
-          padding: 0;
-          background: #0b0b2a;
-          color: #ffffff;
-          font-family:
-            Inter,
-            ui-sans-serif,
-            system-ui,
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
-            sans-serif;
-        }
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #0b0b2a;
+              color: #ffffff;
+              font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            }
 
-        .pageShell {
-          min-height: 100vh;
-          background: #0b0b2a;
-          color: #fff;
-        }
+            .pageShell {
+              min-height: 100vh;
+              background: #0b0b2a;
+              color: #fff;
+            }
 
-        .frame {
-          max-width: 1600px;
-          margin: 0 auto;
-          padding: 12px 16px 16px;
-          border-top: 4px solid rgba(241, 245, 249, 0.9);
-          border-left: 4px solid rgba(241, 245, 249, 0.9);
-          border-right: 4px solid rgba(241, 245, 249, 0.9);
-        }
+            .frame {
+              max-width: 1600px;
+              margin: 0 auto;
+              padding: 12px 16px 16px;
+              border-top: 4px solid rgba(241, 245, 249, 0.9);
+              border-left: 4px solid rgba(241, 245, 249, 0.9);
+              border-right: 4px solid rgba(241, 245, 249, 0.9);
+            }
 
-        .topBar {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 16px;
-          padding-bottom: 16px;
-        }
+            .topBar {
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              gap: 16px;
+              padding-bottom: 16px;
+            }
 
-        .pageTitle {
-          margin: 0;
-          font-size: 48px;
-          line-height: 1;
-          font-weight: 900;
-          color: #17a34a;
-          letter-spacing: -0.03em;
-        }
+            .pageTitle {
+              margin: 0;
+              font-size: 48px;
+              line-height: 1;
+              font-weight: 900;
+              color: #17a34a;
+              letter-spacing: -0.03em;
+            }
 
-        .sourceBlock {
-          text-align: right;
-          font-size: 14px;
-          line-height: 1.3;
-          font-weight: 700;
-          color: #e2e8f0;
-        }
+            .sourceBlock {
+              text-align: right;
+              font-size: 14px;
+              line-height: 1.3;
+              font-weight: 700;
+              color: #e2e8f0;
+            }
 
-        .connectedBar {
-          margin-bottom: 12px;
-          border-radius: 14px;
-          background: #1e1b4f;
-          padding: 14px 16px;
-          font-size: 14px;
-          font-weight: 700;
-          color: #f8fafc;
-        }
+            .connectedBar {
+              margin-bottom: 12px;
+              border-radius: 14px;
+              background: #1e1b4f;
+              padding: 14px 16px;
+              font-size: 14px;
+              font-weight: 700;
+              color: #f8fafc;
+            }
 
-        .panel {
-          border-radius: 16px;
-          background: #23255a;
-          padding: 12px;
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-        }
+            .panel {
+              border-radius: 16px;
+              background: #23255a;
+              padding: 12px;
+              box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+            }
 
-        .stressPanel {
-          margin-top: 16px;
-          background: #171949;
-        }
+            .stressPanel {
+              margin-top: 16px;
+              background: #171949;
+            }
 
-        .panelHeader {
-          display: flex;
-          align-items: flex-end;
-          justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 12px;
-        }
+            .panelHeader {
+              display: flex;
+              align-items: flex-end;
+              justify-content: space-between;
+              gap: 12px;
+              margin-bottom: 12px;
+            }
 
-        .panelTitle {
-          font-size: 26px;
-          line-height: 1.05;
-          font-weight: 900;
-          color: #fff;
-          letter-spacing: -0.02em;
-        }
+            .panelTitle {
+              font-size: 26px;
+              line-height: 1.05;
+              font-weight: 900;
+              color: #fff;
+              letter-spacing: -0.02em;
+            }
 
-        .panelSubtitle {
-          margin-top: 4px;
-          font-size: 12px;
-          font-weight: 700;
-          letter-spacing: 0.12em;
-          color: #cbd5e1;
-          text-transform: none;
-        }
+            .panelSubtitle {
+              margin-top: 4px;
+              font-size: 12px;
+              font-weight: 700;
+              letter-spacing: 0.12em;
+              color: #cbd5e1;
+            }
 
-        .damageText {
-          font-size: 13px;
-          font-weight: 700;
-          color: #cbd5e1;
-          white-space: nowrap;
-        }
+            .damageText {
+              font-size: 13px;
+              font-weight: 700;
+              color: #cbd5e1;
+              white-space: nowrap;
+            }
 
-        .trendGrid {
-          display: grid;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
-          gap: 8px;
-        }
+            .trendGrid {
+              display: grid;
+              grid-template-columns: repeat(5, minmax(0, 1fr));
+              gap: 8px;
+            }
 
-        .stressGrid {
-          display: grid;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
-          gap: 8px;
-        }
+            .stressGrid {
+              display: grid;
+              grid-template-columns: repeat(5, minmax(0, 1fr));
+              gap: 8px;
+            }
 
-        .tile {
-          border-radius: 10px;
-          background: #050a35;
-          padding: 14px 14px 12px;
-          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-          min-width: 0;
-        }
+            .tile {
+              border-radius: 10px;
+              background: #050a35;
+              padding: 14px 14px 12px;
+              box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+              min-width: 0;
+            }
 
-        .tileHeader {
-          margin-bottom: 12px;
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 8px;
-        }
+            .tileHeader {
+              margin-bottom: 12px;
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              gap: 8px;
+            }
 
-        .tileLabel {
-          font-size: 15px;
-          font-weight: 900;
-          color: #fff;
-          letter-spacing: -0.01em;
-        }
+            .tileLabel {
+              font-size: 15px;
+              font-weight: 900;
+              color: #fff;
+              letter-spacing: -0.01em;
+            }
 
-        .tileYtd {
-          font-size: 12px;
-          font-weight: 700;
-          color: #cbd5e1;
-          white-space: nowrap;
-        }
+            .tileYtd {
+              font-size: 12px;
+              font-weight: 700;
+              color: #cbd5e1;
+              white-space: nowrap;
+            }
 
-        .tileValue {
-          font-size: 44px;
-          line-height: 0.95;
-          font-weight: 900;
-          letter-spacing: -0.04em;
-          color: #fff;
-        }
+            .tileValue {
+              font-size: 44px;
+              line-height: 0.95;
+              font-weight: 900;
+              letter-spacing: -0.04em;
+              color: #fff;
+            }
 
-        .stressValue {
-          margin-top: 14px;
-          font-size: 34px;
-        }
+            .stressValue {
+              margin-top: 14px;
+              font-size: 34px;
+            }
 
-        .sparklineWrap {
-          margin-top: 8px;
-          height: 34px;
-          display: flex;
-          align-items: center;
-        }
+            .sparklineWrap {
+              margin-top: 8px;
+              height: 34px;
+              display: flex;
+              align-items: center;
+            }
 
-        .sparkline {
-          display: block;
-          color: #cbd5e1;
-        }
+            .sparkline {
+              display: block;
+              color: #cbd5e1;
+            }
 
-        .tileSubline {
-          margin-top: 10px;
-          font-size: 14px;
-          font-weight: 700;
-        }
+            .tileSubline {
+              margin-top: 10px;
+              font-size: 14px;
+              font-weight: 700;
+            }
 
-        .tileSublineSpx {
-          color: #fb7185;
-        }
+            .tileSublineSpx {
+              color: #fb7185;
+            }
 
-        .badge {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 20px;
-          height: 20px;
-          border-radius: 9999px;
-          font-size: 11px;
-          font-weight: 900;
-        }
+            .badge {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              width: 20px;
+              height: 20px;
+              border-radius: 9999px;
+              font-size: 11px;
+              font-weight: 900;
+            }
 
-        .badge-danger {
-          background: #f43f5e;
-          color: white;
-        }
+            .badge-danger {
+              background: #f43f5e;
+              color: white;
+            }
 
-        .badge-warning {
-          background: #fbbf24;
-          color: #111827;
-        }
+            .badge-warning {
+              background: #fbbf24;
+              color: #111827;
+            }
 
-        .status {
-          font-size: 14px;
-          font-weight: 900;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-        }
+            .status {
+              font-size: 14px;
+              font-weight: 900;
+              text-transform: uppercase;
+              letter-spacing: 0.08em;
+            }
 
-        .status-danger {
-          color: #fb7185;
-        }
+            .status-danger {
+              color: #fb7185;
+            }
 
-        .status-warning {
-          color: #fde047;
-        }
+            .status-warning {
+              color: #fde047;
+            }
 
-        .status-healthy {
-          color: #4ade80;
-        }
+            .status-healthy {
+              color: #4ade80;
+            }
 
-        .status-neutral {
-          color: #cbd5e1;
-        }
+            .status-neutral {
+              color: #cbd5e1;
+            }
 
-        .alertBox {
-          margin-top: 16px;
-          border-radius: 18px;
-          border: 1px solid rgba(245, 158, 11, 0.75);
-          background: #514a56;
-          padding: 16px 20px;
-        }
+            .alertBox {
+              margin-top: 16px;
+              border-radius: 18px;
+              border: 1px solid rgba(245, 158, 11, 0.75);
+              background: #514a56;
+              padding: 16px 20px;
+            }
 
-        .alertTitle {
-          font-size: 14px;
-          font-weight: 900;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: #fde047;
-        }
+            .alertTitle {
+              font-size: 14px;
+              font-weight: 900;
+              letter-spacing: 0.18em;
+              text-transform: uppercase;
+              color: #fde047;
+            }
 
-        .alertBody {
-          margin-top: 8px;
-          font-size: 18px;
-          font-weight: 800;
-          color: #fefce8;
-        }
+            .alertBody {
+              margin-top: 8px;
+              font-size: 18px;
+              font-weight: 800;
+              color: #fefce8;
+            }
 
-        .meterWrap {
-          margin-top: 14px;
-        }
+            .meterWrap {
+              margin-top: 14px;
+            }
 
-        .meterTrack {
-          position: relative;
-          height: 4px;
-          border-radius: 9999px;
-          background: #202a64;
-          overflow: visible;
-        }
+            .meterTrack {
+              position: relative;
+              height: 4px;
+              border-radius: 9999px;
+              background: #202a64;
+              overflow: visible;
+            }
 
-        .meterFill {
-          position: absolute;
-          left: 0;
-          top: 0;
-          height: 4px;
-          border-radius: 9999px;
-        }
+            .meterFill {
+              position: absolute;
+              left: 0;
+              top: 0;
+              height: 4px;
+              border-radius: 9999px;
+            }
 
-        .meterFill-warning {
-          background: #fbbf24;
-        }
+            .meterFill-warning {
+              background: #fbbf24;
+            }
 
-        .meterFill-healthy {
-          background: #4ade80;
-        }
+            .meterFill-healthy {
+              background: #4ade80;
+            }
 
-        .meterFill-neutral {
-          background: #cbd5e1;
-        }
+            .meterFill-neutral {
+              background: #cbd5e1;
+            }
 
-        .meterMarker {
-          position: absolute;
-          top: 50%;
-          width: 2px;
-          height: 18px;
-          transform: translateY(-50%);
-          background: #f8fafc;
-        }
+            .meterMarker {
+              position: absolute;
+              top: 50%;
+              width: 2px;
+              height: 18px;
+              transform: translateY(-50%);
+              background: #f8fafc;
+            }
 
-        .meterScale {
-          margin-top: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          font-size: 12px;
-          font-weight: 500;
-          color: #e2e8f0;
-        }
+            .meterScale {
+              margin-top: 8px;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              font-size: 12px;
+              font-weight: 500;
+              color: #e2e8f0;
+            }
 
-        @media (max-width: 1100px) {
-          .trendGrid,
-          .stressGrid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
+            @media (max-width: 1100px) {
+              .trendGrid,
+              .stressGrid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
 
-          .pageTitle {
-            font-size: 36px;
-          }
+              .pageTitle {
+                font-size: 36px;
+              }
 
-          .tileValue {
-            font-size: 36px;
-          }
-        }
+              .tileValue {
+                font-size: 36px;
+              }
+            }
 
-        @media (max-width: 700px) {
-          .topBar,
-          .panelHeader {
-            flex-direction: column;
-            align-items: flex-start;
-          }
+            @media (max-width: 700px) {
+              .topBar,
+              .panelHeader {
+                flex-direction: column;
+                align-items: flex-start;
+              }
 
-          .damageText {
-            white-space: normal;
-          }
+              .damageText {
+                white-space: normal;
+              }
 
-          .trendGrid,
-          .stressGrid {
-            grid-template-columns: 1fr;
-          }
+              .trendGrid,
+              .stressGrid {
+                grid-template-columns: 1fr;
+              }
 
-          .frame {
-            padding: 10px;
-          }
+              .frame {
+                padding: 10px;
+              }
 
-          .pageTitle {
-            font-size: 30px;
-          }
-        }
-      `}</style>
+              .pageTitle {
+                font-size: 30px;
+              }
+            }
+          `,
+        }}
+      />
     </>
   );
 }
