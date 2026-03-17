@@ -1,53 +1,93 @@
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const revalidate = 0;
+
+type YahooQuote = {
+  symbol?: string;
+  shortName?: string;
+  regularMarketPrice?: number;
+  regularMarketChangePercent?: number;
+};
 
 export async function GET() {
   try {
+    const quoteUrl =
+      "https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC,%5EVIX";
+
+    const chartUrl =
+      "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=1mo&interval=1d&includePrePost=false";
+
+    const commonHeaders = {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      Accept: "application/json,text/plain,*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+      Referer: "https://finance.yahoo.com/",
+      Origin: "https://finance.yahoo.com",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    };
+
     const [quoteRes, chartRes] = await Promise.all([
-      fetch(
-        "https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC,%5EVIX",
-        {
-          cache: "no-store",
-          headers: {
-            "User-Agent": "Mozilla/5.0",
-            Accept: "application/json",
-          },
-        }
-      ),
-      fetch(
-        "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=1mo&interval=1d",
-        {
-          cache: "no-store",
-          headers: {
-            "User-Agent": "Mozilla/5.0",
-            Accept: "application/json",
-          },
-        }
-      ),
+      fetch(quoteUrl, {
+        cache: "no-store",
+        headers: commonHeaders,
+      }),
+      fetch(chartUrl, {
+        cache: "no-store",
+        headers: commonHeaders,
+      }),
     ]);
 
+    const quoteText = await quoteRes.text();
+    const chartText = await chartRes.text();
+
     if (!quoteRes.ok) {
-      throw new Error(`Quote request failed: ${quoteRes.status}`);
+      return Response.json(
+        {
+          ok: false,
+          error: "Yahoo quote request failed",
+          status: quoteRes.status,
+          detail: quoteText.slice(0, 500),
+        },
+        { status: 500 }
+      );
     }
 
     if (!chartRes.ok) {
-      throw new Error(`Chart request failed: ${chartRes.status}`);
+      return Response.json(
+        {
+          ok: false,
+          error: "Yahoo chart request failed",
+          status: chartRes.status,
+          detail: chartText.slice(0, 500),
+        },
+        { status: 500 }
+      );
     }
 
-    const quoteJson = await quoteRes.json();
-    const chartJson = await chartRes.json();
+    const quoteJson = JSON.parse(quoteText);
+    const chartJson = JSON.parse(chartText);
 
-    const quotes = quoteJson?.quoteResponse?.result ?? [];
+    const quotes: YahooQuote[] = quoteJson?.quoteResponse?.result ?? [];
 
     const spxQuote =
-      quotes.find((q: any) => q.symbol === "^GSPC") ??
-      quotes.find((q: any) => q.shortName?.includes("S&P 500"));
+      quotes.find((q) => q.symbol === "^GSPC") ??
+      quotes.find((q) => q.shortName?.includes("S&P 500"));
 
     const vixQuote =
-      quotes.find((q: any) => q.symbol === "^VIX") ??
-      quotes.find((q: any) => q.shortName?.includes("Volatility"));
+      quotes.find((q) => q.symbol === "^VIX") ??
+      quotes.find((q) => q.shortName?.toLowerCase().includes("volatility"));
 
-    if (!spxQuote) {
-      throw new Error("Could not find ^GSPC quote in Yahoo response");
+    if (!spxQuote?.regularMarketPrice) {
+      return Response.json(
+        {
+          ok: false,
+          error: "Could not find SPX quote in Yahoo response",
+          quotes,
+        },
+        { status: 500 }
+      );
     }
 
     const closesRaw =
@@ -63,12 +103,13 @@ export async function GET() {
 
     return Response.json(
       {
-        source: "LIVE_YAHOO",
+        ok: true,
+        source: "LIVE_YAHOO_FRED",
         asOf: new Date().toISOString(),
 
         spx_price: spxPrice,
         spx_change_pct: spxChangePct,
-        spx_ytd_pct: -2.13, // placeholder until you wire true YTD calc
+        spx_ytd_pct: -2.13,
         spx_trend_14d: closes,
 
         vix,
@@ -80,7 +121,6 @@ export async function GET() {
           spx_trend_14d: closes,
           vix,
 
-          // keep your current dashboard values alive until fully wired
           spx_20dma: { level: 6822.68 },
           spx_50dma: { level: 6881.21 },
           spx_100dma: { level: 6841.88 },
@@ -100,6 +140,7 @@ export async function GET() {
   } catch (error: any) {
     return Response.json(
       {
+        ok: false,
         error: "Failed to fetch live market data",
         detail: error?.message ?? "Unknown error",
       },
