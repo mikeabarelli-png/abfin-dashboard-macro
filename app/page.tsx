@@ -2,185 +2,177 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type MarketPayload = Record<string, any> | null;
+type AnyObj = Record<string, any>;
 
 export default function Page() {
   const [showVixModal, setShowVixModal] = useState(false);
-  const [marketData, setMarketData] = useState<MarketPayload>(null);
-  const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [marketData, setMarketData] = useState<AnyObj | null>(null);
+  const [lastUpdated, setLastUpdated] = useState("");
 
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
 
-    const fetchMarketData = async () => {
+    const fetchMarket = async () => {
       try {
-        const res = await fetch("/api/market", {
-          cache: "no-store",
-        });
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-
+        const res = await fetch("/api/market", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-
-        if (!isMounted) return;
+        if (!mounted) return;
         setMarketData(json);
         setLastUpdated(new Date().toLocaleTimeString());
       } catch (err) {
-        console.error("Failed to fetch live market data:", err);
+        console.error("Failed to fetch /api/market", err);
       }
     };
 
-    fetchMarketData();
-    const interval = setInterval(fetchMarketData, 60000);
+    fetchMarket();
+    const id = setInterval(fetchMarket, 60000);
 
     return () => {
-      isMounted = false;
-      clearInterval(interval);
+      mounted = false;
+      clearInterval(id);
     };
   }, []);
 
-  const getNum = (...values: any[]): number | null => {
-    for (const v of values) {
-      if (typeof v === "number" && Number.isFinite(v)) return v;
-      if (typeof v === "string") {
-        const parsed = Number(String(v).replace(/,/g, ""));
-        if (Number.isFinite(parsed)) return parsed;
-      }
-    }
-    return null;
-  };
-
-  const getArr = (...values: any[]): number[] | null => {
-    for (const v of values) {
-      if (Array.isArray(v)) {
-        const nums = v
-          .map((x) => (typeof x === "number" ? x : Number(String(x).replace(/,/g, ""))))
-          .filter((x) => Number.isFinite(x));
-        if (nums.length > 0) return nums;
-      }
-    }
-    return null;
-  };
-
   const metrics = marketData?.metrics ?? marketData ?? {};
 
-  const spxPrice = getNum(
-    metrics.spx_price,
-    metrics.spx,
-    marketData?.spx_price,
-    marketData?.spx
-  ) ?? 6699.38;
+  const getNum = (...vals: any[]): number | null => {
+    for (const v of vals) {
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+      if (typeof v === "string") {
+        const n = Number(v.replace(/,/g, ""));
+        if (Number.isFinite(n)) return n;
+      }
+    }
+    return null;
+  };
 
-  const vixValue = getNum(
-    metrics.vix,
-    marketData?.vix
-  ) ?? 23.5;
+  const getArr = (...vals: any[]): number[] | null => {
+    for (const v of vals) {
+      if (Array.isArray(v)) {
+        const arr = v
+          .map((x) => (typeof x === "number" ? x : Number(String(x).replace(/,/g, ""))))
+          .filter((x) => Number.isFinite(x));
+        if (arr.length) return arr;
+      }
+    }
+    return null;
+  };
 
-  const spx20 = getNum(
-    metrics?.spx_20dma?.level,
-    metrics?.spx_20dma,
-    metrics?.spx20dma,
-    metrics?.dma20,
-    marketData?.spx_20dma?.level,
-    marketData?.spx_20dma
-  ) ?? 6822.68;
+  const spxPrice =
+    getNum(
+      metrics.spx_price,
+      metrics.spx,
+      marketData?.spx_price,
+      marketData?.spx
+    ) ?? 6699.38;
 
-  const spx50 = getNum(
-    metrics?.spx_50dma?.level,
-    metrics?.spx_50dma,
-    metrics?.spx50dma,
-    metrics?.dma50,
-    marketData?.spx_50dma?.level,
-    marketData?.spx_50dma
-  ) ?? 6881.21;
+  const vixValue =
+    getNum(
+      metrics.vix,
+      marketData?.vix
+    ) ?? 23.5;
 
-  const spx100 = getNum(
-    metrics?.spx_100dma?.level,
-    metrics?.spx_100dma,
-    metrics?.spx100dma,
-    metrics?.dma100,
-    marketData?.spx_100dma?.level,
-    marketData?.spx_100dma
-  ) ?? 6841.88;
+  const spx20 =
+    getNum(
+      metrics?.spx_20dma?.level,
+      metrics?.spx_20dma,
+      metrics?.dma20,
+      marketData?.spx_20dma?.level,
+      marketData?.spx_20dma
+    ) ?? 6822.68;
 
-  const spx200 = getNum(
-    metrics?.spx_200dma?.level,
-    metrics?.spx_200dma,
-    metrics?.spx200dma,
-    metrics?.dma200,
-    marketData?.spx_200dma?.level,
-    marketData?.spx_200dma
-  ) ?? 6608.12;
+  const spx50 =
+    getNum(
+      metrics?.spx_50dma?.level,
+      metrics?.spx_50dma,
+      metrics?.dma50,
+      marketData?.spx_50dma?.level,
+      marketData?.spx_50dma
+    ) ?? 6881.21;
 
-  const spxTrend = getArr(
-    metrics?.spx_trend_14d,
-    metrics?.spx_14d,
-    metrics?.spx_history_14d,
-    marketData?.spx_trend_14d,
-    marketData?.spx_14d,
-    [
+  const spx100 =
+    getNum(
+      metrics?.spx_100dma?.level,
+      metrics?.spx_100dma,
+      metrics?.dma100,
+      marketData?.spx_100dma?.level,
+      marketData?.spx_100dma
+    ) ?? 6841.88;
+
+  const spx200 =
+    getNum(
+      metrics?.spx_200dma?.level,
+      metrics?.spx_200dma,
+      metrics?.dma200,
+      marketData?.spx_200dma?.level,
+      marketData?.spx_200dma
+    ) ?? 6608.12;
+
+  const spxDailyPct =
+    getNum(
+      metrics?.spx_change_pct,
+      metrics?.spx_daily_change_pct,
+      metrics?.spx_day_pct,
+      marketData?.spx_change_pct
+    ) ?? -0.6;
+
+  const spxYtd =
+    getNum(
+      metrics?.spx_ytd_pct,
+      metrics?.spx_ytd,
+      marketData?.spx_ytd_pct
+    ) ?? -2.13;
+
+  const spxTrend =
+    getArr(
+      metrics?.spx_trend_14d,
+      metrics?.spx_14d,
+      metrics?.spx_history_14d,
+      marketData?.spx_trend_14d,
+      marketData?.spx_14d
+    ) ?? [
       6946.13, 6908.86, 6878.88, 6881.62, 6816.63, 6869.5, 6830.71, 6740.02,
       6795.99, 6781.48, 6775.8, 6672.62, 6632.19, 6699.38,
-    ]
-  )!;
+    ];
 
-  const spxYtd = getNum(
-    metrics?.spx_ytd_pct,
-    metrics?.spx_ytd,
-    marketData?.spx_ytd_pct,
-    marketData?.spx_ytd
-  ) ?? -2.13;
+  const hySpread =
+    getNum(
+      metrics?.hy_spread,
+      metrics?.high_yield_spread,
+      marketData?.hy_spread
+    ) ?? 3.28;
 
-  const spxDailyPct = getNum(
-    metrics?.spx_change_pct,
-    metrics?.spx_daily_change_pct,
-    metrics?.spx_day_pct,
-    marketData?.spx_change_pct,
-    marketData?.spx_daily_change_pct
-  ) ?? -0.6;
+  const yieldCurve =
+    getNum(
+      metrics?.yield_curve_10y_2y,
+      metrics?.yield_curve,
+      marketData?.yield_curve_10y_2y
+    ) ?? 0.55;
 
-  const hySpread = getNum(
-    metrics?.hy_spread,
-    metrics?.high_yield_spread,
-    marketData?.hy_spread
-  ) ?? 3.28;
-
-  const yieldCurve = getNum(
-    metrics?.yield_curve_10y_2y,
-    metrics?.yield_curve,
-    marketData?.yield_curve_10y_2y,
-    marketData?.yield_curve
-  ) ?? 0.55;
-
-  const real10y = getNum(
-    metrics?.real_10y,
-    metrics?.real_10yr,
-    marketData?.real_10y
-  ) ?? 1.92;
-
-  const spxVs = (level: number) => ((spxPrice - level) / level) * 100;
+  const real10y =
+    getNum(
+      metrics?.real_10y,
+      metrics?.real_10yr,
+      marketData?.real_10y
+    ) ?? 1.92;
 
   const fmtWhole = (n: number) => Math.round(n).toLocaleString();
   const fmt1 = (n: number) => n.toFixed(1);
   const fmt2 = (n: number) => n.toFixed(2);
   const fmtSigned1 = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
-  const fmtSigned2 = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 
-  const vixPercentile = 90;
-  const vixContextMax = 40;
-  const vixBarPos = Math.min((vixValue / vixContextMax) * 100, 100);
+  const spxVs = (level: number) => ((spxPrice - level) / level) * 100;
 
-  const dmaState = (pct: number, isLongTerm = false) => {
+  const dmaState = (pct: number, isLong = false) => {
     if (pct < 0) return "Broken Below";
-    if (isLongTerm && pct >= 0 && pct <= 2) return "Testing Support";
+    if (isLong && pct <= 2) return "Testing Support";
     return "Holding Above";
   };
 
-  const dmaTone = (pct: number, isLongTerm = false) => {
+  const dmaTone = (pct: number, isLong = false) => {
     if (pct < 0) return "danger";
-    if (isLongTerm && pct >= 0 && pct <= 2) return "warning";
+    if (isLong && pct <= 2) return "warning";
     return "healthy";
   };
 
@@ -254,7 +246,7 @@ export default function Page() {
         value: `${fmt2(hySpread)}%`,
         subline: hySpread >= 4 ? "Watch" : "Firm",
         scale: [2, 4, 6],
-        pos: Math.min(((hySpread - 2) / 4) * 100, 100),
+        pos: Math.max(0, Math.min(((hySpread - 2) / 4) * 100, 100)),
         tone: hySpread >= 4 ? "warning" : "neutral",
       },
       {
@@ -278,7 +270,7 @@ export default function Page() {
         value: `${fmt2(real10y)}%`,
         subline: real10y >= 2 ? "Firm" : "Moderate",
         scale: [0, 2, 3],
-        pos: Math.min((real10y / 3) * 100, 100),
+        pos: Math.max(0, Math.min((real10y / 3) * 100, 100)),
         tone: real10y >= 2 ? "warning" : "neutral",
       },
       {
@@ -293,10 +285,12 @@ export default function Page() {
     [vixValue, hySpread, yieldCurve, real10y]
   );
 
-  const damageCount = trendTiles.filter(
-    (t) => t.kind === "ma" && t.status === "Broken Below"
-  ).length;
+  const damageCount = trendTiles.filter((t) => t.kind === "ma" && t.status === "Broken Below").length;
   const totalMA = trendTiles.filter((t) => t.kind === "ma").length;
+
+  const vixPercentile = 90;
+  const vixContextMax = 40;
+  const vixBarPos = Math.min((vixValue / vixContextMax) * 100, 100);
 
   const sparkline = (points: number[]) => {
     const w = 120;
@@ -313,340 +307,857 @@ export default function Page() {
       })
       .join(" ");
 
-    return (
-      <svg viewBox={`0 0 ${w} ${h}`} className="mt-2 w-full">
+    return `
+      <svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
         <polyline
           fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          points={coords}
-          className="text-slate-300"
+          stroke="#cbd5e1"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          points="${coords}"
         />
       </svg>
-    );
+    `;
   };
 
-  const badgeTone = (tone: string) => {
-    if (tone === "warning") return "bg-amber-400 text-slate-950";
-    if (tone === "healthy") return "bg-emerald-500 text-white";
-    return "bg-rose-500 text-white";
+  const badgeClass = (tone: string) => {
+    if (tone === "warning") return "badge badge-warning";
+    if (tone === "healthy") return "badge badge-healthy";
+    return "badge badge-danger";
   };
 
-  const textTone = (tone: string) => {
-    if (tone === "warning") return "text-amber-300";
-    if (tone === "healthy") return "text-emerald-400";
-    if (tone === "neutral") return "text-slate-300";
-    return "text-rose-400";
+  const statusClass = (tone: string) => {
+    if (tone === "warning") return "status status-warning";
+    if (tone === "healthy") return "status status-healthy";
+    if (tone === "neutral") return "status status-neutral";
+    return "status status-danger";
   };
 
-  const barTone = (tone: string) => {
-    if (tone === "warning") return "bg-amber-400";
-    if (tone === "healthy") return "bg-emerald-400";
-    if (tone === "danger") return "bg-rose-500";
-    return "bg-slate-300";
+  const meterFillClass = (tone: string) => {
+    if (tone === "warning") return "meterFill meterFill-warning";
+    if (tone === "healthy") return "meterFill meterFill-healthy";
+    if (tone === "danger") return "meterFill meterFill-danger";
+    return "meterFill meterFill-neutral";
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0b2a] text-white">
-      <div className="mx-auto max-w-[1500px] px-4 pb-6 pt-4">
-        <div className="flex items-start justify-between gap-4 pb-4">
-          <div>
-            <h1 className="text-[34px] font-bold tracking-tight text-green-600">
-              Prospect Market Dashboard
-            </h1>
+    <>
+      <div className="pageShell">
+        <div className="frame">
+          <div className="topBar">
+            <h1 className="title">Prospect Market Dashboard</h1>
+            <div className="meta">
+              <div>Source: LIVE_YAHOO_FRED</div>
+              <div>{lastUpdated ? `Refreshed ${lastUpdated}` : "Loading live feed..."}</div>
+            </div>
           </div>
-          <div className="text-right text-xs font-semibold leading-5 text-slate-200">
-            <div>Source: LIVE_YAHOO_FRED</div>
-            <div>{lastUpdated ? `Refreshed ${lastUpdated}` : "Loading live feed..."}</div>
-          </div>
-        </div>
 
-        <div className="mb-3 rounded-xl bg-[#1e1b4f] px-4 py-3 text-sm font-semibold text-slate-100">
-          Connected
-        </div>
+          <div className="connected">Connected</div>
 
-        <section className="rounded-xl bg-[#23255a] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div>
-              <div className="text-[18px] font-bold tracking-tight text-white">Market Structure</div>
-              <div className="mt-1 text-[11px] font-semibold tracking-[0.03em] text-slate-300">
-                Price vs Key Moving Averages
+          <section className="panel">
+            <div className="panelHeader">
+              <div>
+                <div className="panelTitle">Market Structure</div>
+                <div className="panelSub">Price vs Key Moving Averages</div>
+              </div>
+              <div className="damage">
+                {damageCount} / {totalMA} short-term trends broken
               </div>
             </div>
 
-            <div className="text-[12px] font-semibold text-slate-300">
-              {damageCount} / {totalMA} short-term trends broken
-            </div>
-          </div>
+            <div className="trendGrid">
+              {trendTiles.map((tile) => (
+                <div key={tile.label} className="tile">
+                  <div className="tileTop">
+                    <div className="label">{tile.label}</div>
+                    {tile.kind === "spx" ? (
+                      <div className="ytd">{tile.ytd}</div>
+                    ) : (
+                      <div className={badgeClass(tile.tone)}>!</div>
+                    )}
+                  </div>
 
-          <div className="grid grid-cols-5 gap-2">
-            {trendTiles.map((tile) => (
-              <div key={tile.label} className="rounded-lg bg-[#050a35] p-3 shadow-inner">
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="text-[13px] font-bold tracking-tight text-white">{tile.label}</div>
+                  <div className="value">{tile.value}</div>
 
-                  {tile.kind === "spx" && tile.ytd ? (
-                    <div className="text-[11px] font-semibold text-slate-300">{tile.ytd}</div>
-                  ) : tile.kind === "ma" ? (
+                  {tile.kind === "spx" ? (
                     <div
-                      className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${badgeTone(
-                        tile.tone
-                      )}`}
-                    >
-                      !
-                    </div>
+                      className="sparkWrap"
+                      dangerouslySetInnerHTML={{ __html: sparkline(tile.trend) }}
+                    />
                   ) : null}
-                </div>
 
-                <div className="text-[28px] font-bold leading-none tracking-tight text-white">
-                  {tile.value}
-                </div>
+                  {tile.status ? <div className={statusClass(tile.tone)}>{tile.status}</div> : null}
 
-                {tile.kind === "spx" && tile.trend ? sparkline(tile.trend) : null}
-
-                {tile.status ? (
-                  <div className={`mt-2 text-[11px] font-bold uppercase tracking-[0.04em] ${textTone(tile.tone)}`}>
-                    {tile.status}
+                  <div className={tile.kind === "spx" ? "sub subSpx" : "sub"}>
+                    {tile.subline}
                   </div>
-                ) : null}
-
-                <div
-                  className={`mt-1 text-[11px] font-medium ${
-                    tile.kind === "spx" ? "text-rose-200" : "text-slate-200"
-                  }`}
-                >
-                  {tile.subline}
                 </div>
+              ))}
+            </div>
+
+            <div className="alertBox">
+              <div className="alertTitle">200-DMA Proximity Alert — Immediate Watch</div>
+              <div className="alertBody">
+                S&amp;P 500 is only {Math.abs(spxVs(spx200)).toFixed(1)}%{" "}
+                {spxVs(spx200) >= 0 ? "above" : "below"} its 200-DMA ({fmtWhole(spx200)}).
               </div>
-            ))}
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-amber-500/70 bg-[#5a5260] px-5 py-4">
-            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-amber-300">
-              200-DMA Proximity Alert — Immediate Watch
             </div>
-            <div className="mt-2 text-[17px] font-bold text-amber-50">
-              S&amp;P 500 is only {fmtSigned1(spxVs(spx200)).replace("+", "")}{" "}
-              {spxVs(spx200) >= 0 ? "above" : "below"} its 200-DMA ({fmtWhole(spx200)}).
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="mt-4 rounded-xl bg-[#171949] p-3">
-          <h2 className="mb-3 text-[18px] font-bold tracking-tight text-white">Market Stress</h2>
-          <div className="grid grid-cols-5 gap-2">
-            {stressTiles.map((tile) => (
-              <button
-                key={tile.label}
-                type="button"
-                onDoubleClick={() => {
-                  if (tile.label === "VIX") setShowVixModal(true);
-                }}
-                className="rounded-lg bg-[#050a35] p-3 text-left transition hover:bg-[#09114a] focus:outline-none"
-              >
-                <div className="text-[13px] font-bold text-white">{tile.label}</div>
-                <div className="mt-3 text-[28px] font-bold leading-none tracking-tight text-white">
-                  {tile.value}
-                </div>
-                <div className={`mt-2 text-[11px] font-semibold ${textTone(tile.tone)}`}>
-                  {tile.subline}
-                </div>
+          <section className="panel panelStress">
+            <div className="panelTitle">Market Stress</div>
 
-                <div className="mt-3">
-                  <div className="relative h-1 rounded-full bg-[#202a64]">
-                    <div
-                      className={`absolute left-0 top-0 h-1 rounded-full ${barTone(tile.tone)}`}
-                      style={{ width: `${tile.pos}%` }}
-                    />
-                    <div
-                      className="absolute top-1/2 h-5 w-[2px] -translate-y-1/2 bg-slate-100"
-                      style={{ left: `${tile.pos}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-[11px] font-medium text-slate-200">
-                    <span>{tile.scale[0]}</span>
-                    <span>{tile.scale[1]}</span>
-                    <span>{tile.scale[2]}</span>
-                  </div>
-                </div>
-
-                {tile.label === "VIX" ? (
-                  <div className="mt-2 text-[10px] font-medium text-slate-400">
-                    Double-click for detail
-                  </div>
-                ) : null}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {showVixModal ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="w-full max-w-4xl rounded-2xl border border-slate-700 bg-[#0f153f] p-6 shadow-2xl">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-[24px] font-bold text-white">VIX Drill-Down</div>
-                  <div className="mt-1 text-[12px] font-semibold text-slate-300">
-                    CBOE Volatility Index — implied 30-day S&amp;P 500 volatility
-                  </div>
-                </div>
+            <div className="stressGrid">
+              {stressTiles.map((tile) => (
                 <button
+                  key={tile.label}
                   type="button"
-                  onClick={() => setShowVixModal(false)}
-                  className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700"
+                  onDoubleClick={() => {
+                    if (tile.label === "VIX") setShowVixModal(true);
+                  }}
+                  className="tile tileButton"
                 >
-                  Close
+                  <div className="label">{tile.label}</div>
+                  <div className="value stressValue">{tile.value}</div>
+                  <div className={statusClass(tile.tone)} style={{ marginTop: 10 }}>
+                    {tile.subline}
+                  </div>
+
+                  <div className="meterWrap">
+                    <div className="meterTrack">
+                      <div className={meterFillClass(tile.tone)} style={{ width: `${tile.pos}%` }} />
+                      <div className="meterMarker" style={{ left: `${tile.pos}%` }} />
+                    </div>
+                    <div className="meterScale">
+                      <span>{tile.scale[0]}</span>
+                      <span>{tile.scale[1]}</span>
+                      <span>{tile.scale[2]}</span>
+                    </div>
+                  </div>
+
+                  {tile.label === "VIX" ? (
+                    <div className="hint">Double-click for detail</div>
+                  ) : null}
                 </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      {showVixModal ? (
+        <div className="modalBackdrop">
+          <div className="modal">
+            <div className="modalTop">
+              <div>
+                <div className="modalTitle">VIX Drill-Down</div>
+                <div className="modalSub">CBOE Volatility Index — implied 30-day S&amp;P 500 volatility</div>
+              </div>
+              <button className="closeBtn" onClick={() => setShowVixModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="modalGrid">
+              <div className="modalCard">
+                <div className="smallHead">Current Read</div>
+                <div className="bigValue">{fmt1(vixValue)}</div>
+                <div className="status status-warning">
+                  {vixValue >= 30 ? "Stress" : vixValue >= 20 ? "Elevated" : "Normal"}
+                </div>
+                <div className="bodyCopy">
+                  {vixValue >= 30 ? "High stress regime" : vixValue >= 20 ? "Elevated but not panic" : "Calm to normal"}
+                </div>
+
+                <div className="vixBandWrap">
+                  <div className="vixBandTrack">
+                    <div className="seg seg1" />
+                    <div className="seg seg2" />
+                    <div className="seg seg3" />
+                    <div className="seg seg4" />
+                    <div className="vixMarker" style={{ left: `${vixBarPos}%` }} />
+                  </div>
+                  <div className="vixScale">
+                    <span>0</span>
+                    <span>15</span>
+                    <span>20</span>
+                    <span>30</span>
+                    <span>40+</span>
+                  </div>
+                  <div className="vixBands">
+                    <span>Low</span>
+                    <span>Normal</span>
+                    <span>Elevated</span>
+                    <span>Stress</span>
+                    <span>Crisis</span>
+                  </div>
+                </div>
+
+                <div className="percentileBox">
+                  <div className="smallHead">Historical Percentile</div>
+                  <div className="percentileRow">
+                    <div className="percentileValue">
+                      {vixPercentile}
+                      <span>th</span>
+                    </div>
+                    <div className="bodyCopy bodyCopyRight">since 1990<br />anxious, not panic</div>
+                  </div>
+                  <div className="percentileTrack">
+                    <div className="pseg p1" />
+                    <div className="pseg p2" />
+                    <div className="pseg p3" />
+                    <div className="pMarker" style={{ left: `${vixPercentile}%` }} />
+                  </div>
+                  <div className="percentileBands">
+                    <span>Calm</span>
+                    <span>Elevated</span>
+                    <span>Fear</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-[0.95fr_1.05fr]">
-                <div className="rounded-xl bg-[#050a35] p-4">
-                  <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Current Read
+              <div className="modalStack">
+                <div className="modalCard">
+                  <div className="smallHead">What It Measures</div>
+                  <div className="bodyCopy">
+                    The VIX measures the market&apos;s expectation of 30-day S&amp;P 500 volatility,
+                    derived from option pricing. When fear rises, traders pay up for protection
+                    and the VIX moves higher.
                   </div>
-                  <div className="mt-3 text-[42px] font-bold leading-none text-white">{fmt1(vixValue)}</div>
-                  <div className="mt-3 text-[14px] font-bold text-amber-300">
-                    {vixValue >= 30 ? "Stress" : vixValue >= 20 ? "Elevated" : "Normal"}
-                  </div>
-                  <div className="mt-1 text-[12px] text-slate-300">
-                    {vixValue >= 30 ? "High stress regime" : vixValue >= 20 ? "Elevated but not panic" : "Calm to normal"}
-                  </div>
+                </div>
 
-                  <div className="mt-5">
-                    <div className="relative h-2 overflow-hidden rounded-full bg-[#202a64]">
-                      <div className="absolute left-0 top-0 h-2 w-[37.5%] bg-emerald-600" />
-                      <div className="absolute left-[37.5%] top-0 h-2 w-[12.5%] bg-emerald-400" />
-                      <div className="absolute left-[50%] top-0 h-2 w-[25%] bg-amber-500" />
-                      <div className="absolute left-[75%] top-0 h-2 w-[25%] bg-rose-500" />
-                      <div
-                        className="absolute top-1/2 h-8 w-[2px] -translate-y-1/2 bg-white"
-                        style={{ left: `${vixBarPos}%` }}
-                      />
-                    </div>
-                    <div className="mt-3 flex justify-between text-[11px] text-slate-300">
-                      <span>0</span>
-                      <span>15</span>
-                      <span>20</span>
-                      <span>30</span>
-                      <span>40+</span>
-                    </div>
-                    <div className="mt-2 flex justify-between text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                      <span>Low</span>
-                      <span>Normal</span>
-                      <span>Elevated</span>
-                      <span>Stress</span>
-                      <span>Crisis</span>
-                    </div>
+                <div className="modalCard">
+                  <div className="smallHead">Why It Matters</div>
+                  <div className="bodyCopy">
+                    Above 30 is where volatility starts to become the enemy of compounding.
+                    Drawdowns get sharper, recoveries slower, and sequence risk rises.
+                    Below 30 is caution; above 30 is where you pause all-new-equity-buying.
                   </div>
+                </div>
 
-                  <div className="mt-5 rounded-xl border border-amber-500/30 bg-[#141b47] p-4">
-                    <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                      Historical Percentile
+                <div className="modalCard">
+                  <div className="smallHead">Historical Context</div>
+                  <div className="historyList">
+                    <div className="historyRow">
+                      <div className="historyNum">82.7</div>
+                      <div>COVID (Mar 2020)</div>
+                      <div className="historyNote">All-time high — flash crash, recovered in months</div>
                     </div>
-                    <div className="mt-2 flex items-end justify-between gap-3">
-                      <div className="text-[32px] font-bold leading-none text-amber-300">
-                        {vixPercentile}
-                        <span className="text-[16px] align-top">th</span>
-                      </div>
-                      <div className="text-right text-[12px] text-slate-300">
-                        since 1990
-                        <br />
-                        anxious, not panic
-                      </div>
+                    <div className="historyRow">
+                      <div className="historyNum">79.1</div>
+                      <div>GFC (Nov 2008)</div>
+                      <div className="historyNote">Sustained fear regime — 18 months of pain</div>
                     </div>
-                    <div className="mt-3 relative h-3 overflow-hidden rounded-full bg-[#202a64]">
-                      <div className="absolute left-0 top-0 h-3 w-[50%] bg-emerald-700" />
-                      <div className="absolute left-[50%] top-0 h-3 w-[35%] bg-amber-700" />
-                      <div className="absolute left-[85%] top-0 h-3 w-[15%] bg-rose-700" />
-                      <div
-                        className="absolute top-1/2 h-5 w-[2px] -translate-y-1/2 bg-white"
-                        style={{ left: `${vixPercentile}%` }}
-                      />
+                    <div className="historyRow">
+                      <div className="historyNum">38.6</div>
+                      <div>Aug 2024 spike</div>
+                      <div className="historyNote">Yen carry unwind — resolved in 2 weeks</div>
                     </div>
-                    <div className="mt-2 flex justify-between text-[10px] font-medium text-slate-400">
-                      <span>Calm</span>
-                      <span>Elevated</span>
-                      <span>Fear</span>
+                    <div className="historyRow historyRowActive">
+                      <div className="historyNum historyNumActive">{fmt1(vixValue)}</div>
+                      <div>Today</div>
+                      <div className="historyNote">Elevated but below danger zone</div>
+                    </div>
+                    <div className="historyRow">
+                      <div className="historyNum">20</div>
+                      <div>Long-run avg</div>
+                      <div className="historyNote">Mean — but median is closer to ~17</div>
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="rounded-xl bg-[#050a35] p-4">
-                    <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                      What It Measures
-                    </div>
-                    <div className="mt-2 text-[13px] leading-6 text-slate-200">
-                      The VIX (CBOE Volatility Index) measures the market&apos;s expectation of
-                      30-day S&amp;P 500 volatility, derived from option pricing. When fear rises,
-                      traders pay up for put protection and the VIX moves higher.
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl bg-[#050a35] p-4">
-                    <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                      Why It Matters
-                    </div>
-                    <div className="mt-2 text-[13px] leading-6 text-slate-200">
-                      VIX doesn&apos;t kill a bull market, but above 30 it tells you that volatility
-                      is the enemy of compounding. Drawdowns become sharper, recoveries slower, and
-                      sequence risk rises sharply.
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl bg-[#050a35] p-4">
-                    <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                      Historical Context
-                    </div>
-                    <div className="mt-3 grid gap-2 text-[13px] text-slate-200">
-                      <div className="grid grid-cols-[70px_1fr_1fr] gap-3 rounded-lg border border-slate-800 bg-[#0b1138] px-3 py-2">
-                        <div className="font-bold text-slate-300">82.7</div>
-                        <div>COVID (Mar 2020)</div>
-                        <div className="text-slate-400">All-time high — flash crash, recovered in months</div>
-                      </div>
-                      <div className="grid grid-cols-[70px_1fr_1fr] gap-3 rounded-lg border border-slate-800 bg-[#0b1138] px-3 py-2">
-                        <div className="font-bold text-slate-300">79.1</div>
-                        <div>GFC (Nov 2008)</div>
-                        <div className="text-slate-400">Sustained fear regime — 18 months of pain</div>
-                      </div>
-                      <div className="grid grid-cols-[70px_1fr_1fr] gap-3 rounded-lg border border-slate-800 bg-[#0b1138] px-3 py-2">
-                        <div className="font-bold text-slate-300">38.6</div>
-                        <div>Aug 2024 spike</div>
-                        <div className="text-slate-400">Yen carry unwind — resolved in 2 weeks</div>
-                      </div>
-                      <div className="grid grid-cols-[70px_1fr_1fr] gap-3 rounded-lg border border-amber-500/40 bg-[#141b47] px-3 py-2">
-                        <div className="font-bold text-amber-300">{fmt1(vixValue)}</div>
-                        <div>Today</div>
-                        <div className="text-slate-400">
-                          {vixValue >= 30 ? "High stress / danger zone" : "Elevated but below danger zone"}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-[70px_1fr_1fr] gap-3 rounded-lg border border-slate-800 bg-[#0b1138] px-3 py-2">
-                        <div className="font-bold text-slate-300">20</div>
-                        <div>Long-run avg</div>
-                        <div className="text-slate-400">Mean — but median is closer to ~17</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-emerald-500/40 bg-[#031e1a] p-4">
-                    <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-amber-300">
-                      Your Action
-                    </div>
-                    <div className="mt-2 text-[13px] leading-7 text-emerald-50">
-                      {vixValue < 30
-                        ? "VIX is below 30. No dividend reinvestment restriction. Continue normal plan, but do not treat the tape as calm."
-                        : "VIX is above 30. Pause all-new-equity-buying and treat volatility as a real portfolio constraint."}
-                    </div>
+                <div className="actionCard">
+                  <div className="smallHead actionHead">Your Action</div>
+                  <div className="bodyCopy actionCopy">
+                    {vixValue < 30
+                      ? "VIX is below 30. No dividend reinvestment restriction. Continue normal plan, but do not treat the tape as calm."
+                      : "VIX is above 30. Pause all-new-equity-buying and treat volatility as a real portfolio constraint."}
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        ) : null}
-      </div>
-    </div>
+        </div>
+      ) : null}
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            * { box-sizing: border-box; }
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #0b0b2a;
+              color: #fff;
+              font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            }
+
+            .pageShell {
+              min-height: 100vh;
+              background: #0b0b2a;
+            }
+
+            .frame {
+              max-width: 1500px;
+              margin: 0 auto;
+              padding: 16px;
+            }
+
+            .topBar {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              gap: 16px;
+              margin-bottom: 12px;
+            }
+
+            .title {
+              margin: 0;
+              font-size: 34px;
+              font-weight: 700;
+              line-height: 1;
+              color: #16c75c;
+              letter-spacing: -0.03em;
+            }
+
+            .meta {
+              text-align: right;
+              font-size: 12px;
+              font-weight: 600;
+              line-height: 1.35;
+              color: #e2e8f0;
+            }
+
+            .connected {
+              background: #1e1b4f;
+              padding: 10px 14px;
+              border-radius: 14px;
+              font-size: 13px;
+              font-weight: 600;
+              color: #f8fafc;
+              margin-bottom: 12px;
+            }
+
+            .panel {
+              background: #23255a;
+              border-radius: 16px;
+              padding: 12px;
+            }
+
+            .panelStress {
+              margin-top: 16px;
+              background: #171949;
+            }
+
+            .panelHeader {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-end;
+              gap: 12px;
+              margin-bottom: 10px;
+            }
+
+            .panelTitle {
+              font-size: 18px;
+              font-weight: 700;
+              line-height: 1.1;
+            }
+
+            .panelSub {
+              margin-top: 2px;
+              font-size: 11px;
+              font-weight: 600;
+              color: #cbd5e1;
+              letter-spacing: 0.03em;
+            }
+
+            .damage {
+              font-size: 12px;
+              font-weight: 600;
+              color: #cbd5e1;
+              white-space: nowrap;
+            }
+
+            .trendGrid,
+            .stressGrid {
+              display: grid;
+              grid-template-columns: repeat(5, minmax(0, 1fr));
+              gap: 8px;
+            }
+
+            .stressGrid {
+              margin-top: 10px;
+            }
+
+            .tile {
+              background: #050a35;
+              border-radius: 10px;
+              padding: 12px;
+              min-width: 0;
+              border: 0;
+            }
+
+            .tileButton {
+              cursor: default;
+              color: inherit;
+              font: inherit;
+            }
+
+            .tileTop {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              gap: 8px;
+              margin-bottom: 8px;
+            }
+
+            .label {
+              font-size: 13px;
+              font-weight: 700;
+              line-height: 1.1;
+              color: #fff;
+            }
+
+            .ytd {
+              font-size: 11px;
+              font-weight: 600;
+              color: #94a3b8;
+              white-space: nowrap;
+            }
+
+            .value {
+              font-size: 28px;
+              font-weight: 700;
+              line-height: 0.95;
+              letter-spacing: -0.03em;
+              color: #fff;
+            }
+
+            .stressValue {
+              margin-top: 10px;
+            }
+
+            .sparkWrap {
+              margin-top: 6px;
+              height: 30px;
+              width: 120px;
+              display: flex;
+              align-items: center;
+            }
+
+            .sub {
+              margin-top: 4px;
+              font-size: 11px;
+              font-weight: 500;
+              color: #dbe4f0;
+            }
+
+            .subSpx {
+              color: #f8d7df;
+              font-weight: 600;
+            }
+
+            .status {
+              margin-top: 8px;
+              font-size: 11px;
+              font-weight: 700;
+              letter-spacing: 0.04em;
+              text-transform: uppercase;
+            }
+
+            .status-danger { color: #ff6b88; }
+            .status-warning { color: #f7df5e; }
+            .status-healthy { color: #37e184; }
+            .status-neutral { color: #cbd5e1; }
+
+            .badge {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              width: 20px;
+              height: 20px;
+              border-radius: 9999px;
+              font-size: 11px;
+              font-weight: 700;
+              line-height: 1;
+              flex-shrink: 0;
+            }
+
+            .badge-danger { background: #ff4f72; color: #fff; }
+            .badge-warning { background: #f6bf34; color: #111827; }
+            .badge-healthy { background: #22c55e; color: #fff; }
+
+            .alertBox {
+              margin-top: 14px;
+              border-radius: 18px;
+              border: 1px solid rgba(245, 158, 11, 0.8);
+              background: #5a5260;
+              padding: 14px 18px;
+            }
+
+            .alertTitle {
+              font-size: 11px;
+              font-weight: 700;
+              letter-spacing: 0.16em;
+              text-transform: uppercase;
+              color: #f7df5e;
+            }
+
+            .alertBody {
+              margin-top: 8px;
+              font-size: 17px;
+              font-weight: 700;
+              color: #fff8dc;
+            }
+
+            .meterWrap {
+              margin-top: 12px;
+            }
+
+            .meterTrack {
+              position: relative;
+              height: 4px;
+              border-radius: 9999px;
+              background: #202a64;
+            }
+
+            .meterFill {
+              position: absolute;
+              left: 0;
+              top: 0;
+              height: 4px;
+              border-radius: 9999px;
+            }
+
+            .meterFill-warning { background: #f6bf34; }
+            .meterFill-healthy { background: #37e184; }
+            .meterFill-danger { background: #ff4f72; }
+            .meterFill-neutral { background: #cbd5e1; }
+
+            .meterMarker {
+              position: absolute;
+              top: 50%;
+              width: 2px;
+              height: 18px;
+              transform: translateY(-50%);
+              background: #f8fafc;
+            }
+
+            .meterScale {
+              margin-top: 8px;
+              display: flex;
+              justify-content: space-between;
+              font-size: 11px;
+              font-weight: 500;
+              color: #dbe4f0;
+            }
+
+            .hint {
+              margin-top: 8px;
+              font-size: 10px;
+              color: #94a3b8;
+            }
+
+            .modalBackdrop {
+              position: fixed;
+              inset: 0;
+              z-index: 50;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 16px;
+              background: rgba(0,0,0,0.6);
+            }
+
+            .modal {
+              width: 100%;
+              max-width: 1100px;
+              border-radius: 18px;
+              border: 1px solid #334155;
+              background: #0f153f;
+              padding: 24px;
+              box-shadow: 0 25px 80px rgba(0,0,0,0.4);
+            }
+
+            .modalTop {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              gap: 16px;
+            }
+
+            .modalTitle {
+              font-size: 24px;
+              font-weight: 700;
+              color: #fff;
+            }
+
+            .modalSub {
+              margin-top: 4px;
+              font-size: 12px;
+              font-weight: 600;
+              color: #cbd5e1;
+            }
+
+            .closeBtn {
+              border: 0;
+              border-radius: 10px;
+              background: #1f2937;
+              color: #e2e8f0;
+              padding: 10px 14px;
+              font-size: 14px;
+              font-weight: 600;
+              cursor: pointer;
+            }
+
+            .modalGrid {
+              display: grid;
+              grid-template-columns: 0.95fr 1.05fr;
+              gap: 16px;
+              margin-top: 24px;
+            }
+
+            .modalStack {
+              display: grid;
+              gap: 16px;
+            }
+
+            .modalCard {
+              background: #050a35;
+              border-radius: 14px;
+              padding: 16px;
+            }
+
+            .smallHead {
+              font-size: 12px;
+              font-weight: 600;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              color: #94a3b8;
+            }
+
+            .bigValue {
+              margin-top: 12px;
+              font-size: 42px;
+              font-weight: 700;
+              line-height: 1;
+              color: #fff;
+            }
+
+            .bodyCopy {
+              margin-top: 8px;
+              font-size: 13px;
+              line-height: 1.7;
+              color: #e2e8f0;
+            }
+
+            .bodyCopyRight {
+              text-align: right;
+            }
+
+            .vixBandWrap {
+              margin-top: 20px;
+            }
+
+            .vixBandTrack {
+              position: relative;
+              height: 8px;
+              border-radius: 9999px;
+              overflow: hidden;
+              background: #202a64;
+            }
+
+            .seg {
+              position: absolute;
+              top: 0;
+              height: 8px;
+            }
+
+            .seg1 { left: 0; width: 37.5%; background: #047857; }
+            .seg2 { left: 37.5%; width: 12.5%; background: #4ade80; }
+            .seg3 { left: 50%; width: 25%; background: #f59e0b; }
+            .seg4 { left: 75%; width: 25%; background: #ef4444; }
+
+            .vixMarker {
+              position: absolute;
+              top: 50%;
+              width: 2px;
+              height: 30px;
+              transform: translateY(-50%);
+              background: #fff;
+            }
+
+            .vixScale,
+            .vixBands,
+            .percentileBands {
+              margin-top: 10px;
+              display: flex;
+              justify-content: space-between;
+              font-size: 10px;
+              color: #94a3b8;
+            }
+
+            .vixScale {
+              font-size: 11px;
+              color: #cbd5e1;
+            }
+
+            .vixBands {
+              text-transform: uppercase;
+              font-weight: 600;
+              letter-spacing: 0.06em;
+            }
+
+            .percentileBox {
+              margin-top: 20px;
+              border-radius: 14px;
+              border: 1px solid rgba(245, 158, 11, 0.3);
+              background: #141b47;
+              padding: 16px;
+            }
+
+            .percentileRow {
+              margin-top: 8px;
+              display: flex;
+              align-items: flex-end;
+              justify-content: space-between;
+              gap: 12px;
+            }
+
+            .percentileValue {
+              font-size: 32px;
+              font-weight: 700;
+              line-height: 1;
+              color: #fbbf24;
+            }
+
+            .percentileValue span {
+              font-size: 16px;
+              vertical-align: top;
+            }
+
+            .percentileTrack {
+              position: relative;
+              height: 12px;
+              margin-top: 12px;
+              border-radius: 9999px;
+              overflow: hidden;
+              background: #202a64;
+            }
+
+            .pseg {
+              position: absolute;
+              top: 0;
+              height: 12px;
+            }
+
+            .p1 { left: 0; width: 50%; background: #166534; }
+            .p2 { left: 50%; width: 35%; background: #a16207; }
+            .p3 { left: 85%; width: 15%; background: #7f1d1d; }
+
+            .pMarker {
+              position: absolute;
+              top: 50%;
+              width: 2px;
+              height: 20px;
+              transform: translateY(-50%);
+              background: #fff;
+            }
+
+            .historyList {
+              display: grid;
+              gap: 8px;
+              margin-top: 12px;
+            }
+
+            .historyRow {
+              display: grid;
+              grid-template-columns: 70px 1fr 1fr;
+              gap: 12px;
+              align-items: start;
+              border: 1px solid #1e293b;
+              border-radius: 10px;
+              background: #0b1138;
+              padding: 10px 12px;
+              font-size: 13px;
+              color: #e2e8f0;
+            }
+
+            .historyRowActive {
+              border-color: rgba(245, 158, 11, 0.4);
+              background: #141b47;
+            }
+
+            .historyNum {
+              font-weight: 700;
+              color: #cbd5e1;
+            }
+
+            .historyNumActive {
+              color: #fbbf24;
+            }
+
+            .historyNote {
+              color: #94a3b8;
+            }
+
+            .actionCard {
+              border: 1px solid rgba(34, 197, 94, 0.35);
+              border-radius: 14px;
+              background: #031e1a;
+              padding: 16px;
+            }
+
+            .actionHead {
+              color: #fbbf24;
+            }
+
+            .actionCopy {
+              color: #ecfdf5;
+            }
+
+            @media (max-width: 1100px) {
+              .trendGrid,
+              .stressGrid {
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+              }
+
+              .modalGrid {
+                grid-template-columns: 1fr;
+              }
+            }
+
+            @media (max-width: 900px) {
+              .title { font-size: 30px; }
+              .value { font-size: 24px; }
+              .stressValue { font-size: 24px; }
+            }
+
+            @media (max-width: 700px) {
+              .topBar,
+              .panelHeader,
+              .modalTop {
+                flex-direction: column;
+                align-items: flex-start;
+              }
+
+              .damage {
+                white-space: normal;
+              }
+
+              .trendGrid,
+              .stressGrid {
+                grid-template-columns: 1fr;
+              }
+
+              .historyRow {
+                grid-template-columns: 1fr;
+              }
+            }
+          `,
+        }}
+      />
+    </>
   );
 }
