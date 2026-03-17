@@ -1,7 +1,8 @@
-import { AlertCircle, ShieldAlert } from "lucide-react";
-
 export default function SmartMoneyDashboardFrontendV2() {
   const trendTiles = [
+    
+    
+    
     {
       label: "S&P 500",
       value: "6,699",
@@ -9,10 +10,7 @@ export default function SmartMoneyDashboardFrontendV2() {
       ytd: "-2.13% YTD",
       tone: "danger",
       kind: "spx",
-      trend: [
-        6946.13, 6908.86, 6878.88, 6881.62, 6816.63, 6869.5, 6830.71,
-        6740.02, 6795.99, 6781.48, 6775.8, 6672.62, 6632.19, 6699.38,
-      ],
+      trend: [6946.13, 6908.86, 6878.88, 6881.62, 6816.63, 6869.50, 6830.71, 6740.02, 6795.99, 6781.48, 6775.80, 6672.62, 6632.19, 6699.38],
     },
     {
       label: "20-DMA",
@@ -49,83 +47,29 @@ export default function SmartMoneyDashboardFrontendV2() {
   ];
 
   const stressTiles = [
-    {
-      label: "VIX",
-      value: "23.5",
-      subline: "Warning",
-      scale: [0, 30, 100],
-      pos: 34,
-      tone: "warning",
-    },
-    {
-      label: "VIX / VXV",
-      value: "—",
-      subline: "Awaiting feed",
-      scale: [0, 1, 2],
-      pos: 50,
-      tone: "neutral",
-    },
-    {
-      label: "HY Spread",
-      value: "3.28%",
-      subline: "Watch",
-      scale: [2, 4, 6],
-      pos: 38,
-      tone: "warning",
-    },
-    {
-      label: "DXY",
-      value: "—",
-      subline: "Not in v1",
-      scale: [90, 105, 115],
-      pos: 52,
-      tone: "neutral",
-    },
-    {
-      label: "Yield Curve",
-      value: "0.55%",
-      subline: "Healthy",
-      scale: [-1, 0, 1.5],
-      pos: 62,
-      tone: "healthy",
-    },
-    {
-      label: "Real 10Y",
-      value: "1.92%",
-      subline: "Firm",
-      scale: [0, 2, 3],
-      pos: 58,
-      tone: "warning",
-    },
-    {
-      label: "Equity Risk Premium",
-      value: "—%",
-      subline: "Manual / later",
-      scale: [0, 1, 5],
-      pos: 18,
-      tone: "neutral",
-    },
+    { label: "VIX", value: "23.5", subline: "Warning", scale: [0, 30, 100], pos: 34, tone: "warning" },
+    { label: "VIX / VXV", value: "—", subline: "Awaiting feed", scale: [0, 1, 2], pos: 50, tone: "neutral" },
+    { label: "HY Spread", value: "3.28%", subline: "Watch", scale: [2, 4, 6], pos: 38, tone: "warning" },
+    { label: "DXY", value: "—", subline: "Not in v1", scale: [90, 105, 115], pos: 52, tone: "neutral" },
+    { label: "Yield Curve", value: "0.55%", subline: "Healthy", scale: [-1, 0, 1.5], pos: 62, tone: "healthy" },
+    { label: "Real 10Y", value: "1.92%", subline: "Firm", scale: [0, 2, 3], pos: 58, tone: "warning" },
+    { label: "Equity Risk Premium", value: "—%", subline: "Manual / later", scale: [0, 1, 5], pos: 18, tone: "neutral" },
   ];
 
-  const damageCount = trendTiles.filter(
-    (t) => t.kind === "ma" && t.status === "Broken Below"
-  ).length;
-  const totalMA = trendTiles.filter((t) => t.kind === "ma").length;
+  const damageCount = trendTiles.filter((t) => t.kind === "ma" && t.status === "Broken Below").length;
+  const totalMA = trendTiles.filter(t => t.kind === "ma").length;
 
-  const sparkline = (points: number[]) => {
+  const sparkline = (points) => {
     const w = 120;
     const h = 28;
     const max = Math.max(...points);
     const min = Math.min(...points);
     const range = Math.max(1, max - min);
-
-    const coords = points
-      .map((p, i) => {
-        const x = (i / (points.length - 1)) * w;
-        const y = h - ((p - min) / range) * h;
-        return `${x},${y}`;
-      })
-      .join(" ");
+    const coords = points.map((p, i) => {
+      const x = (i / (points.length - 1)) * w;
+      const y = h - ((p - min) / range) * h;
+      return `${x},${y}`;
+    }).join(" ");
 
     return (
       <svg viewBox={`0 0 ${w} ${h}`} className="mt-2 w-full">
@@ -142,24 +86,19 @@ export default function SmartMoneyDashboardFrontendV2() {
     );
   };
 
-  const iconForTone = (tone: string) => {
-    if (tone === "warning") return <ShieldAlert className="h-4 w-4" />;
-    return <AlertCircle className="h-4 w-4" />;
-  };
-
-  const badgeTone = (tone: string) => {
+    const badgeTone = (tone) => {
     if (tone === "warning") return "bg-amber-400 text-slate-950";
     return "bg-rose-500 text-white";
   };
 
-  const textTone = (tone: string) => {
+  const textTone = (tone) => {
     if (tone === "warning") return "text-amber-300";
     if (tone === "healthy") return "text-emerald-400";
     if (tone === "neutral") return "text-slate-300";
     return "text-rose-400";
   };
 
-  const barTone = (tone: string) => {
+  const barTone = (tone) => {
     if (tone === "warning") return "bg-amber-400";
     if (tone === "healthy") return "bg-emerald-400";
     return "bg-slate-300";
@@ -187,10 +126,8 @@ export default function SmartMoneyDashboardFrontendV2() {
         <section className="rounded-xl bg-[#23255a] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
           <div className="mb-3 flex items-end justify-between">
             <div>
-              <div className="text-xl font-extrabold tracking-tight text-white sm:text-[24px]">
-                Market Structure
-              </div>
-              <div className="mt-1 text-xs font-semibold tracking-[0.12em] text-slate-300">
+              <div className="text-xl sm:text-[24px] font-extrabold tracking-tight text-white">Market Structure</div>
+              <div className="text-xs font-semibold tracking-[0.12em] text-slate-300 mt-1">
                 Price vs Key Moving Averages
               </div>
             </div>
@@ -204,21 +141,15 @@ export default function SmartMoneyDashboardFrontendV2() {
             {trendTiles.map((tile) => (
               <div key={tile.label} className="rounded-lg bg-[#050a35] p-3 shadow-inner">
                 <div className="mb-3 flex items-start justify-between gap-2">
-                  <div className="text-[15px] font-extrabold tracking-tight text-white">
-                    {tile.label}
-                  </div>
+                  <div className="text-[15px] font-extrabold tracking-tight text-white">{tile.label}</div>
 
                   {tile.kind === "spx" && tile.ytd ? (
                     <div className="text-[12px] font-semibold text-slate-300">
                       {tile.ytd}
                     </div>
                   ) : tile.kind === "ma" ? (
-                    <div
-                      className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${badgeTone(
-                        tile.tone
-                      )}`}
-                    >
-                      {iconForTone(tile.tone)}
+                    <div className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${badgeTone(tile.tone)}`}>
+                      <span>{tile.tone === "warning" ? "!" : "!"}</span>
                     </div>
                   ) : null}
                 </div>
@@ -230,20 +161,12 @@ export default function SmartMoneyDashboardFrontendV2() {
                 {tile.kind === "spx" && tile.trend ? sparkline(tile.trend) : null}
 
                 {tile.status ? (
-                  <div
-                    className={`mt-3 text-[14px] font-extrabold uppercase tracking-[0.08em] ${textTone(
-                      tile.tone
-                    )}`}
-                  >
+                  <div className={`mt-3 text-[14px] font-extrabold uppercase tracking-[0.08em] ${textTone(tile.tone)}`}>
                     {tile.status}
                   </div>
                 ) : null}
 
-                <div
-                  className={`mt-2 text-[14px] font-bold ${
-                    tile.kind === "spx" ? "text-rose-400" : textTone(tile.tone)
-                  }`}
-                >
+                <div className={`mt-2 text-[14px] font-bold ${tile.kind === "spx" ? "text-rose-400" : textTone(tile.tone)}`}>
                   {tile.subline}
                 </div>
               </div>
@@ -261,9 +184,7 @@ export default function SmartMoneyDashboardFrontendV2() {
         </section>
 
         <section className="mt-4 rounded-xl bg-[#171949] p-3">
-          <h2 className="mb-3 text-xl font-extrabold tracking-tight text-white">
-            Market Stress
-          </h2>
+          <h2 className="mb-3 text-xl font-extrabold tracking-tight text-white">Market Stress</h2>
           <div className="grid gap-2 md:grid-cols-5">
             {stressTiles.map((tile) => (
               <div key={tile.label} className="rounded-lg bg-[#050a35] p-3">
@@ -271,18 +192,11 @@ export default function SmartMoneyDashboardFrontendV2() {
                 <div className="mt-4 text-[24px] font-extrabold leading-none tracking-tight text-white">
                   {tile.value}
                 </div>
-                <div className={`mt-3 text-[14px] font-bold ${textTone(tile.tone)}`}>
-                  {tile.subline}
-                </div>
+                <div className={`mt-3 text-[14px] font-bold ${textTone(tile.tone)}`}>{tile.subline}</div>
 
                 <div className="mt-4">
                   <div className="relative h-1 rounded-full bg-[#202a64]">
-                    <div
-                      className={`absolute left-0 top-0 h-1 rounded-full ${barTone(
-                        tile.tone
-                      )}`}
-                      style={{ width: `${tile.pos}%` }}
-                    />
+                    <div className={`absolute left-0 top-0 h-1 rounded-full ${barTone(tile.tone)}`} style={{ width: `${tile.pos}%` }} />
                     <div
                       className="absolute top-1/2 h-6 w-[2px] -translate-y-1/2 bg-slate-100"
                       style={{ left: `${tile.pos}%` }}
