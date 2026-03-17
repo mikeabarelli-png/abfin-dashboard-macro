@@ -2,13 +2,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
-type YahooQuote = {
-  symbol?: string;
-  shortName?: string;
-  regularMarketPrice?: number;
-  regularMarketChangePercent?: number;
-};
-
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -23,6 +16,7 @@ export async function GET() {
   try {
     const quoteUrl =
       "https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC,%5EVIX";
+
     const chartUrl =
       "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=1mo&interval=1d&includePrePost=false";
 
@@ -98,22 +92,24 @@ export async function GET() {
       );
     }
 
-    const quotes: YahooQuote[] = quoteJson?.quoteResponse?.result ?? [];
+    const quotes = quoteJson?.quoteResponse?.result ?? [];
 
     const spxQuote =
-      quotes.find((q) => q.symbol === "^GSPC") ??
-      quotes.find((q) => q.shortName?.includes("S&P 500"));
+      quotes.find((q: any) => q.symbol === "^GSPC") ??
+      quotes.find((q: any) => String(q.shortName || "").includes("S&P 500"));
 
     const vixQuote =
-      quotes.find((q) => q.symbol === "^VIX") ??
-      quotes.find((q) => q.shortName?.toLowerCase().includes("volatility"));
+      quotes.find((q: any) => q.symbol === "^VIX") ??
+      quotes.find((q: any) =>
+        String(q.shortName || "").toLowerCase().includes("volatility")
+      );
 
     if (!spxQuote?.regularMarketPrice) {
       return json(
         {
           ok: false,
           error: "Could not find SPX quote in Yahoo response",
-          quotes,
+          detail: quotes,
         },
         500
       );
