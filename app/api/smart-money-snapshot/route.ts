@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
-// Using require to bypass strict yahoo-finance2 TypeScript types
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const yahooFinance = require("yahoo-finance2").default;
+const YahooFinance = require("yahoo-finance2").default;
+const yahooFinance = new YahooFinance();
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
