@@ -9,15 +9,24 @@ type YahooQuote = {
   regularMarketChangePercent?: number;
 };
 
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store, max-age=0",
+    },
+  });
+}
+
 export async function GET() {
   try {
     const quoteUrl =
       "https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC,%5EVIX";
-
     const chartUrl =
       "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=1mo&interval=1d&includePrePost=false";
 
-    const commonHeaders = {
+    const headers = {
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       Accept: "application/json,text/plain,*/*",
@@ -29,45 +38,65 @@ export async function GET() {
     };
 
     const [quoteRes, chartRes] = await Promise.all([
-      fetch(quoteUrl, {
-        cache: "no-store",
-        headers: commonHeaders,
-      }),
-      fetch(chartUrl, {
-        cache: "no-store",
-        headers: commonHeaders,
-      }),
+      fetch(quoteUrl, { cache: "no-store", headers }),
+      fetch(chartUrl, { cache: "no-store", headers }),
     ]);
 
     const quoteText = await quoteRes.text();
     const chartText = await chartRes.text();
 
     if (!quoteRes.ok) {
-      return Response.json(
+      return json(
         {
           ok: false,
           error: "Yahoo quote request failed",
           status: quoteRes.status,
           detail: quoteText.slice(0, 500),
         },
-        { status: 500 }
+        500
       );
     }
 
     if (!chartRes.ok) {
-      return Response.json(
+      return json(
         {
           ok: false,
           error: "Yahoo chart request failed",
           status: chartRes.status,
           detail: chartText.slice(0, 500),
         },
-        { status: 500 }
+        500
       );
     }
 
-    const quoteJson = JSON.parse(quoteText);
-    const chartJson = JSON.parse(chartText);
+    let quoteJson: any;
+    let chartJson: any;
+
+    try {
+      quoteJson = JSON.parse(quoteText);
+    } catch {
+      return json(
+        {
+          ok: false,
+          error: "Yahoo quote response was not JSON",
+          detail: quoteText.slice(0, 500),
+        },
+        500
+      );
+    }
+
+    try {
+      chartJson = JSON.parse(chartText);
+    } catch {
+      return json(
+        {
+          ok: false,
+          error: "Yahoo chart response was not JSON",
+          detail: chartText.slice(0, 500),
+        },
+        500
+      );
+    }
 
     const quotes: YahooQuote[] = quoteJson?.quoteResponse?.result ?? [];
 
@@ -80,13 +109,13 @@ export async function GET() {
       quotes.find((q) => q.shortName?.toLowerCase().includes("volatility"));
 
     if (!spxQuote?.regularMarketPrice) {
-      return Response.json(
+      return json(
         {
           ok: false,
           error: "Could not find SPX quote in Yahoo response",
           quotes,
         },
-        { status: 500 }
+        500
       );
     }
 
@@ -101,50 +130,43 @@ export async function GET() {
     const spxChangePct = Number(spxQuote.regularMarketChangePercent ?? 0);
     const vix = Number(vixQuote?.regularMarketPrice ?? 0);
 
-    return Response.json(
-      {
-        ok: true,
-        source: "LIVE_YAHOO_FRED",
-        asOf: new Date().toISOString(),
+    return json({
+      ok: true,
+      source: "LIVE_YAHOO_FRED",
+      asOf: new Date().toISOString(),
 
+      spx_price: spxPrice,
+      spx_change_pct: spxChangePct,
+      spx_ytd_pct: -2.13,
+      spx_trend_14d: closes,
+
+      vix,
+
+      metrics: {
         spx_price: spxPrice,
         spx_change_pct: spxChangePct,
         spx_ytd_pct: -2.13,
         spx_trend_14d: closes,
-
         vix,
 
-        metrics: {
-          spx_price: spxPrice,
-          spx_change_pct: spxChangePct,
-          spx_ytd_pct: -2.13,
-          spx_trend_14d: closes,
-          vix,
+        spx_20dma: { level: 6822.68 },
+        spx_50dma: { level: 6881.21 },
+        spx_100dma: { level: 6841.88 },
+        spx_200dma: { level: 6608.12 },
 
-          spx_20dma: { level: 6822.68 },
-          spx_50dma: { level: 6881.21 },
-          spx_100dma: { level: 6841.88 },
-          spx_200dma: { level: 6608.12 },
-
-          hy_spread: 3.28,
-          yield_curve_10y_2y: 0.55,
-          real_10y: 1.92,
-        },
+        hy_spread: 3.28,
+        yield_curve_10y_2y: 0.55,
+        real_10y: 1.92,
       },
-      {
-        headers: {
-          "Cache-Control": "no-store, max-age=0",
-        },
-      }
-    );
+    });
   } catch (error: any) {
-    return Response.json(
+    return json(
       {
         ok: false,
         error: "Failed to fetch live market data",
         detail: error?.message ?? "Unknown error",
       },
-      { status: 500 }
+      500
     );
   }
 }
