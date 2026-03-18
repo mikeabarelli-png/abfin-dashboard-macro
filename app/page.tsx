@@ -70,6 +70,8 @@ export default function Page() {
   const hySpread = getNum(metrics?.hy_spread, marketData?.hy_spread) ?? 3.28;
   const yieldCurve = getNum(metrics?.yield_curve_10y_2y, marketData?.yield_curve_10y_2y) ?? 0.55;
   const real10y = getNum(metrics?.real_10y, marketData?.real_10y) ?? 1.92;
+  const erpBps = getNum(metrics?.erp_bps, marketData?.erp_bps);
+  const trailingPE = getNum(metrics?.trailing_pe, marketData?.trailing_pe);
 
   const fmtWhole = (n: number) => Math.round(n).toLocaleString();
   const fmt1 = (n: number) => n.toFixed(1);
@@ -293,7 +295,8 @@ export default function Page() {
           {/* ② MARKET STRESS */}
           <section className="panel">
             <div className="panelTitle" style={{ marginBottom: 10 }}>Market Stress</div>
-            <div className="grid5" style={{ marginBottom: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 8 }}>
+              {/* VIX */}
               <div className="tile" style={{ cursor: "pointer" }} onClick={() => setModal("vix")}>
                 <div className="lbl" style={{ marginBottom: 6 }}>VIX</div>
                 <div className="valHero">{vixValue != null ? fmt1(vixValue) : "—"}</div>
@@ -305,6 +308,7 @@ export default function Page() {
                 <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569" }}><span>0</span><span>100</span></div>
                 <div style={{ fontSize: 10, color: vixValue != null && vixValue >= 30 ? "#ff6b88" : "#64748b", marginTop: 4 }}>{vixStatus.sub || "Click for detail"}</div>
               </div>
+              {/* VIX/VXV */}
               <div className="tile">
                 <div className="lbl" style={{ marginBottom: 6 }}>VIX / VXV</div>
                 <div className="valHero" style={{ color: "#64748b" }}>—</div>
@@ -313,6 +317,7 @@ export default function Page() {
                 <div className="meterScale"><span>0.8</span><span>1.0</span><span>1.2</span></div>
                 <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>&gt;1.0 = short-term panic</div>
               </div>
+              {/* HY Spread */}
               <div className="tile" style={{ cursor: "pointer" }} onClick={() => setModal("hy")}>
                 <div className="lbl" style={{ marginBottom: 6 }}>HY Spread</div>
                 <div className="valHero">{fmt2(hySpread)}<span style={{ fontSize: 20, fontWeight: 600 }}>%</span></div>
@@ -321,6 +326,7 @@ export default function Page() {
                 <div className="meterScale"><span>2%</span><span>4%</span><span>6%</span></div>
                 <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>Click for detail</div>
               </div>
+              {/* Yield Curve */}
               <div className="tile" style={{ cursor: "pointer" }} onClick={() => setModal("yc")}>
                 <div className="lbl" style={{ marginBottom: 6 }}>Yield Curve</div>
                 <div className="valHero">{fmt2(yieldCurve)}<span style={{ fontSize: 20, fontWeight: 600 }}>%</span></div>
@@ -329,6 +335,7 @@ export default function Page() {
                 <div className="meterScale"><span>-1%</span><span>0%</span><span>1.5%</span></div>
                 <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>Click for detail</div>
               </div>
+              {/* Real 10Y */}
               <div className="tile" style={{ cursor: "pointer" }} onClick={() => setModal("real10y")}>
                 <div className="lbl" style={{ marginBottom: 6 }}>Real 10Y</div>
                 <div className="valHero">{fmt2(real10y)}<span style={{ fontSize: 20, fontWeight: 600 }}>%</span></div>
@@ -337,11 +344,23 @@ export default function Page() {
                 <div className="meterScale"><span>0%</span><span>2%</span><span>3%</span></div>
                 <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>Click for detail</div>
               </div>
-            </div>
-            <div className="tile erpTile">
-              <div><div className="lbl" style={{ marginBottom: 3 }}>Equity Risk Premium</div><div style={{ fontSize: 26, fontWeight: 700, color: "#475569" }}>—%</div></div>
-              <div style={{ flex: 1 }}><div className="meterTrack" style={{ marginTop: 0 }}><div className="meterFill" style={{ width: "35%", background: "#475569" }} /><div className="meterMarker" style={{ left: "35%" }} /></div><div className="meterScale"><span>0%</span><span>3%</span><span>6%</span></div></div>
-              <div style={{ fontSize: 11, color: "#334155", textAlign: "right", lineHeight: 1.5 }}>Earnings yield minus<br />real 10Y rate · Manual v2</div>
+              {/* ERP — 6th tile, same size */}
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom: 6 }}>Equity Risk Premium</div>
+                <div className="valHero" style={{ color: erpBps == null ? "#475569" : erpBps < 200 ? "#ff6b88" : erpBps < 500 ? "#fbbf24" : "#4ade80" }}>
+                  {erpBps != null ? `${erpBps}` : "—"}<span style={{ fontSize: 18, fontWeight: 600 }}>{erpBps != null ? "bps" : ""}</span>
+                </div>
+                <div className="status" style={{ color: erpBps == null ? "#475569" : erpBps < 200 ? "#ff6b88" : erpBps < 500 ? "#fbbf24" : "#4ade80" }}>
+                  {erpBps == null ? "Loading" : erpBps < 200 ? "Danger — Equities Overpriced" : erpBps < 500 ? "Watch — Below Threshold" : "Healthy — Good Risk Premium"}
+                </div>
+                <div style={{ position: "relative", height: 4, borderRadius: 9999, background: "#202a64", marginTop: 10 }}>
+                  <div style={{ position: "absolute", left: 0, top: 0, height: 4, borderRadius: 9999, width: `${Math.max(0, Math.min((erpBps ?? 0) / 8, 100))}%`, background: erpBps == null ? "#475569" : erpBps < 200 ? "#ff6b88" : erpBps < 500 ? "#fbbf24" : "#4ade80" }} />
+                  {/* warning line at 500bps = 62.5% of 800bps scale */}
+                  <div style={{ position: "absolute", top: -5, left: "62.5%", width: 1.5, height: 14, background: "rgba(255,255,255,0.35)", borderRadius: 1 }} />
+                </div>
+                <div style={{ marginTop: 5, display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569" }}><span>0</span><span>500⚡</span><span>800+</span></div>
+                <div style={{ fontSize: 10, color: "#334155", marginTop: 4 }}>Earnings yield minus real 10Y</div>
+              </div>
             </div>
           </section>
 
