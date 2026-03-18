@@ -108,8 +108,8 @@ export async function GET() {
   const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, peData] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
-    fetchChart("DX-Y.NYB", 5),   // Dollar Index
-    fetchChart("^CPC", 5),        // CBOE Total Put/Call Ratio
+    fetchChart("DX=F", 5),       // Dollar Index futures
+    fetchChart("^CPCE", 5),       // CBOE Equity Put/Call Ratio
     fetchFred("DFII10"),           // Real 10Y TIPS yield
     fetchFred("DGS10"),            // Nominal 10Y Treasury yield
     fetchFred("BAMLH0A0HYM2"),    // ICE BofA HY OAS
@@ -151,7 +151,7 @@ export async function GET() {
 
   const real10y: number = fredReal10y.value ?? 1.92;
   const nom10y: number = fredNom10y.value ?? 4.30;
-  const hySpread: number = fredHY.value != null ? fredHY.value / 100 : 3.28;
+  const hySpread: number = fredHY.value ?? 3.28; // FRED returns value already in % (e.g. 3.28)
   const yieldCurve: number = fredYC.value ?? 0.55;
 
   // DXY — Dollar Index current price
