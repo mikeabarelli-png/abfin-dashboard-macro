@@ -55,10 +55,7 @@ async function fetchChart(
   }
 }
 
-// Fetch latest value from FRED series
-async function fetchFred(
-  seriesId: string
-): Promise<{ value: number | null; error?: string }> {
+async function fetchFred(seriesId: string): Promise<{ value: number | null; error?: string }> {
   const apiKey = process.env.FRED_API_KEY;
   if (!apiKey) return { value: null, error: "FRED_API_KEY not set" };
   const url = `${FRED}?series_id=${seriesId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=1`;
@@ -79,7 +76,6 @@ async function fetchFred(
   }
 }
 
-// Fetch PE ratio from Yahoo v7 quote endpoint
 async function fetchPE(): Promise<{ value: number | null; error?: string }> {
   const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC&fields=trailingPE,forwardPE`;
   const controller = new AbortController();
@@ -108,9 +104,9 @@ async function fetchPE(): Promise<{ value: number | null; error?: string }> {
 export async function GET() {
   const diagnostics: Record<string, string> = {};
 
-  // Fetch all in parallel — failures isolated
+  // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
   const [spx, vix, fredReal10y, fredHY, fredYC, peData] = await Promise.all([
-    fetchChart("^GSPC", 300),
+    fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
     fetchFred("DFII10"),
     fetchFred("BAMLH0A0HYM2"),
@@ -125,7 +121,6 @@ export async function GET() {
   if (fredYC.error) diagnostics["yc"] = fredYC.error;
   if (peData.error) diagnostics["pe"] = peData.error;
 
-  // SPX metrics
   const spxCloses = spx.closes;
   const spxPrice: number | null = spx.meta.regularMarketPrice ?? spxCloses[spxCloses.length - 1] ?? null;
   const spxPrevClose: number | null =
@@ -135,33 +130,31 @@ export async function GET() {
       ? ((spxPrice - spxPrevClose) / spxPrevClose) * 100
       : null;
 
+  function avg(arr: number[]) {
+    const clean = arr.filter((n) => Number.isFinite(n));
+    return clean.reduce((s, n) => s + n, 0) / clean.length;
+  }
+
   const spx20dma = spxCloses.length >= 20 ? avg(spxCloses.slice(-20)) : null;
   const spx50dma = spxCloses.length >= 50 ? avg(spxCloses.slice(-50)) : null;
   const spx100dma = spxCloses.length >= 100 ? avg(spxCloses.slice(-100)) : null;
   const spx200dma = spxCloses.length >= 200 ? avg(spxCloses.slice(-200)) : null;
   const spxTrend14d = spxCloses.slice(-14);
 
-  // VIX
-  const vixPrice: number | null =
-    vix.meta.regularMarketPrice ?? vix.closes[vix.closes.length - 1] ?? null;
+  const vixPrice: number | null = vix.meta.regularMarketPrice ?? vix.closes[vix.closes.length - 1] ?? null;
 
-  // FRED-sourced values (fallback to hardcoded if unavailable)
   const real10y: number = fredReal10y.value ?? 1.92;
-  // FRED HY OAS is in bps — convert to % for display
   const hySpread: number = fredHY.value != null ? fredHY.value / 100 : 3.28;
   const yieldCurve: number = fredYC.value ?? 0.55;
 
-  // ERP = Earnings Yield - Real 10Y Rate (in basis points)
-  // Try v7 PE first, fall back to chart meta
   const trailingPE: number | null = peData.value ?? spx.meta.trailingPE ?? null;
   let erp: number | null = null;
   if (trailingPE != null && trailingPE > 0) {
     const earningsYield = (1 / trailingPE) * 100;
     erp = Math.round((earningsYield - real10y) * 100);
-    console.log(`ERP: ${erp} bps (PE: ${trailingPE}, EY: ${earningsYield.toFixed(2)}%, Real10Y: ${real10y}%)`);
+    console.log(`ERP: ${erp} bps`);
   }
 
-  // YTD
   let spxYtdPct: number | null = null;
   try {
     const now = new Date();
@@ -190,12 +183,14 @@ export async function GET() {
     spx_change_pct: spxChangePct,
     spx_ytd_pct: spxYtdPct,
     spx_trend_14d: spxTrend14d,
+    spx_history: spxCloses,
     vix: vixPrice,
     metrics: {
       spx_price: spxPrice,
       spx_change_pct: spxChangePct,
       spx_ytd_pct: spxYtdPct,
       spx_trend_14d: spxTrend14d,
+      spx_history: spxCloses,
       vix: vixPrice,
       spx_20dma: { level: spx20dma },
       spx_50dma: { level: spx50dma },
