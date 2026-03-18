@@ -105,7 +105,7 @@ async function fetchPE(): Promise<{ value: number | null; error?: string }> {
   }
 }
 
-
+export async function GET() {
   const diagnostics: Record<string, string> = {};
 
   // Fetch all in parallel — failures isolated
