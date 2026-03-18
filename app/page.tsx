@@ -131,8 +131,17 @@ export default function Page() {
       const text = data.text ?? data.error ?? "Unable to load.";
       if (!msgs) setAiCache(prev => ({ ...prev, [key]: text }));
       return text;
+    } catch (err: any) {
+      const text = `Error: ${err?.message ?? "Request failed"}`;
+      if (!msgs) setAiCache(prev => ({ ...prev, [key]: text }));
+      return text;
     } finally { setAiLoading(false); }
   };
+
+  // Load summary on mount — no dependency on spxPrice
+  useEffect(() => {
+    callClaude("3-4 sentence market summary: SPX vs key MAs, VIX and HY spread signal, single most important thing to watch. Direct.", "summary");
+  }, []);
 
   const handleAiTab = (tab: string) => {
     setAiTab(tab);
@@ -142,6 +151,18 @@ export default function Page() {
       triggers: "Which triggers closest to firing? How many SPX points to 200-DMA breach? What activates defensive posture? Specific numbers.",
     };
     if (tab !== "chat" && !aiCache[tab]) callClaude(prompts[tab], tab);
+  };
+
+  const refreshAiTab = () => {
+    const prompts: Record<string, string> = {
+      summary: "3-4 sentence market summary: SPX vs key MAs, VIX and HY spread signal, single most important thing to watch. Direct.",
+      action: "Based on my rules: (1) current mode, (2) what to do or not do, (3) what level changes that. Direct and specific.",
+      triggers: "Which triggers closest to firing? How many SPX points to 200-DMA breach? What activates defensive posture? Specific numbers.",
+    };
+    if (aiTab !== "chat") {
+      setAiCache(prev => { const n = {...prev}; delete n[aiTab]; return n; });
+      callClaude(prompts[aiTab], aiTab);
+    }
   };
 
   const sendChat = async () => {
@@ -523,6 +544,9 @@ export default function Page() {
                   {{ summary: "Market Summary", action: "Recommended Action", triggers: "Trigger Watch", chat: "Ask a Question" }[t]}
                 </button>
               ))}
+              {aiTab !== "chat" && (
+                <button className="aiTab" onClick={refreshAiTab} style={{ marginLeft: "auto", opacity: aiLoading ? 0.4 : 1 }} disabled={aiLoading}>↺ Refresh</button>
+              )}
             </div>
             {aiTab !== "chat" ? (
               <div className="aiOut">{aiLoading && !aiCache[aiTab] ? <><span className="spinner" /> Analyzing...</> : (aiCache[aiTab] ?? "")}</div>
