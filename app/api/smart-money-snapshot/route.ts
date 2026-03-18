@@ -79,16 +79,43 @@ async function fetchFred(
   }
 }
 
-export async function GET() {
+// Fetch PE ratio from Yahoo v7 quote endpoint
+async function fetchPE(): Promise<{ value: number | null; error?: string }> {
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC&fields=trailingPE,forwardPE`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "application/json",
+      },
+    });
+    if (!res.ok) return { value: null, error: `Yahoo v7 PE: HTTP ${res.status}` };
+    const data = await res.json();
+    const result = data?.quoteResponse?.result?.[0];
+    const pe = result?.trailingPE ?? result?.forwardPE ?? null;
+    console.log(`PE ratio: ${pe}`);
+    return { value: pe };
+  } catch (err: any) {
+    return { value: null, error: `PE fetch: ${err?.message}` };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+
   const diagnostics: Record<string, string> = {};
 
   // Fetch all in parallel — failures isolated
-  const [spx, vix, fredReal10y, fredHY, fredYC] = await Promise.all([
+  const [spx, vix, fredReal10y, fredHY, fredYC, peData] = await Promise.all([
     fetchChart("^GSPC", 300),
     fetchChart("^VIX", 5),
-    fetchFred("DFII10"),    // Real 10Y TIPS yield
-    fetchFred("BAMLH0A0HYM2"),  // ICE BofA HY OAS (bps)
-    fetchFred("T10Y2Y"),    // 10Y-2Y Treasury spread
+    fetchFred("DFII10"),
+    fetchFred("BAMLH0A0HYM2"),
+    fetchFred("T10Y2Y"),
+    fetchPE(),
   ]);
 
   if (spx.error) diagnostics["spx"] = spx.error;
@@ -96,6 +123,7 @@ export async function GET() {
   if (fredReal10y.error) diagnostics["real10y"] = fredReal10y.error;
   if (fredHY.error) diagnostics["hy"] = fredHY.error;
   if (fredYC.error) diagnostics["yc"] = fredYC.error;
+  if (peData.error) diagnostics["pe"] = peData.error;
 
   // SPX metrics
   const spxCloses = spx.closes;
@@ -124,13 +152,12 @@ export async function GET() {
   const yieldCurve: number = fredYC.value ?? 0.55;
 
   // ERP = Earnings Yield - Real 10Y Rate (in basis points)
-  // Earnings Yield = (1 / Trailing P/E) * 100
-  // Trailing P/E from Yahoo meta (trailingPE field)
-  const trailingPE: number | null = spx.meta.trailingPE ?? null;
+  // Try v7 PE first, fall back to chart meta
+  const trailingPE: number | null = peData.value ?? spx.meta.trailingPE ?? null;
   let erp: number | null = null;
-  if (trailingPE != null && trailingPE > 0 && real10y != null) {
-    const earningsYield = (1 / trailingPE) * 100; // as a %
-    erp = Math.round((earningsYield - real10y) * 100); // convert to bps
+  if (trailingPE != null && trailingPE > 0) {
+    const earningsYield = (1 / trailingPE) * 100;
+    erp = Math.round((earningsYield - real10y) * 100);
     console.log(`ERP: ${erp} bps (PE: ${trailingPE}, EY: ${earningsYield.toFixed(2)}%, Real10Y: ${real10y}%)`);
   }
 
