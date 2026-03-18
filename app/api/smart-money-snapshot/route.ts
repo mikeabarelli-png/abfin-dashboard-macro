@@ -80,7 +80,9 @@ export async function GET() {
   // SPX metrics — null if data unavailable
   const spxCloses = spx.closes;
   const spxPrice: number | null = spx.meta.regularMarketPrice ?? spxCloses[spxCloses.length - 1] ?? null;
-  const spxPrevClose: number | null = spx.meta.chartPreviousClose ?? null;
+  // Use second-to-last close from array for daily change — more reliable than meta.chartPreviousClose
+  const spxPrevClose: number | null =
+    spxCloses.length >= 2 ? spxCloses[spxCloses.length - 2] : spx.meta.chartPreviousClose ?? null;
   const spxChangePct: number | null =
     spxPrice != null && spxPrevClose != null
       ? ((spxPrice - spxPrevClose) / spxPrevClose) * 100
