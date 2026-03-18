@@ -75,6 +75,10 @@ export default function Page() {
   const hySpread = getNum(metrics?.hy_spread, marketData?.hy_spread) ?? 3.28;
   const yieldCurve = getNum(metrics?.yield_curve_10y_2y, marketData?.yield_curve_10y_2y) ?? 0.55;
   const real10y = getNum(metrics?.real_10y, marketData?.real_10y) ?? 1.92;
+  const nom10y = getNum(metrics?.nom_10y, marketData?.nom_10y) ?? 4.30;
+  const dxy = getNum(metrics?.dxy, marketData?.dxy);
+  const dxyChangePct = getNum(metrics?.dxy_change_pct, marketData?.dxy_change_pct);
+  const putCallRatio = getNum(metrics?.put_call_ratio, marketData?.put_call_ratio);
   const erpBps = getNum(metrics?.erp_bps, marketData?.erp_bps);
   const trailingPE = getNum(metrics?.trailing_pe, marketData?.trailing_pe);
 
@@ -551,6 +555,52 @@ export default function Page() {
                 </div>
                 <div style={{ marginTop:5, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>500⚡</span><span>800+</span></div>
                 <div style={{ fontSize:10, color:"#334155", marginTop:4 }}>Earnings yield minus real 10Y</div>
+              </div>
+            </div>
+
+            {/* Liquidity & Positioning row */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", margin:"10px 0 6px" }}>Liquidity &amp; Positioning</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:8 }}>
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom:6 }}>US Dollar Index (DXY)</div>
+                <div className="valHero" style={{ color:"#fff" }}>{dxy!=null?dxy.toFixed(2):"—"}</div>
+                <div className="status" style={{ color:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }}>
+                  {dxy==null?"Loading":dxy>104?"Strong — Liquidity Tight":dxy>100?"Elevated":"Neutral — Easier Liquidity"}
+                </div>
+                <div className="meterTrack">
+                  <div className="meterFill" style={{ width:`${Math.max(0,Math.min(((dxy??100)-90)/30*100,100))}%`, background:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }} />
+                  <div className="meterMarker" style={{ left:`${Math.max(0,Math.min(((dxy??100)-90)/30*100,100))}%` }} />
+                </div>
+                <div className="meterScale"><span>90</span><span>100</span><span>110</span><span>120</span></div>
+                <div style={{ fontSize:10, color:dxyChangePct!=null&&dxyChangePct>0?"#ff6b88":dxyChangePct!=null&&dxyChangePct<0?"#4ade80":"#475569", marginTop:4 }}>
+                  {dxyChangePct!=null?`${dxyChangePct>0?"▲":"▼"} ${Math.abs(dxyChangePct).toFixed(2)}% today · ↑ Dollar = tighter liquidity`:"↑ Dollar = tighter liquidity for risk assets"}
+                </div>
+              </div>
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom:6 }}>10Y Treasury Yield (Nominal)</div>
+                <div className="valHero" style={{ color:"#fff" }}>{nom10y.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                <div className="status" style={{ color:nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80" }}>
+                  {nom10y>4.5?"Restrictive — Equity Headwind":nom10y>4?"Elevated — Watch":"Neutral"}
+                </div>
+                <div className="meterTrack">
+                  <div className="meterFill" style={{ width:`${Math.max(0,Math.min(nom10y/6*100,100))}%`, background:nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80" }} />
+                  <div className="meterMarker" style={{ left:`${Math.max(0,Math.min(nom10y/6*100,100))}%` }} />
+                </div>
+                <div className="meterScale"><span>2%</span><span>3%</span><span>4%</span><span>5%</span><span>6%</span></div>
+                <div style={{ fontSize:10, color:"#475569", marginTop:4 }}>Real: {real10y.toFixed(2)}% · Inflation premium: {(nom10y-real10y).toFixed(2)}%</div>
+              </div>
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom:6 }}>Put / Call Ratio (CBOE)</div>
+                <div className="valHero" style={{ color:"#fff" }}>{putCallRatio!=null?putCallRatio.toFixed(2):"—"}</div>
+                <div className="status" style={{ color:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }}>
+                  {putCallRatio==null?"Loading":putCallRatio>1.2?"Fearful — Contrarian Bullish":putCallRatio>0.9?"Neutral":putCallRatio>0.7?"Complacency":"Extreme Complacency"}
+                </div>
+                <div className="meterTrack">
+                  <div className="meterFill" style={{ width:`${Math.max(0,Math.min(((putCallRatio??0.9)-0.4)/1.2*100,100))}%`, background:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }} />
+                  <div className="meterMarker" style={{ left:`${Math.max(0,Math.min(((putCallRatio??0.9)-0.4)/1.2*100,100))}%` }} />
+                </div>
+                <div className="meterScale"><span>0.4</span><span>0.7</span><span>0.9</span><span>1.2</span><span>1.6</span></div>
+                <div style={{ fontSize:10, color:"#475569", marginTop:4 }}>&gt;1.0 = more puts than calls · contrarian buy signal</div>
               </div>
             </div>
           </section>
