@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 type AnyObj = Record<string, any>;
 
@@ -40,8 +40,22 @@ export default function Page() {
   }, []);
 
   const metrics = marketData?.metrics ?? marketData ?? {};
-  const getNum = (...vals: any[]): number | null => { for (const v of vals) { if (typeof v === "number" && Number.isFinite(v)) return v; if (typeof v === "string") { const n = Number(v.replace(/,/g, "")); if (Number.isFinite(n)) return n; } } return null; };
-  const getArr = (...vals: any[]): number[] | null => { for (const v of vals) { if (Array.isArray(v)) { const arr = v.map((x) => typeof x === "number" ? x : Number(String(x).replace(/,/g, ""))).filter((x) => Number.isFinite(x)); if (arr.length) return arr; } } return null; };
+  const getNum = (...vals: any[]): number | null => {
+    for (const v of vals) {
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+      if (typeof v === "string") { const n = Number(v.replace(/,/g, "")); if (Number.isFinite(n)) return n; }
+    }
+    return null;
+  };
+  const getArr = (...vals: any[]): number[] | null => {
+    for (const v of vals) {
+      if (Array.isArray(v)) {
+        const arr = v.map((x) => typeof x === "number" ? x : Number(String(x).replace(/,/g, ""))).filter((x) => Number.isFinite(x));
+        if (arr.length) return arr;
+      }
+    }
+    return null;
+  };
 
   const spxPrice = getNum(metrics.spx_price, metrics.spx, marketData?.spx_price);
   const vixValue = getNum(metrics.vix, marketData?.vix);
@@ -61,35 +75,51 @@ export default function Page() {
   const fmt2 = (n: number) => n.toFixed(2);
   const fmtSigned1 = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
   const spxVs = (level: number) => spxPrice == null ? null : ((spxPrice - level) / level) * 100;
-  const dmaState = (pct: number | null, isLong = false) => { if (pct == null) return "Loading"; if (pct < 0) return "Broken Below"; if (isLong && pct <= 2) return "Testing Support"; return "Holding Above"; };
-  const dmaTone = (pct: number | null, isLong = false) => { if (pct == null) return "neutral"; if (pct < 0) return "danger"; if (isLong && pct <= 2) return "warning"; return "healthy"; };
+  const dmaState = (pct: number | null, isLong = false) => {
+    if (pct == null) return "Loading";
+    if (pct < 0) return "Broken Below";
+    if (isLong && pct <= 2) return "Testing Support";
+    return "Holding Above";
+  };
+  const dmaTone = (pct: number | null, isLong = false) => {
+    if (pct == null) return "neutral";
+    if (pct < 0) return "danger";
+    if (isLong && pct <= 2) return "warning";
+    return "healthy";
+  };
+  const toneColor = (tone: string) => ({ danger: "#ff6b88", warning: "#fbbf24", healthy: "#4ade80", neutral: "#94a3b8" }[tone] ?? "#94a3b8");
 
-  const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" } : vixValue >= 30 ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" } : vixValue >= 20 ? { label: "Slightly Elevated", sub: "Rising fear and potential volatility", color: "#fbbf24" } : { label: "Normal", sub: "Calm · No action required", color: "#4ade80" };
+  const vixStatus = vixValue == null
+    ? { label: "Loading", sub: "", color: "#94a3b8" }
+    : vixValue >= 30
+    ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" }
+    : vixValue >= 20
+    ? { label: "Slightly Elevated", sub: "Rising fear and potential volatility", color: "#fbbf24" }
+    : { label: "Normal", sub: "Calm · No action required", color: "#4ade80" };
 
   const damageCount = [spxVs(spx20), spxVs(spx50), spxVs(spx100), spxVs(spx200)].filter(v => v != null && v < 0).length;
 
   const systemPrompt = `You are an AI Wealth Strategist on a macro dashboard. Investor rules: Defensive trigger = two consecutive Friday closes below SPX 200-DMA (${fmtWhole(spx200)}) AND VIX>30 OR HY>400bps. VIX>30 = pause new equity buying. Current data: SPX ${spxPrice != null ? fmtWhole(spxPrice) : "loading"} (${spxDailyPct != null ? spxDailyPct.toFixed(2) : "?"}% today, ${spxYtd.toFixed(2)}% YTD), VIX ${vixValue != null ? fmt1(vixValue) : "loading"}, vs 20-DMA: ${spxVs(spx20) != null ? fmtSigned1(spxVs(spx20)!) : "?"} BROKEN, vs 50-DMA: ${spxVs(spx50) != null ? fmtSigned1(spxVs(spx50)!) : "?"} BROKEN, vs 100-DMA: ${spxVs(spx100) != null ? fmtSigned1(spxVs(spx100)!) : "?"} BROKEN, vs 200-DMA: ${spxVs(spx200) != null ? fmtSigned1(spxVs(spx200)!) : "?"} TESTING, HY Spread: ${hySpread}%, Yield Curve: ${yieldCurve}%, ${damageCount}/4 DMAs broken. Ivy Portfolio: all 5 positions invested. Valuation: 4/5 models overvalued or strongly overvalued. Be direct, specific, use actual numbers. No fluff.`;
 
-  const callClaude = async (prompt: string, key: string) => {
-    if (aiCache[key]) return aiCache[key];
+  const callClaude = async (prompt: string, key: string, msgs?: { role: string; content: string }[]) => {
     setAiLoading(true);
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: systemPrompt, messages: [{ role: "user", content: prompt }] }),
-    });
-    const data = await res.json();
-    const text = data.content?.[0]?.text ?? "Unable to load.";
-    setAiCache(prev => ({ ...prev, [key]: text }));
-    setAiLoading(false);
-    return text;
-  };
-
-  useEffect(() => {
-    if (!aiCache["summary"]) {
-      callClaude("3-4 sentence market summary: SPX vs key MAs, VIX and HY spread signal, single most important thing to watch. Direct.", "summary");
+    try {
+      const res = await fetch("/api/ai-strategist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemPrompt,
+          messages: msgs ?? [{ role: "user", content: prompt }],
+        }),
+      });
+      const data = await res.json();
+      const text = data.text ?? data.error ?? "Unable to load.";
+      if (!msgs) setAiCache(prev => ({ ...prev, [key]: text }));
+      return text;
+    } finally {
+      setAiLoading(false);
     }
-  }, [spxPrice]);
+  };
 
   const handleAiTab = (tab: string) => {
     setAiTab(tab);
@@ -103,23 +133,14 @@ export default function Page() {
 
   const sendChat = async () => {
     const q = chatInput.trim();
-    if (!q) return;
+    if (!q || aiLoading) return;
     setChatInput("");
-    const newHistory = [...chatHistory, { role: "user", text: q }];
-    setChatHistory(newHistory);
-    const newMessages = [...chatMessages, { role: "user", content: q }];
-    setChatMessages(newMessages);
-    setAiLoading(true);
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: systemPrompt, messages: newMessages }),
-    });
-    const data = await res.json();
-    const reply = data.content?.[0]?.text ?? "Unable to respond.";
-    setChatMessages([...newMessages, { role: "assistant", content: reply }]);
-    setChatHistory([...newHistory, { role: "assistant", text: reply }]);
-    setAiLoading(false);
+    const newMsgs = [...chatMessages, { role: "user", content: q }];
+    setChatMessages(newMsgs);
+    setChatHistory(prev => [...prev, { role: "user", text: q }]);
+    const reply = await callClaude("", "chat", newMsgs);
+    setChatMessages([...newMsgs, { role: "assistant", content: reply }]);
+    setChatHistory(prev => [...prev, { role: "assistant", text: reply }]);
   };
 
   const sparkline = (points: number[], color: string) => {
@@ -127,11 +148,9 @@ export default function Page() {
     const max = Math.max(...points), min = Math.min(...points);
     const range = Math.max(1, max - min);
     const coords = points.map((p, i) => `${(i / (points.length - 1)) * w},${h - ((p - min) / range) * (h - 2) - 1}`).join(" ");
-    const lx = w, ly = h - ((points[points.length - 1] - min) / range) * (h - 2) - 1;
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" aria-hidden="true"><polyline fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="${coords}"/><circle cx="${lx}" cy="${ly}" r="2" fill="${color}"/></svg>`;
+    const ly = h - ((points[points.length - 1] - min) / range) * (h - 2) - 1;
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}"><polyline fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="${coords}"/><circle cx="${w}" cy="${ly}" r="2" fill="${color}"/></svg>`;
   };
-
-  const toneColor = (tone: string) => ({ danger: "#ff6b88", warning: "#fbbf24", healthy: "#4ade80", neutral: "#94a3b8" }[tone] ?? "#94a3b8");
 
   return (
     <>
@@ -155,58 +174,19 @@ export default function Page() {
 
           {feedError && <div className="errorBar">Feed error: {feedError}</div>}
 
-          {/* ① AI WEALTH STRATEGIST */}
-          <div className="panel panelAI">
-            <div className="aiHeader">
-              <div className="aiIcon">✦</div>
-              <div>
-                <div className="panelTitle">AI Wealth Strategist</div>
-                <div className="aiSub">Powered by Claude · Loads on demand · No auto-refresh</div>
-              </div>
-            </div>
-            <div className="aiTabs">
-              {["summary", "action", "triggers", "chat"].map(t => (
-                <button key={t} className={`aiTab${aiTab === t ? " aiTabOn" : ""}`} onClick={() => handleAiTab(t)}>
-                  {{ summary: "Market Summary", action: "Recommended Action", triggers: "Trigger Watch", chat: "Ask a Question" }[t]}
-                </button>
-              ))}
-            </div>
-            {aiTab !== "chat" ? (
-              <div className="aiOut">
-                {aiLoading && !aiCache[aiTab] ? <span className="spinner" /> : null}
-                {aiCache[aiTab] ?? ""}
-              </div>
-            ) : (
-              <div>
-                <div className="chatHist">
-                  {chatHistory.map((m, i) => (
-                    <div key={i} className={m.role === "user" ? "msgUser" : "msgAI"}>{m.text}</div>
-                  ))}
-                  {aiLoading && <div className="msgAI"><span className="spinner" /> Thinking...</div>}
-                </div>
-                <div className="chatRow">
-                  <input className="chatInp" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendChat()} placeholder="Ask about your dashboard..." />
-                  <button className="chatBtn" onClick={sendChat}>Ask ↗</button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ② MARKET STRUCTURE */}
+          {/* ① MARKET STRUCTURE */}
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Market Structure</div><div className="panelSub">Price vs Key Moving Averages</div></div>
               <div className="damage">{damageCount} / 4 short-term trends broken</div>
             </div>
             <div className="grid5" style={{ marginBottom: 8 }}>
-              {/* SPX */}
               <div className="tile">
                 <div className="tileTop"><span className="lbl">S&P 500</span><span className="ytd">{spxYtd > 0 ? "+" : ""}{spxYtd.toFixed(2)}% YTD</span></div>
                 <div className="valHero">{spxPrice != null ? fmtWhole(spxPrice) : "—"}</div>
                 <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(spxTrend, spxDailyPct != null && spxDailyPct >= 0 ? "#4ade80" : "#ff6b88") }} />
                 <div className="subSpx">{spxDailyPct != null ? `${spxDailyPct >= 0 ? "▲" : "▼"} ${Math.abs(spxDailyPct).toFixed(1)}% today` : "Waiting for live price"}</div>
               </div>
-              {/* 20/50/100 DMA */}
               {[{ label: "20-DMA", level: spx20 }, { label: "50-DMA", level: spx50 }, { label: "100-DMA", level: spx100 }].map(d => {
                 const pct = spxVs(d.level);
                 const tone = dmaTone(pct);
@@ -215,11 +195,10 @@ export default function Page() {
                     <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background: toneColor(tone), color: tone === "warning" ? "#000" : "#fff" }}>!</span></div>
                     <div className="valMuted">{fmtWhole(d.level)}</div>
                     <div className="status" style={{ color: toneColor(tone) }}>{dmaState(pct)}</div>
-                    <div className="sub">{pct != null ? `SPX ${fmtSigned1(pct)} ${pct >= 0 ? "above" : "below"}` : "Waiting for live price"}</div>
+                    <div className="sub">{pct != null ? `SPX ${fmtSigned1(pct)} ${pct >= 0 ? "above" : "below"}` : "Waiting"}</div>
                   </div>
                 );
               })}
-              {/* 200-DMA amber hero */}
               <div className="tile tile200">
                 <div className="tileTop"><span className="lbl" style={{ color: "#f59e0b" }}>200-DMA</span><span className="badge" style={{ background: "#f59e0b", color: "#000" }}>!</span></div>
                 <div className="valHero">{fmtWhole(spx200)}</div>
@@ -236,11 +215,10 @@ export default function Page() {
             </div>
           </section>
 
-          {/* ③ MARKET STRESS */}
+          {/* ② MARKET STRESS */}
           <section className="panel">
             <div className="panelTitle" style={{ marginBottom: 10 }}>Market Stress</div>
             <div className="grid5" style={{ marginBottom: 8 }}>
-              {/* VIX */}
               <div className="tile" onDoubleClick={() => setShowVixModal(true)} style={{ cursor: "default" }}>
                 <div className="lbl" style={{ marginBottom: 6 }}>VIX</div>
                 <div className="valHero" style={{ color: vixStatus.color }}>{vixValue != null ? fmt1(vixValue) : "—"}</div>
@@ -250,9 +228,8 @@ export default function Page() {
                   <div style={{ position: "absolute", top: -5, left: "30%", width: 1.5, height: 14, background: "rgba(255,255,255,0.35)", borderRadius: 1 }} />
                 </div>
                 <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569" }}><span>0</span><span>100</span></div>
-                <div style={{ fontSize: 10, color: vixValue != null && vixValue >= 30 ? "#ff6b88" : "#475569", marginTop: 5 }}>{vixStatus.sub}</div>
+                <div style={{ fontSize: 10, color: vixValue != null && vixValue >= 30 ? "#ff6b88" : "#64748b", marginTop: 5 }}>{vixStatus.sub}</div>
               </div>
-              {/* VIX/VXV */}
               <div className="tile">
                 <div className="lbl" style={{ marginBottom: 6 }}>VIX / VXV</div>
                 <div className="valHero" style={{ color: "#64748b" }}>—</div>
@@ -261,7 +238,6 @@ export default function Page() {
                 <div className="meterScale"><span>0.8</span><span>1.0</span><span>1.2</span></div>
                 <div style={{ fontSize: 10, color: "#475569", marginTop: 5 }}>&gt;1.0 = short-term panic</div>
               </div>
-              {/* HY Spread */}
               <div className="tile">
                 <div className="lbl" style={{ marginBottom: 6 }}>HY Spread</div>
                 <div className="valHero" style={{ color: hySpread >= 4 ? "#fbbf24" : "#94a3b8" }}>{fmt2(hySpread)}<span style={{ fontSize: 20, fontWeight: 600 }}>%</span></div>
@@ -269,7 +245,6 @@ export default function Page() {
                 <div className="meterTrack"><div className="meterFill" style={{ width: `${Math.max(0, Math.min(((hySpread - 2) / 4) * 100, 100))}%`, background: hySpread >= 4 ? "#fbbf24" : "#94a3b8" }} /><div className="meterMarker" style={{ left: `${Math.max(0, Math.min(((hySpread - 2) / 4) * 100, 100))}%` }} /></div>
                 <div className="meterScale"><span>2%</span><span>4%</span><span>6%</span></div>
               </div>
-              {/* Yield Curve */}
               <div className="tile">
                 <div className="lbl" style={{ marginBottom: 6 }}>Yield Curve</div>
                 <div className="valHero" style={{ color: yieldCurve > 0 ? "#4ade80" : "#fbbf24" }}>{fmt2(yieldCurve)}<span style={{ fontSize: 20, fontWeight: 600 }}>%</span></div>
@@ -277,7 +252,6 @@ export default function Page() {
                 <div className="meterTrack"><div className="meterFill" style={{ width: `${Math.max(0, Math.min(((yieldCurve + 1) / 2.5) * 100, 100))}%`, background: yieldCurve > 0 ? "#4ade80" : "#fbbf24" }} /><div className="meterMarker" style={{ left: `${Math.max(0, Math.min(((yieldCurve + 1) / 2.5) * 100, 100))}%` }} /></div>
                 <div className="meterScale"><span>-1%</span><span>0%</span><span>1.5%</span></div>
               </div>
-              {/* Real 10Y */}
               <div className="tile">
                 <div className="lbl" style={{ marginBottom: 6 }}>Real 10Y</div>
                 <div className="valHero" style={{ color: real10y >= 2 ? "#fbbf24" : "#94a3b8" }}>{fmt2(real10y)}<span style={{ fontSize: 20, fontWeight: 600 }}>%</span></div>
@@ -286,7 +260,6 @@ export default function Page() {
                 <div className="meterScale"><span>0%</span><span>2%</span><span>3%</span></div>
               </div>
             </div>
-            {/* ERP */}
             <div className="tile erpTile">
               <div><div className="lbl" style={{ marginBottom: 3 }}>Equity Risk Premium</div><div style={{ fontSize: 26, fontWeight: 700, color: "#475569" }}>—%</div></div>
               <div style={{ flex: 1 }}><div className="meterTrack" style={{ marginTop: 0 }}><div className="meterFill" style={{ width: "35%", background: "#475569" }} /><div className="meterMarker" style={{ left: "35%" }} /></div><div className="meterScale"><span>0%</span><span>3%</span><span>6%</span></div></div>
@@ -294,60 +267,58 @@ export default function Page() {
             </div>
           </section>
 
-          {/* ④ ECONOMY */}
+          {/* ③ ECONOMY */}
           <section className="panel">
             <div className="panelHeader"><div><div className="panelTitle">Economy</div><div className="panelSub">Macro Conditions · 3-Month Trend</div></div><div className="pstamp">FRED &amp; ISM · weekly/monthly</div></div>
             <div className="grid4" style={{ marginBottom: 8 }}>
               {[
-                { label: "ISM Mfg PMI", val: "49.0", chg: "▼ 0.6 from prior", chgColor: "#ff6b88", sub: "3-mo: contracting", pill: "Below 50", pillClass: "pillR", sparkColor: "#ff6b88", pts: "0,8 25,9 50,11 75,12 100,14", hasMidline: true },
-                { label: "ISM Services PMI", val: "53.5", chg: "▼ 1.2 from prior", chgColor: "#fbbf24", sub: "3-mo: softening", pill: "Slowing", pillClass: "pillA", sparkColor: "#fbbf24", pts: "0,6 25,7 50,9 75,10 100,12", hasMidline: true },
-                { label: "Initial Claims", val: "225K", chg: "▲ 8K from prior", chgColor: "#fbbf24", sub: "3-mo: drifting up", pill: "Watch", pillClass: "pillA", sparkColor: "#fbbf24", pts: "0,18 25,16 50,15 75,12 100,9", hasMidline: false },
-                { label: "Fed Net Liquidity", val: "$6.1T", chg: "▼ $180B from prior", chgColor: "#ff6b88", sub: "3-mo: draining", pill: "Tightening", pillClass: "pillR", sparkColor: "#ff6b88", pts: "0,6 25,8 50,11 75,15 100,20", hasMidline: false },
+                { label: "ISM Mfg PMI", val: "49.0", chg: "▼ 0.6 from prior", chgColor: "#ff6b88", sub: "3-mo: contracting", pill: "Below 50", pillC: "pillR", sColor: "#ff6b88", pts: "0,8 25,9 50,11 75,12 100,14", mid: true },
+                { label: "ISM Services PMI", val: "53.5", chg: "▼ 1.2 from prior", chgColor: "#fbbf24", sub: "3-mo: softening", pill: "Slowing", pillC: "pillA", sColor: "#fbbf24", pts: "0,6 25,7 50,9 75,10 100,12", mid: true },
+                { label: "Initial Claims", val: "225K", chg: "▲ 8K from prior", chgColor: "#fbbf24", sub: "3-mo: drifting up", pill: "Watch", pillC: "pillA", sColor: "#fbbf24", pts: "0,18 25,16 50,15 75,12 100,9", mid: false },
+                { label: "Fed Net Liquidity", val: "$6.1T", chg: "▼ $180B from prior", chgColor: "#ff6b88", sub: "3-mo: draining", pill: "Tightening", pillC: "pillR", sColor: "#ff6b88", pts: "0,6 25,8 50,11 75,15 100,20", mid: false },
               ].map(t => (
                 <div key={t.label} className="tile">
                   <div className="lbl">{t.label}</div>
-                  <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", color: "#fff" }}>{t.val}</div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: "#fff" }}>{t.val}</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: t.chgColor, marginTop: 3 }}>{t.chg}</div>
-                  <div style={{ margin: "5px 0 2px" }}>
-                    <svg viewBox="0 0 100 24" width="100%" height="20">
-                      {t.hasMidline && <line x1="0" y1="12" x2="100" y2="12" stroke="rgba(255,255,255,0.07)" strokeWidth="1" strokeDasharray="3,3" />}
-                      <polyline fill="none" stroke={t.sparkColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={t.pts} />
-                      <circle cx={t.pts.split(" ").slice(-1)[0].split(",")[0]} cy={t.pts.split(" ").slice(-1)[0].split(",")[1]} r="2" fill={t.sparkColor} />
-                    </svg>
-                  </div>
+                  <svg viewBox="0 0 100 24" width="100%" height="20" style={{ margin: "5px 0 2px" }}>
+                    {t.mid && <line x1="0" y1="12" x2="100" y2="12" stroke="rgba(255,255,255,0.07)" strokeWidth="1" strokeDasharray="3,3" />}
+                    <polyline fill="none" stroke={t.sColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={t.pts} />
+                    <circle cx={t.pts.split(" ").pop()!.split(",")[0]} cy={t.pts.split(" ").pop()!.split(",")[1]} r="2" fill={t.sColor} />
+                  </svg>
                   <div className="sub">{t.sub}</div>
-                  <span className={t.pillClass}>{t.pill}</span>
+                  <span className={t.pillC}>{t.pill}</span>
                 </div>
               ))}
             </div>
             <div className="grid3">
               {[
-                { label: "Nonfarm Payrolls", val: "151K", date: "Feb '25", chg: "▼ 56K from prior", chgColor: "#ff6b88", meterW: "38%", meterC: "#fbbf24", sub: "3-mo: decelerating", pill: "Below trend", pillClass: "pillA", s: ["0", "200K", "400K"] },
-                { label: "CPI Inflation", val: "2.8%", date: "YoY", chg: "▼ 0.2% easing", chgColor: "#4ade80", meterW: "56%", meterC: "#fbbf24", sub: "3-mo: slowly easing", pill: "Above target", pillClass: "pillA", s: ["0%", "2%", "5%"] },
-                { label: "GDP Growth", val: "2.3%", date: "Q4 '24", chg: "▼ 0.8% from prior", chgColor: "#ff6b88", meterW: "46%", meterC: "#4ade80", sub: "3-mo: moderating", pill: "Positive", pillClass: "pillG", s: ["-2%", "0%", "5%"] },
+                { label: "Nonfarm Payrolls", val: "151K", date: "Feb '25", chg: "▼ 56K from prior", chgC: "#ff6b88", mW: "38%", mC: "#fbbf24", sub: "3-mo: decelerating", pill: "Below trend", pillC: "pillA", sc: ["0","200K","400K"] },
+                { label: "CPI Inflation", val: "2.8%", date: "YoY", chg: "▼ 0.2% easing", chgC: "#4ade80", mW: "56%", mC: "#fbbf24", sub: "3-mo: slowly easing", pill: "Above target", pillC: "pillA", sc: ["0%","2%","5%"] },
+                { label: "GDP Growth", val: "2.3%", date: "Q4 '24", chg: "▼ 0.8% from prior", chgC: "#ff6b88", mW: "46%", mC: "#4ade80", sub: "3-mo: moderating", pill: "Positive", pillC: "pillG", sc: ["-2%","0%","5%"] },
               ].map(t => (
                 <div key={t.label} className="tile">
                   <div className="lbl">{t.label}</div>
                   <div style={{ fontSize: 20, fontWeight: 700, color: "#fff" }}>{t.val} <span style={{ fontSize: 11, color: "#475569" }}>{t.date}</span></div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: t.chgColor, marginTop: 3 }}>{t.chg}</div>
-                  <div className="meterTrack"><div className="meterFill" style={{ width: t.meterW, background: t.meterC }} /><div className="meterMarker" style={{ left: t.meterW }} /></div>
-                  <div className="meterScale"><span>{t.s[0]}</span><span>{t.s[1]}</span><span>{t.s[2]}</span></div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: t.chgC, marginTop: 3 }}>{t.chg}</div>
+                  <div className="meterTrack"><div className="meterFill" style={{ width: t.mW, background: t.mC }} /><div className="meterMarker" style={{ left: t.mW }} /></div>
+                  <div className="meterScale"><span>{t.sc[0]}</span><span>{t.sc[1]}</span><span>{t.sc[2]}</span></div>
                   <div className="sub" style={{ marginTop: 4 }}>{t.sub}</div>
-                  <span className={t.pillClass}>{t.pill}</span>
+                  <span className={t.pillC}>{t.pill}</span>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* ⑤ BREADTH */}
+          {/* ④ BREADTH */}
           <section className="panel">
             <div className="panelHeader"><div><div className="panelTitle">Market Breadth</div><div className="panelSub">% of S&P 500 stocks above key moving averages</div></div><div className="pstamp">Updated daily</div></div>
             <div className="grid4" style={{ marginBottom: 8 }}>
               {[
-                { label: "% Above 200-DMA", val: "44%", pct: 44, color: "#fbbf24", sub: "3-mo: deteriorating", pill: "Weakening", pillClass: "pillA" },
-                { label: "% Above 100-DMA", val: "38%", pct: 38, color: "#ff6b88", sub: "3-mo: declining", pill: "Bearish", pillClass: "pillR" },
-                { label: "% Above 50-DMA", val: "31%", pct: 31, color: "#ff6b88", sub: "3-mo: sharp decline", pill: "Bearish", pillClass: "pillR" },
-                { label: "% Above 20-DMA", val: "28%", pct: 28, color: "#ff6b88", sub: "3-mo: capitulating", pill: "Oversold", pillClass: "pillR" },
+                { label: "% Above 200-DMA", val: "44%", pct: 44, color: "#fbbf24", sub: "3-mo: deteriorating", pill: "Weakening", pillC: "pillA" },
+                { label: "% Above 100-DMA", val: "38%", pct: 38, color: "#ff6b88", sub: "3-mo: declining", pill: "Bearish", pillC: "pillR" },
+                { label: "% Above 50-DMA", val: "31%", pct: 31, color: "#ff6b88", sub: "3-mo: sharp decline", pill: "Bearish", pillC: "pillR" },
+                { label: "% Above 20-DMA", val: "28%", pct: 28, color: "#ff6b88", sub: "3-mo: capitulating", pill: "Oversold", pillC: "pillR" },
               ].map(t => (
                 <div key={t.label} className="tile">
                   <div className="lbl">{t.label}</div>
@@ -355,7 +326,7 @@ export default function Page() {
                   <div className="bbar"><div className="bbarFill" style={{ width: `${t.pct}%`, background: t.color }} /></div>
                   <div className="meterScale"><span>0%</span><span>50%</span><span>100%</span></div>
                   <div className="sub" style={{ marginTop: 4 }}>{t.sub}</div>
-                  <span className={t.pillClass}>{t.pill}</span>
+                  <span className={t.pillC}>{t.pill}</span>
                 </div>
               ))}
             </div>
@@ -366,7 +337,7 @@ export default function Page() {
             </div>
           </section>
 
-          {/* ⑥ VTI */}
+          {/* ⑤ VTI */}
           <section className="panel">
             <div className="panelHeader"><div><div className="panelTitle">VTI — Total Market Trend</div><div className="panelSub">Vanguard Total Market ETF · Key Moving Averages</div></div><div className="pstamp">LIVE · Yahoo Finance</div></div>
             <div className="grid5">
@@ -393,7 +364,7 @@ export default function Page() {
             </div>
           </section>
 
-          {/* ⑦ VALUATION */}
+          {/* ⑥ VALUATION */}
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Valuation</div><div className="panelSub">Long-term market valuation · Sigma scores vs historical norm</div></div>
@@ -426,7 +397,7 @@ export default function Page() {
             </div>
           </section>
 
-          {/* ⑧ IVY PORTFOLIO */}
+          {/* ⑦ IVY PORTFOLIO */}
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Ivy Portfolio</div><div className="panelSub">10-Month SMA Signals · Mebane Faber Model</div></div>
@@ -465,6 +436,42 @@ export default function Page() {
             </div>
           </section>
 
+          {/* ⑧ AI WEALTH STRATEGIST — bottom, synthesis layer */}
+          <section className="panel panelAI">
+            <div className="aiHeader">
+              <div className="aiIcon">✦</div>
+              <div>
+                <div className="panelTitle">AI Wealth Strategist</div>
+                <div className="aiSub">Powered by Claude · Reads live dashboard data · Loads on demand</div>
+              </div>
+            </div>
+            <div className="aiTabs">
+              {(["summary","action","triggers","chat"] as const).map(t => (
+                <button key={t} className={`aiTab${aiTab === t ? " aiTabOn" : ""}`} onClick={() => handleAiTab(t)}>
+                  {{ summary: "Market Summary", action: "Recommended Action", triggers: "Trigger Watch", chat: "Ask a Question" }[t]}
+                </button>
+              ))}
+            </div>
+            {aiTab !== "chat" ? (
+              <div className="aiOut">
+                {aiLoading && !aiCache[aiTab] ? <><span className="spinner" /> Analyzing...</> : (aiCache[aiTab] ?? "")}
+              </div>
+            ) : (
+              <div>
+                <div className="chatHist">
+                  {chatHistory.map((m, i) => (
+                    <div key={i} className={m.role === "user" ? "msgUser" : "msgAI"}>{m.text}</div>
+                  ))}
+                  {aiLoading && <div className="msgAI"><span className="spinner" /> Thinking...</div>}
+                </div>
+                <div className="chatRow">
+                  <input className="chatInp" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendChat()} placeholder="Ask about your dashboard..." />
+                  <button className="chatBtn" onClick={sendChat} disabled={aiLoading}>Ask ↗</button>
+                </div>
+              </div>
+            )}
+          </section>
+
         </div>
       </div>
 
@@ -479,8 +486,8 @@ export default function Page() {
             <div className="modalGrid">
               <div className="modalCard">
                 <div className="smallHead">Current Read</div>
-                <div className="bigValue">{vixValue != null ? fmt1(vixValue) : "—"}</div>
-                <div className="status" style={{ color: vixStatus.color }}>{vixStatus.label}</div>
+                <div className="bigValue" style={{ color: vixStatus.color }}>{vixValue != null ? fmt1(vixValue) : "—"}</div>
+                <div className="status" style={{ color: vixStatus.color, marginTop: 8 }}>{vixStatus.label}</div>
                 <div className="bodyCopy">{vixValue == null ? "No live VIX value." : vixValue >= 30 ? "High stress regime — pause all new equity buying." : vixValue >= 20 ? "Elevated but not panic. Monitor closely." : "Calm to normal volatility environment."}</div>
                 <div style={{ marginTop: 20 }}>
                   <div style={{ position: "relative", height: 8, borderRadius: 9999, overflow: "hidden", background: "#202a64" }}>
@@ -500,8 +507,14 @@ export default function Page() {
                 <div className="modalCard">
                   <div className="smallHead">Historical Context</div>
                   <div style={{ display: "grid", gap: 6, marginTop: 10 }}>
-                    {[{ val: "82.7", event: "COVID (Mar 2020)", note: "All-time high — recovered in months" }, { val: "79.1", event: "GFC (Nov 2008)", note: "Sustained fear regime — 18 months" }, { val: "38.6", event: "Aug 2024 spike", note: "Yen carry unwind — resolved in 2 weeks" }, { val: vixValue != null ? fmt1(vixValue) : "—", event: "Today", note: vixValue != null && vixValue >= 30 ? "High stress / danger zone" : "Elevated but below danger zone", active: true }, { val: "20", event: "Long-run avg", note: "Mean — median closer to ~17" }].map((h, i) => (
-                      <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 1fr 1fr", gap: 10, background: h.active ? "#141b47" : "#0b1138", border: `1px solid ${h.active ? "rgba(245,158,11,0.4)" : "#1e293b"}`, borderRadius: 8, padding: "8px 10px", fontSize: 12 }}>
+                    {[
+                      { val: "82.7", event: "COVID (Mar 2020)", note: "All-time high — recovered in months" },
+                      { val: "79.1", event: "GFC (Nov 2008)", note: "Sustained fear — 18 months" },
+                      { val: "38.6", event: "Aug 2024 spike", note: "Yen carry unwind — 2 weeks" },
+                      { val: vixValue != null ? fmt1(vixValue) : "—", event: "Today", note: vixValue != null && vixValue >= 30 ? "High stress / danger zone" : "Elevated but below danger zone", active: true },
+                      { val: "20", event: "Long-run avg", note: "Mean — median closer to ~17" },
+                    ].map((h, i) => (
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: "56px 1fr 1fr", gap: 10, background: h.active ? "#141b47" : "#0b1138", border: `1px solid ${h.active ? "rgba(245,158,11,0.4)" : "#1e293b"}`, borderRadius: 8, padding: "8px 10px", fontSize: 12 }}>
                         <div style={{ fontWeight: 700, color: h.active ? "#fbbf24" : "#cbd5e1" }}>{h.val}</div>
                         <div style={{ color: "#e2e8f0" }}>{h.event}</div>
                         <div style={{ color: "#94a3b8" }}>{h.note}</div>
@@ -511,7 +524,7 @@ export default function Page() {
                 </div>
                 <div style={{ border: "1px solid rgba(34,197,94,0.35)", borderRadius: 14, background: "#031e1a", padding: 16 }}>
                   <div className="smallHead" style={{ color: "#fbbf24" }}>Your Action</div>
-                  <div className="bodyCopy" style={{ color: "#ecfdf5" }}>{vixValue != null && vixValue < 30 ? "VIX below 30. No buying restriction. Continue normal plan but do not treat the tape as calm." : "VIX above 30. Pause all new equity buying and treat volatility as a real portfolio constraint."}</div>
+                  <div className="bodyCopy" style={{ color: "#ecfdf5" }}>{vixValue != null && vixValue < 30 ? "VIX below 30. No buying restriction. Continue normal plan." : "VIX above 30. Pause all new equity buying."}</div>
                 </div>
               </div>
             </div>
@@ -522,7 +535,7 @@ export default function Page() {
       <style dangerouslySetInnerHTML={{ __html: `
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; background: #0b0b2a; color: #fff; font-family: Inter, system-ui, -apple-system, sans-serif; }
-        .pageShell { min-height: 100vh; background: #0b0b2a; }
+        .pageShell { min-height: 100vh; }
         .frame { max-width: 1500px; margin: 0 auto; padding: 16px; }
         .topBar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
         .title { margin: 0; font-size: 28px; font-weight: 700; color: #16c75c; letter-spacing: -0.03em; }
@@ -550,7 +563,7 @@ export default function Page() {
         .erpTile { display: flex; align-items: center; gap: 20px; padding: 10px 14px; margin-top: 8px; }
         .tileTop { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
         .lbl { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; }
-        .ytd { font-size: 11px; font-weight: 600; color: #64748b; white-space: nowrap; }
+        .ytd { font-size: 11px; font-weight: 600; color: #64748b; }
         .badge { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
         .valHero { font-size: 38px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; color: #fff; }
         .valMuted { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; color: #94a3b8; }
@@ -570,7 +583,7 @@ export default function Page() {
         .bbarFill { height: 7px; border-radius: 9999px; }
         .pillR { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 6px; background: rgba(255,79,114,0.15); color: #ff6b88; }
         .pillA { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 6px; background: rgba(245,158,11,0.15); color: #fbbf24; }
-        .pillG { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0; background: rgba(34,197,94,0.15); color: #4ade80; }
+        .pillG { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.04em; background: rgba(34,197,94,0.15); color: #4ade80; }
         .valTable { width: 100%; border-collapse: collapse; font-size: 13px; }
         .valTable th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; padding: 0 12px 8px; }
         .valTable td { padding: 9px 12px; border-top: 0.5px solid rgba(255,255,255,0.05); }
@@ -592,6 +605,7 @@ export default function Page() {
         .chatRow { display: flex; gap: 8px; margin-top: 10px; }
         .chatInp { flex: 1; background: #060e1c; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 9px 12px; color: #fff; font-size: 13px; font-family: inherit; outline: none; }
         .chatBtn { background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.4); border-radius: 8px; color: #93c5fd; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .chatBtn:disabled { opacity: 0.5; cursor: not-allowed; }
         .spinner { display: inline-block; width: 11px; height: 11px; border: 2px solid rgba(255,255,255,0.15); border-top-color: #93c5fd; border-radius: 50%; animation: spin .7s linear infinite; margin-right: 5px; vertical-align: middle; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .modalBackdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,0.6); }
@@ -607,7 +621,7 @@ export default function Page() {
         .bigValue { margin-top: 12px; font-size: 42px; font-weight: 700; line-height: 1; }
         .bodyCopy { margin-top: 8px; font-size: 13px; line-height: 1.7; color: #e2e8f0; }
         @media (max-width: 1100px) { .modalGrid { grid-template-columns: 1fr; } }
-        @media (max-width: 900px) { .title { font-size: 22px; } .valHero { font-size: 30px; } }
+        @media (max-width: 900px) { .title { font-size: 22px; } .valHero { font-size: 28px; } }
         @media (max-width: 700px) {
           .topBar, .panelHeader, .modalTop { flex-direction: column; align-items: flex-start; }
           .grid5, .grid4 { grid-template-columns: repeat(2,minmax(0,1fr)); }
