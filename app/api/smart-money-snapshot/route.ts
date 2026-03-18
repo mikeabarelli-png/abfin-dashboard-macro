@@ -105,18 +105,24 @@ export async function GET() {
   const diagnostics: Record<string, string> = {};
 
   // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
-  const [spx, vix, fredReal10y, fredHY, fredYC, peData] = await Promise.all([
+  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, peData] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
-    fetchFred("DFII10"),
-    fetchFred("BAMLH0A0HYM2"),
-    fetchFred("T10Y2Y"),
+    fetchChart("DX-Y.NYB", 5),   // Dollar Index
+    fetchChart("^CPC", 5),        // CBOE Total Put/Call Ratio
+    fetchFred("DFII10"),           // Real 10Y TIPS yield
+    fetchFred("DGS10"),            // Nominal 10Y Treasury yield
+    fetchFred("BAMLH0A0HYM2"),    // ICE BofA HY OAS
+    fetchFred("T10Y2Y"),           // 10Y-2Y spread
     fetchPE(),
   ]);
 
   if (spx.error) diagnostics["spx"] = spx.error;
   if (vix.error) diagnostics["vix"] = vix.error;
+  if (dxy.error) diagnostics["dxy"] = dxy.error;
+  if (putCall.error) diagnostics["putcall"] = putCall.error;
   if (fredReal10y.error) diagnostics["real10y"] = fredReal10y.error;
+  if (fredNom10y.error) diagnostics["nom10y"] = fredNom10y.error;
   if (fredHY.error) diagnostics["hy"] = fredHY.error;
   if (fredYC.error) diagnostics["yc"] = fredYC.error;
   if (peData.error) diagnostics["pe"] = peData.error;
@@ -144,8 +150,17 @@ export async function GET() {
   const vixPrice: number | null = vix.meta.regularMarketPrice ?? vix.closes[vix.closes.length - 1] ?? null;
 
   const real10y: number = fredReal10y.value ?? 1.92;
+  const nom10y: number = fredNom10y.value ?? 4.30;
   const hySpread: number = fredHY.value != null ? fredHY.value / 100 : 3.28;
   const yieldCurve: number = fredYC.value ?? 0.55;
+
+  // DXY — Dollar Index current price
+  const dxyPrice: number | null = dxy.meta.regularMarketPrice ?? dxy.closes[dxy.closes.length - 1] ?? null;
+  const dxyPrev: number | null = dxy.closes.length >= 2 ? dxy.closes[dxy.closes.length - 2] : null;
+  const dxyChangePct: number | null = dxyPrice != null && dxyPrev != null ? ((dxyPrice - dxyPrev) / dxyPrev) * 100 : null;
+
+  // Put/Call Ratio
+  const putCallRatio: number | null = putCall.meta.regularMarketPrice ?? putCall.closes[putCall.closes.length - 1] ?? null;
 
   const trailingPE: number | null = peData.value ?? spx.meta.trailingPE ?? null;
   let erp: number | null = null;
@@ -199,6 +214,10 @@ export async function GET() {
       hy_spread: hySpread,
       yield_curve_10y_2y: yieldCurve,
       real_10y: real10y,
+      nom_10y: nom10y,
+      dxy: dxyPrice,
+      dxy_change_pct: dxyChangePct,
+      put_call_ratio: putCallRatio,
       erp_bps: erp,
       trailing_pe: trailingPE,
     },
