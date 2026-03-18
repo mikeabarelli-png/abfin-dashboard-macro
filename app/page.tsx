@@ -589,7 +589,7 @@ export default function Page() {
               />
               <div style={{ marginTop: 16, background: "#141b47", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10, padding: 14 }}>
                 <SH>Your trigger threshold</SH>
-                <BC style={{ marginTop: 0 } as any}>HY Spread &gt;400bps (4.0%) is your stress confirmation. Current {fmt2(hySpread)}% is {((4.0 - hySpread) * 100).toFixed(0)}bps {hySpread < 4 ? "below" : "above"} that level.</BC>
+                <div style={{ fontSize: 13, lineHeight: 1.7, color: "#cbd5e1" }}>HY Spread &gt;400bps (4.0%) is your stress confirmation. Current {fmt2(hySpread)}% is {((4.0 - hySpread) * 100).toFixed(0)}bps {hySpread < 4 ? "below" : "above"} that level.</div>
               </div>
             </>}
             right={<>
@@ -628,7 +628,7 @@ export default function Page() {
               />
               <div style={{ marginTop: 16, background: "#141b47", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10, padding: 14 }}>
                 <SH>Re-steepening watch</SH>
-                <BC style={{ marginTop: 0 } as any}>After deep inversion reaching -1.08% in Jul 2023, the curve re-steepened to {yieldCurve > 0 ? "+" : ""}{fmt2(yieldCurve)}%. Re-steepening after inversion has historically preceded recession — this phase warrants monitoring.</BC>
+                <div style={{ fontSize: 13, lineHeight: 1.7, color: "#cbd5e1" }}>After deep inversion reaching -1.08% in Jul 2023, the curve re-steepened to {yieldCurve > 0 ? "+" : ""}{fmt2(yieldCurve)}%. Re-steepening after inversion has historically preceded recession — this phase warrants monitoring.</div>
               </div>
             </>}
             right={<>
@@ -666,7 +666,7 @@ export default function Page() {
               />
               <div style={{ marginTop: 16, background: "#141b47", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10, padding: 14 }}>
                 <SH>Equity valuation impact</SH>
-                <BC style={{ marginTop: 0 } as any}>Every 100bps rise in real rates historically reduces fair-value P/E by ~3-5x. At {fmt2(real10y)}%, this creates a headwind vs. the near-zero real rates of 2020-2021 that drove the bull market.</BC>
+                <div style={{ fontSize: 13, lineHeight: 1.7, color: "#cbd5e1" }}>Every 100bps rise in real rates historically reduces fair-value P/E by ~3-5x. At {fmt2(real10y)}%, this creates a headwind vs. the near-zero real rates of 2020-2021 that drove the bull market.</div>
               </div>
             </>}
             right={<>
