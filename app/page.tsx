@@ -513,11 +513,11 @@ export default function Page() {
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("hy")}>
                 <div className="lbl" style={{ marginBottom:6 }}>HY Spread</div>
-                <div className="valHero">{fmt2(hySpread)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
-                <div className="status" style={{ color:hySpread>=4?"#fbbf24":"#94a3b8" }}>{hySpread>=4?"Watch":"Firm"}</div>
+                <div className="valHero">{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
+                <div className="status" style={{ color:hySpread>=4?"#fbbf24":"#94a3b8" }}>{hySpread>=4?"Watch — Above 400bps":"Firm"}</div>
                 <div className="meterTrack"><div className="meterFill" style={{ width:`${Math.max(0,Math.min(((hySpread-2)/4)*100,100))}%`, background:hySpread>=4?"#fbbf24":"#94a3b8" }} /><div className="meterMarker" style={{ left:`${Math.max(0,Math.min(((hySpread-2)/4)*100,100))}%` }} /></div>
-                <div className="meterScale"><span>2%</span><span>4%</span><span>6%</span></div>
-                <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
+                <div className="meterScale"><span>200</span><span>400⚡</span><span>600</span></div>
+                <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail · trigger: 400bps</div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("yc")}>
                 <div className="lbl" style={{ marginBottom:6 }}>Yield Curve</div>
