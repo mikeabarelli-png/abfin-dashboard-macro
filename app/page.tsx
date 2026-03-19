@@ -534,7 +534,7 @@ export default function Page() {
                   <div style={{ position:"absolute", top:-6, left:"60%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
                 </div>
                 <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>30</span><span>50</span></div>
-                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color: vixValue!=null&&vixValue>=30?"#ff6b88":vixValue!=null&&vixValue>=25?"#fbbf24":"#64748b" }}>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
                   {vixValue!=null&&vixValue>=30 ? "▲ Stress — pause buying" : vixValue!=null ? `▲ ${(30-vixValue).toFixed(1)} pts from Stress` : ""}
                 </div>
               </div>
@@ -543,28 +543,30 @@ export default function Page() {
                 <div className="lbl" style={{ marginBottom:6 }}>10Y Yield (Nominal)</div>
                 <div className="valHero" style={{ color:"#fff" }}>{nom10y.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
                 <div className="status" style={{ color:nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80" }}>
-                  {nom10y>4.5?"Restrictive":nom10y>4?"Elevated — Watch":"Neutral"}
+                  {nom10y>4.5?"Restrictive":nom10y>4?"Watch":"Neutral"}
                 </div>
-                <div className="meterTrack">
-                  <div className="meterFill" style={{ width:`${Math.max(0,Math.min(nom10y/6*100,100))}%`, background:nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80" }} />
-                  <div className="meterMarker" style={{ left:`${Math.max(0,Math.min(nom10y/6*100,100))}%` }} />
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((nom10y/6)*100,100))}%`, borderRadius:9999, background:nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(4/6)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:`${(4.5/6)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div className="meterScale"><span>2%</span><span>3%</span><span>4%</span><span>5%</span><span>6%</span></div>
-                <div style={{ fontSize:10, color:"#475569", marginTop:4 }}>Real: {real10y.toFixed(2)}% · Prem: {(nom10y-real10y).toFixed(2)}% · Click for detail</div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>2%</span><span>4%</span><span>4.5%</span><span>6%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Real: {real10y.toFixed(2)}% · Premium: {(nom10y-real10y).toFixed(2)}%</div>
               </div>
               {/* 4. 5Y Breakeven */}
               <div className="tile">
                 <div className="lbl" style={{ marginBottom:6 }}>5Y Breakeven Infl.</div>
                 <div className="valHero" style={{ color:"#fff" }}>{breakeven5y.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
-                <div className="status" style={{ color:breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }}>
-                  {breakeven5y>2.5?"Above Target — Watch":breakeven5y>2?"Near Target":"Below Target"}
+                <div className="status" style={{ color:breakeven5y>3?"#ff6b88":breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }}>
+                  {breakeven5y>3?"Danger":breakeven5y>2.5?"Watch":breakeven5y>2?"On Target":"Low"}
                 </div>
-                <div className="meterTrack">
-                  <div className="meterFill" style={{ width:`${Math.max(0,Math.min((breakeven5y/4)*100,100))}%`, background:breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }} />
-                  <div className="meterMarker" style={{ left:`${Math.max(0,Math.min((breakeven5y/4)*100,100))}%` }} />
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((breakeven5y/4)*100,100))}%`, borderRadius:9999, background:breakeven5y>3?"#ff6b88":breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }} />
+                  <div style={{ position:"absolute", top:-6, left:"62.5%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:"50%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div className="meterScale"><span>0%</span><span>2%</span><span>3%</span><span>4%</span></div>
-                <div style={{ fontSize:10, color:"#475569", marginTop:4 }}>Market-implied inflation · drives Fed policy</div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>2%</span><span>2.5%</span><span>4%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Market-implied inflation · Fed target: 2%</div>
               </div>
               {/* 5. Fed Funds */}
               <div className="tile">
@@ -573,12 +575,12 @@ export default function Page() {
                 <div className="status" style={{ color:fedFunds>4.5?"#ff6b88":fedFunds>3?"#fbbf24":"#4ade80" }}>
                   {fedFunds>4.5?"Restrictive":fedFunds>3?"Elevated":"Accommodative"}
                 </div>
-                <div className="meterTrack">
-                  <div className="meterFill" style={{ width:`${Math.max(0,Math.min(fedFunds/6*100,100))}%`, background:fedFunds>4.5?"#ff6b88":fedFunds>3?"#fbbf24":"#4ade80" }} />
-                  <div className="meterMarker" style={{ left:`${Math.max(0,Math.min(fedFunds/6*100,100))}%` }} />
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((fedFunds/6)*100,100))}%`, borderRadius:9999, background:fedFunds>4.5?"#ff6b88":fedFunds>3?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(4.5/6)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div className="meterScale"><span>0%</span><span>2%</span><span>4%</span><span>6%</span></div>
-                <div style={{ fontSize:10, color:"#475569", marginTop:4 }}>Real Fed Funds: {(fedFunds-breakeven5y).toFixed(2)}% · FRED monthly</div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>3%</span><span>4.5%</span><span>6%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Real rate: {(fedFunds-breakeven5y).toFixed(2)}%</div>
               </div>
             </div>
 
@@ -588,61 +590,79 @@ export default function Page() {
               {/* 6. HY Spread */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("hy")}>
                 <div className="lbl" style={{ marginBottom:6 }}>HY Spread</div>
-                <div className="valHero">{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
+                <div className="valHero" style={{ color:"#fff" }}>{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
                 <div className="status" style={{ color:hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#94a3b8" }}>{hySpread>=4?"Danger":hySpread>=3.5?"Watch":"Firm"}</div>
-                <div className="meterTrack"><div className="meterFill" style={{ width:`${Math.max(0,Math.min(((hySpread-2)/4)*100,100))}%`, background:hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#94a3b8" }} /><div className="meterMarker" style={{ left:`${Math.max(0,Math.min(((hySpread-2)/4)*100,100))}%` }} /></div>
-                <div className="meterScale"><span>200</span><span>400 trigger</span><span>600</span></div>
-                <div style={{ fontSize:10, marginTop:5, color: hySpread>=4 ? "#ff6b88" : hySpread>=3.5 ? "#fbbf24" : "#475569" }}>
-                  {hySpread>=4 ? "▲ Trigger active — stress confirmed" : `▲ ${Math.round((4-hySpread)*100)}bps to trigger`}
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((hySpread-2)/4)*100,100))}%`, borderRadius:9999, background:hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#94a3b8" }} />
+                  <div style={{ position:"absolute", top:-6, left:"50%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>200</span><span>400</span><span>600</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {hySpread>=4 ? "▲ Trigger active" : `▲ ${Math.round((4-hySpread)*100)}bps to trigger`}
                 </div>
               </div>
               {/* 7. Real 10Y */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("real10y")}>
                 <div className="lbl" style={{ marginBottom:6 }}>Real 10Y</div>
-                <div className="valHero">{fmt2(real10y)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
-                <div className="status" style={{ color:real10y>=2?"#fbbf24":"#94a3b8" }}>{real10y>=2?"Firm":"Moderate"}</div>
-                <div className="meterTrack"><div className="meterFill" style={{ width:`${Math.max(0,Math.min((real10y/3)*100,100))}%`, background:real10y>=2?"#fbbf24":"#94a3b8" }} /><div className="meterMarker" style={{ left:`${Math.max(0,Math.min((real10y/3)*100,100))}%` }} /></div>
-                <div className="meterScale"><span>0%</span><span>2%</span><span>3%</span></div>
-                <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
+                <div className="valHero" style={{ color:"#fff" }}>{fmt2(real10y)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                <div className="status" style={{ color:real10y>=2.5?"#ff6b88":real10y>=1.5?"#fbbf24":"#4ade80" }}>
+                  {real10y>=2.5?"Restrictive":real10y>=1.5?"Watch":"Neutral"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((real10y/3)*100,100))}%`, borderRadius:9999, background:real10y>=2.5?"#ff6b88":real10y>=1.5?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(1.5/3)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.5)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:`${(2.5/3)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>1.5%</span><span>2.5%</span><span>3%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Equity headwind above 1.5%</div>
               </div>
               {/* 8. DXY */}
               <div className="tile">
                 <div className="lbl" style={{ marginBottom:6 }}>US Dollar (DXY)</div>
                 <div className="valHero" style={{ color:"#fff" }}>{dxy!=null?dxy.toFixed(2):"—"}</div>
                 <div className="status" style={{ color:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }}>
-                  {dxy==null?"Loading":dxy>104?"Strong — Tight Liquidity":dxy>100?"Elevated":"Neutral — Easier"}
+                  {dxy==null?"Loading":dxy>104?"Strong":dxy>100?"Elevated":"Neutral"}
                 </div>
-                <div className="meterTrack">
-                  <div className="meterFill" style={{ width:`${Math.max(0,Math.min(((dxy??100)-90)/30*100,100))}%`, background:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }} />
-                  <div className="meterMarker" style={{ left:`${Math.max(0,Math.min(((dxy??100)-90)/30*100,100))}%` }} />
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((dxy??100)-88)/32*100,100))}%`, borderRadius:9999, background:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((100-88)/32)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.5)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:`${((104-88)/32)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div className="meterScale"><span>90</span><span>100</span><span>110</span><span>120</span></div>
-                <div style={{ fontSize:10, color:dxyChangePct!=null&&dxyChangePct>0?"#ff6b88":"#475569", marginTop:4 }}>
-                  {dxyChangePct!=null?`${dxyChangePct>0?"▲":"▼"} ${Math.abs(dxyChangePct).toFixed(2)}% today`:"↑ Dollar = tighter liquidity"}
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>88</span><span>100</span><span>104</span><span>120</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {dxyChangePct!=null ? `${dxyChangePct>0?"▲":"▼"} ${Math.abs(dxyChangePct).toFixed(2)}% today` : "↑ Dollar = tighter liquidity"}
                 </div>
               </div>
               {/* 9. Yield Curve */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("yc")}>
                 <div className="lbl" style={{ marginBottom:6 }}>Yield Curve</div>
-                <div className="valHero">{fmt2(yieldCurve)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
-                <div className="status" style={{ color:yieldCurve>0?"#4ade80":"#fbbf24" }}>{yieldCurve>0?"Healthy":"Inverted"}</div>
-                <div className="meterTrack"><div className="meterFill" style={{ width:`${Math.max(0,Math.min(((yieldCurve+1)/2.5)*100,100))}%`, background:yieldCurve>0?"#4ade80":"#fbbf24" }} /><div className="meterMarker" style={{ left:`${Math.max(0,Math.min(((yieldCurve+1)/2.5)*100,100))}%` }} /></div>
-                <div className="meterScale"><span>-1%</span><span>0%</span><span>1.5%</span></div>
-                <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
+                <div className="valHero" style={{ color:"#fff" }}>{yieldCurve>0?"+":""}{fmt2(yieldCurve)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                <div className="status" style={{ color:yieldCurve<-0.5?"#ff6b88":yieldCurve<0?"#fbbf24":"#4ade80" }}>
+                  {yieldCurve<-0.5?"Inverted":yieldCurve<0?"Flattening":"Healthy"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((yieldCurve+1.5)/3)*100,100))}%`, borderRadius:9999, background:yieldCurve<-0.5?"#ff6b88":yieldCurve<0?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(1.5/3)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>-1.5%</span><span>0%</span><span>+1.5%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {yieldCurve>=0 ? `Re-steepened ${fmt2(yieldCurve)}% from inversion` : `Inverted ${fmt2(Math.abs(yieldCurve))}%`}
+                </div>
               </div>
               {/* 10. Put/Call */}
               <div className="tile">
                 <div className="lbl" style={{ marginBottom:6 }}>Put / Call Ratio</div>
                 <div className="valHero" style={{ color:"#fff" }}>{putCallRatio!=null?putCallRatio.toFixed(2):"—"}</div>
                 <div className="status" style={{ color:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }}>
-                  {putCallRatio==null?"Loading":putCallRatio>1.2?"Fearful — Contrarian Buy":putCallRatio>0.9?"Neutral":putCallRatio>0.7?"Complacency":"Extreme Complacency"}
+                  {putCallRatio==null?"Loading":putCallRatio>1.2?"Fearful":putCallRatio>0.9?"Neutral":putCallRatio>0.7?"Complacency":"Extreme"}
                 </div>
-                <div className="meterTrack">
-                  <div className="meterFill" style={{ width:`${Math.max(0,Math.min(((putCallRatio??0.9)-0.4)/1.2*100,100))}%`, background:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }} />
-                  <div className="meterMarker" style={{ left:`${Math.max(0,Math.min(((putCallRatio??0.9)-0.4)/1.2*100,100))}%` }} />
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((putCallRatio??0.9)-0.4)/1.2*100,100))}%`, borderRadius:9999, background:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((0.7-0.4)/1.2)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((1.0-0.4)/1.2)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div className="meterScale"><span>0.4</span><span>0.7</span><span>0.9</span><span>1.2</span><span>1.6</span></div>
-                <div style={{ fontSize:10, color:"#475569", marginTop:4 }}>&gt;1.0 = more puts · contrarian buy signal</div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0.4</span><span>0.7</span><span>1.0</span><span>1.6</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>&gt;1.0 contrarian buy · &lt;0.7 complacency</div>
               </div>
             </div>
           </section>
