@@ -506,17 +506,17 @@ export default function Page() {
               {/* 1. ERP — most critical */}
               <div className="tile">
                 <div className="lbl" style={{ marginBottom:6 }}>Equity Risk Premium</div>
-                <div className="valHero" style={{ color:erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80" }}>
-                  {erpBps!=null?`${erpBps}`:"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"bps":""}</span>
+                <div className="valHero" style={{ color:"#fff" }}>
+                  {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
                 </div>
                 <div className="status" style={{ color:erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80" }}>
-                  {erpBps==null?"Loading":erpBps<200?"Danger":erpBps<500?"Watch — Below 500bps":"Healthy"}
+                  {erpBps==null?"Loading":erpBps<200?"Danger":erpBps<500?"Watch — Below 5.0%":"Healthy"}
                 </div>
                 <div style={{ position:"relative", height:4, borderRadius:9999, background:"#202a64", marginTop:10 }}>
                   <div style={{ position:"absolute", left:0, top:0, height:4, borderRadius:9999, width:`${Math.max(0,Math.min((erpBps??0)/8,100))}%`, background:erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80" }} />
                   <div style={{ position:"absolute", top:-5, left:"62.5%", width:1.5, height:14, background:"rgba(255,255,255,0.35)", borderRadius:1 }} />
                 </div>
-                <div style={{ marginTop:5, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>500⚡</span><span>800+</span></div>
+                <div style={{ marginTop:5, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>5%⚡</span><span>8%+</span></div>
                 <div style={{ fontSize:10, color:"#334155", marginTop:4 }}>Earnings yield minus real 10Y</div>
               </div>
               {/* 2. VIX */}
@@ -651,7 +651,7 @@ export default function Page() {
               ].map(t => (
                 <div key={t.label} className="tile">
                   <div className="lbl">{t.label}</div>
-                  <div style={{ fontSize:22, fontWeight:700, color:"#fff" }}>{t.val}{t.date && <span style={{ fontSize:11, color:"#475569", marginLeft:4 }}>{t.date}</span>}</div>
+                  <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>{t.val}{t.date && <span style={{ fontSize:11, color:"#475569", marginLeft:4 }}>{t.date}</span>}</div>
                   <div style={{ fontSize:12, fontWeight:600, color:t.chgColor, marginTop:3 }}>{t.chg}</div>
                   {t.isMeter ? (
                     <><div className="meterTrack"><div className="meterFill" style={{ width:t.mW!, background:t.mC! }} /><div className="meterMarker" style={{ left:t.mW! }} /></div>
@@ -674,7 +674,7 @@ export default function Page() {
               ].map(t => (
                 <div key={t.label} className="tile">
                   <div className="lbl">{t.label}</div>
-                  <div style={{ fontSize:22, fontWeight:700, color:"#fff" }}>{t.val}</div>
+                  <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>{t.val}</div>
                   <div style={{ fontSize:12, fontWeight:600, color:t.chgColor, marginTop:3 }}>{t.chg}</div>
                   <svg viewBox="0 0 100 24" width="100%" height="18" style={{ margin:"5px 0 2px" }}>
                     {t.mid && <line x1="0" y1="12" x2="100" y2="12" stroke="rgba(255,255,255,0.07)" strokeWidth="1" strokeDasharray="3,3" />}
@@ -693,7 +693,7 @@ export default function Page() {
             <div className="grid5" style={{ marginBottom:8 }}>
               <div className="tile">
                 <div className="lbl">% Above 200-DMA</div>
-                <div style={{ fontSize:26, fontWeight:700, color:"#fbbf24" }}>44%</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>44%</div>
                 <div className="bbar"><div className="bbarFill" style={{ width:"44%", background:"#fbbf24" }} /></div>
                 <div className="meterScale"><span>0%</span><span>50%</span><span>100%</span></div>
                 <div className="sub" style={{ marginTop:4 }}>3-mo: deteriorating</div>
@@ -701,7 +701,7 @@ export default function Page() {
               </div>
               <div className="tile">
                 <div className="lbl">% Above 50-DMA</div>
-                <div style={{ fontSize:26, fontWeight:700, color:"#ff6b88" }}>31%</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>31%</div>
                 <div className="bbar"><div className="bbarFill" style={{ width:"31%", background:"#ff6b88" }} /></div>
                 <div className="meterScale"><span>0%</span><span>50%</span><span>100%</span></div>
                 <div className="sub" style={{ marginTop:4 }}>3-mo: sharp decline</div>
@@ -709,19 +709,19 @@ export default function Page() {
               </div>
               <div className="tile">
                 <div className="lbl">NYSE Adv / Dec</div>
-                <div style={{ fontSize:26, fontWeight:700, color:"#ff6b88", marginTop:4 }}>-412</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff", marginTop:4 }}>-412</div>
                 <div className="sub" style={{ marginTop:6 }}>More declines than advances</div>
                 <span className="pillR">Weak</span>
               </div>
               <div className="tile">
                 <div className="lbl">52-Wk Highs / Lows</div>
-                <div style={{ fontSize:26, fontWeight:700, marginTop:4 }}>48 / <span style={{ color:"#ff6b88" }}>187</span></div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff", marginTop:4 }}>48 / <span style={{ color:"#fff" }}>187</span></div>
                 <div className="sub" style={{ marginTop:4 }}>3-mo: lows dominating</div>
                 <span className="pillR">Bearish</span>
               </div>
               <div className="tile">
                 <div className="lbl">McClellan Oscillator</div>
-                <div style={{ fontSize:26, fontWeight:700, color:"#fbbf24", marginTop:4 }}>-42</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff", marginTop:4 }}>-42</div>
                 <div className="meterTrack"><div className="meterFill" style={{ width:"29%", background:"#ff6b88" }} /><div className="meterMarker" style={{ left:"29%" }} /></div>
                 <div className="meterScale"><span>-100</span><span>0</span><span>+100</span></div>
                 <span className="pillA">Oversold</span>
@@ -730,7 +730,7 @@ export default function Page() {
             <div className="grid5">
               <div className="tile">
                 <div className="lbl">% Above 100-DMA</div>
-                <div style={{ fontSize:26, fontWeight:700, color:"#ff6b88" }}>38%</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>38%</div>
                 <div className="bbar"><div className="bbarFill" style={{ width:"38%", background:"#ff6b88" }} /></div>
                 <div className="meterScale"><span>0%</span><span>50%</span><span>100%</span></div>
                 <div className="sub" style={{ marginTop:4 }}>3-mo: declining</div>
@@ -738,7 +738,7 @@ export default function Page() {
               </div>
               <div className="tile">
                 <div className="lbl">% Above 20-DMA</div>
-                <div style={{ fontSize:26, fontWeight:700, color:"#ff6b88" }}>28%</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>28%</div>
                 <div className="bbar"><div className="bbarFill" style={{ width:"28%", background:"#ff6b88" }} /></div>
                 <div className="meterScale"><span>0%</span><span>50%</span><span>100%</span></div>
                 <div className="sub" style={{ marginTop:4 }}>3-mo: capitulating</div>
