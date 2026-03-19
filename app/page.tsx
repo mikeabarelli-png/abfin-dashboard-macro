@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 
 type AnyObj = Record<string, any>;
-type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | null;
+type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | null;
 
 export default function Page() {
   const [modal, setModal] = useState<Modal>(null);
@@ -504,7 +504,7 @@ export default function Page() {
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Critical Risk</div>
             <div className="grid5" style={{ marginBottom:8 }}>
               {/* 1. ERP — most critical */}
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("erp")}>
                 <div className="lbl" style={{ marginBottom:6 }}>Equity Risk Premium</div>
                 <div className="valHero" style={{ color:"#fff" }}>
                   {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
@@ -517,7 +517,7 @@ export default function Page() {
                   <div style={{ position:"absolute", top:-5, left:"62.5%", width:1.5, height:14, background:"rgba(255,255,255,0.35)", borderRadius:1 }} />
                 </div>
                 <div style={{ marginTop:5, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>5%⚡</span><span>8%+</span></div>
-                <div style={{ fontSize:10, color:"#334155", marginTop:4 }}>Earnings yield minus real 10Y</div>
+                <div style={{ fontSize:10, color:"#334155", marginTop:4 }}>Earnings yield minus real 10Y · Click for detail</div>
               </div>
               {/* 2. VIX */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("vix")}>
@@ -532,7 +532,7 @@ export default function Page() {
                 <div style={{ fontSize:10, color:vixValue!=null&&vixValue>=30?"#ff6b88":"#64748b", marginTop:4 }}>{vixStatus.sub||"Click for detail"}</div>
               </div>
               {/* 3. 10Y Nominal */}
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("nom10y")}>
                 <div className="lbl" style={{ marginBottom:6 }}>10Y Yield (Nominal)</div>
                 <div className="valHero" style={{ color:"#fff" }}>{nom10y.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
                 <div className="status" style={{ color:nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80" }}>
@@ -543,7 +543,7 @@ export default function Page() {
                   <div className="meterMarker" style={{ left:`${Math.max(0,Math.min(nom10y/6*100,100))}%` }} />
                 </div>
                 <div className="meterScale"><span>2%</span><span>3%</span><span>4%</span><span>5%</span><span>6%</span></div>
-                <div style={{ fontSize:10, color:"#475569", marginTop:4 }}>Real: {real10y.toFixed(2)}% · Prem: {(nom10y-real10y).toFixed(2)}%</div>
+                <div style={{ fontSize:10, color:"#475569", marginTop:4 }}>Real: {real10y.toFixed(2)}% · Prem: {(nom10y-real10y).toFixed(2)}% · Click for detail</div>
               </div>
               {/* 4. 5Y Breakeven */}
               <div className="tile">
@@ -947,6 +947,203 @@ export default function Page() {
             right={<><MCard><SH>Why the 200-DMA matters</SH><BC>The 200-day moving average represents roughly one year of trading. It is the single most watched trend line by institutional investors, hedge funds, and systematic strategies. When SPX breaks below it, many models automatically reduce equity exposure — creating self-reinforcing selling pressure.</BC></MCard>
               <MCard><SH>Historical 200-DMA breaks</SH><div style={{ display:"grid", gap:5, marginTop:8 }}><HistRow val="-34%" event="COVID 2020" note="Broke · recovered in 23 days" /><HistRow val="-20%" event="2022 bear" note="Broke Jan · stayed below 10 months" /><HistRow val="-19%" event="Q4 2018" note="Broke Dec · recovered Feb 2019" /><HistRow val="-57%" event="GFC 2008" note="Broke Oct 2007 · 2 year bear" /><HistRow val={spxVs(spx200)!=null?fmtSigned1(spxVs(spx200)!):"+1.6%"} event="Today" note="Above · testing support zone" active /></div></MCard>
               <ActionCard>SPX is {spxPrice!=null?`${Math.abs(spxPrice-spx200).toFixed(0)} pts`:"~108 pts"} above its 200-DMA. Watch Friday closes specifically — your rule requires two consecutive Friday closes below {fmtWhole(spx200)} to trigger.</ActionCard></>}
+          />
+        </ModalWrapper>
+      )}
+
+      {/* ERP MODAL */}
+      {modal==="erp" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="Equity Risk Premium" sub="Earnings Yield minus Real 10Y Rate · The reward for owning stocks over bonds">
+          <ModalGrid
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>
+                {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:22 }}>%</span>
+              </div>
+              <Tag label={erpBps==null?"Loading":erpBps<200?"Danger — Near Zero":erpBps<500?"Watch — Below 5%":"Healthy"} color={erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80"} bg={erpBps==null?"rgba(148,163,184,0.12)":erpBps<200?"rgba(255,79,114,0.15)":erpBps<500?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
+              <BC>{erpBps!=null&&erpBps<500?"The premium for owning equities over risk-free bonds is historically thin. In a high-rate environment, this is a major warning of equity overvaluation.":"Equity premium above 5% — stocks offer meaningful compensation over bonds."}</BC>
+              <BandTrack
+                segs={[{w:"25%",color:"#ef4444"},{w:"37.5%",color:"#f59e0b"},{w:"37.5%",color:"#047857"}]}
+                needle={Math.max(0,Math.min((erpBps??0)/8,99))}
+                scaleNums={["0%","2%","5%","8%+"]}
+                scaleNames={["Danger","Watch","Healthy",""]}
+              />
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
+                <SH>How it&apos;s calculated</SH>
+                <div style={{ display:"grid", gap:6, marginTop:8, fontSize:13, color:"#cbd5e1", lineHeight:1.7 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Trailing P/E</span><span style={{ color:"#fff", fontWeight:600 }}>{trailingPE!=null?trailingPE.toFixed(1)+"x":"~24x"}</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Earnings Yield (1÷PE)</span><span style={{ color:"#fff", fontWeight:600 }}>{trailingPE!=null?((1/trailingPE)*100).toFixed(2)+"%":"~4.17%"}</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Real 10Y Rate</span><span style={{ color:"#fff", fontWeight:600 }}>{real10y.toFixed(2)}%</span></div>
+                  <div style={{ height:1, background:"rgba(255,255,255,0.08)", margin:"4px 0" }} />
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600 }}>ERP = Earnings Yield − Real Rate</span><span style={{ color:erpBps!=null&&erpBps<500?"#fbbf24":"#4ade80", fontWeight:700 }}>{erpBps!=null?(erpBps/100).toFixed(2)+"%":"—"}</span></div>
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>Why it matters</SH>
+                <BC>ERP is the "smart money math check." When it collapses below 2%, a rational institutional investor has almost no incentive to own equities over Treasuries. Why accept a 30-40% drawdown risk for less than 2% extra yield? Short-term bonds yield ~5% with zero equity risk.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical context</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="7.2%" event="2009 bottom" note="Stocks screaming cheap vs bonds" />
+                  <HistRow val="3.5%" event="2012-2019 avg" note="Healthy bull market premium" />
+                  <HistRow val="-2.1%" event="2000 Dot-Com" note="Bonds yielded more — 50% crash followed" />
+                  <HistRow val="~0%" event="2021 peak" note="ZIRP distorted — ERP near zero" />
+                  <HistRow val={erpBps!=null?(erpBps/100).toFixed(2)+"%":"—"} event="Today" note={erpBps!=null&&erpBps<500?"Near historical danger zone":"Reasonable premium"} active />
+                  <HistRow val="5%+" event="Healthy target" note="Adequate compensation for equity risk" />
+                </div>
+              </MCard>
+              <ActionCard>{erpBps!=null&&erpBps<200?"ERP is dangerously low. Bonds are nearly as attractive as stocks on a risk-adjusted basis. This is a structural argument for reducing equity exposure.":erpBps!=null&&erpBps<500?`ERP at ${(erpBps/100).toFixed(2)}% is below the 5% watch level. The high-rate environment is compressing the reward for equity risk. Watch for further compression as rates or CAPE changes.`:"ERP above 5% — stocks offer adequate compensation over bonds. No valuation concern from this metric."}</ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      {/* 10Y NOMINAL MODAL */}
+      {modal==="nom10y" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="10Y Treasury Yield — Nominal" sub="US 10-Year Treasury Yield · The gravity of all asset valuations">
+          <ModalGrid
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{nom10y.toFixed(2)}<span style={{ fontSize:22 }}>%</span></div>
+              <Tag label={nom10y>4.5?"Restrictive — Equity Headwind":nom10y>4?"Elevated — Watch":"Neutral"} color={nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80"} bg={nom10y>4.5?"rgba(255,79,114,0.15)":nom10y>4?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
+              <BC>{nom10y>4?"At {nom10y.toFixed(2)}%, the 10Y yield is creating real competition for equities. Every dollar in bonds earns more than at any point in the 2010s — raising the bar for equity returns.":"Nominal yield is in a relatively neutral range — limited pressure on equity valuations."}</BC>
+              <BandTrack
+                segs={[{w:"33%",color:"#047857"},{w:"34%",color:"#f59e0b"},{w:"33%",color:"#ef4444"}]}
+                needle={Math.max(0,Math.min(nom10y/6*100,99))}
+                scaleNums={["0%","2%","4%","5%","6%"]}
+                scaleNames={["Low","Neutral","Elevated","Restrictive",""]}
+              />
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
+                <SH>Rate decomposition</SH>
+                <div style={{ display:"grid", gap:6, marginTop:8, fontSize:13, color:"#cbd5e1", lineHeight:1.7 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Nominal 10Y yield</span><span style={{ color:"#fff", fontWeight:600 }}>{nom10y.toFixed(2)}%</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>5Y Breakeven inflation</span><span style={{ color:"#fff", fontWeight:600 }}>{breakeven5y.toFixed(2)}%</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Real 10Y (TIPS)</span><span style={{ color:"#fff", fontWeight:600 }}>{real10y.toFixed(2)}%</span></div>
+                  <div style={{ height:1, background:"rgba(255,255,255,0.08)", margin:"4px 0" }} />
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600 }}>Inflation premium</span><span style={{ color:"#fbbf24", fontWeight:700 }}>{(nom10y-real10y).toFixed(2)}%</span></div>
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>Why it matters</SH>
+                <BC>The 10Y yield is the "gravity" of all financial markets. When it rises, it discounts future corporate earnings more heavily — compressing P/E multiples. Growth stocks, long-duration assets, and high-multiple equities are most sensitive. Every 100bps rise historically reduces fair-value P/E by 3-5x.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical context</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="0.5%" event="2020 COVID low" note="Emergency levels · bull market fuel" />
+                  <HistRow val="1.5%" event="2021 avg" note="Still accommodative · P/E expansion" />
+                  <HistRow val="4.0%" event="Late 2022" note="First 4% breach since 2008" />
+                  <HistRow val="5.0%" event="Oct 2023 peak" note="Multi-decade high · equity selloff" />
+                  <HistRow val={nom10y.toFixed(2)+"%"} event="Today" note={nom10y>4.5?"Restrictive — headwind for multiples":"Elevated — still above neutral"} active />
+                  <HistRow val="3.0%" event="Neutral estimate" note="Fed long-run rate estimate" />
+                </div>
+              </MCard>
+              <ActionCard>{nom10y>4.5?`At ${nom10y.toFixed(2)}%, yields are restrictive. This is a structural headwind for equity P/E multiples. Combined with thin ERP, it supports a cautious posture on equity valuations.`:`At ${nom10y.toFixed(2)}%, the 10Y is elevated but below the 4.5% restrictive threshold. Monitor for a move above 4.5% — that would increase pressure on equity multiples significantly.`}</ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      {/* ERP MODAL */}
+      {modal==="erp" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="Equity Risk Premium" sub="Earnings Yield minus Real 10Y Rate · The core math of equity vs bond valuation">
+          <ModalGrid
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>
+                {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:22 }}>%</span>
+              </div>
+              <Tag label={erpBps==null?"Loading":erpBps<200?"Danger — Near Zero":erpBps<500?"Watch — Below 5%":"Healthy Premium"} color={erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80"} bg={erpBps==null?"rgba(148,163,184,0.12)":erpBps<200?"rgba(255,79,114,0.15)":erpBps<500?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
+              <BC>Stocks currently offer {erpBps!=null?(erpBps/100).toFixed(2):"—"}% extra return over risk-free bonds. Below 5% means equities are not compensating adequately for the risk of owning them.</BC>
+              <div style={{ marginTop:14 }}>
+                <SH>How it&apos;s calculated</SH>
+                <div style={{ background:"#050a35", borderRadius:10, padding:12, marginTop:6, fontSize:12, lineHeight:1.8, color:"#94a3b8" }}>
+                  <div>Trailing P/E: <span style={{ color:"#fff", fontWeight:600 }}>{trailingPE!=null?trailingPE.toFixed(1)+"x":"~24.2x"}</span></div>
+                  <div>Earnings Yield (1÷PE): <span style={{ color:"#fff", fontWeight:600 }}>{trailingPE!=null?(100/trailingPE).toFixed(2)+"%":"~4.13%"}</span></div>
+                  <div>Real 10Y Rate: <span style={{ color:"#fff", fontWeight:600 }}>{real10y.toFixed(2)}%</span></div>
+                  <div style={{ borderTop:"0.5px solid rgba(255,255,255,0.08)", marginTop:6, paddingTop:6 }}>ERP = {trailingPE!=null?(100/trailingPE).toFixed(2):"4.13"}% − {real10y.toFixed(2)}% = <span style={{ color:erpBps!=null&&erpBps<500?"#fbbf24":"#4ade80", fontWeight:700 }}>{erpBps!=null?(erpBps/100).toFixed(2):"—"}%</span></div>
+                </div>
+              </div>
+              <div style={{ marginTop:14, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
+                <SH>Warning threshold</SH>
+                <div style={{ height:8, borderRadius:9999, background:"#1e2a5e", overflow:"hidden", margin:"8px 0" }}>
+                  <div style={{ height:8, borderRadius:9999, background:erpBps!=null&&erpBps<200?"#ff6b88":erpBps!=null&&erpBps<500?"#fbbf24":"#4ade80", width:`${Math.max(0,Math.min((erpBps??0)/8,100))}%` }} />
+                  <div style={{ position:"relative" }}><div style={{ position:"absolute", top:-12, left:"62.5%", width:1.5, height:14, background:"rgba(255,255,255,0.4)" }} /></div>
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>5%⚡ warning</span><span>8%+</span></div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>Why it matters</SH>
+                <BC>ERP is the "smart money math check." When it collapses below 2%, a rational institutional investor has almost no incentive to own equities over Treasuries. Why accept a 30-40% drawdown risk for less than 2% extra yield? Short-term government bonds yield ~5% with zero equity risk.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical context</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="7.2%" event="2009 bottom" note="Stocks screaming cheap vs bonds" />
+                  <HistRow val="3.5%" event="2012-2019 avg" note="Healthy bull market premium" />
+                  <HistRow val="-2.1%" event="2000 Dot-Com" note="Bonds yielded more · 50% crash followed" />
+                  <HistRow val="0.5%" event="2021 peak" note="Near-zero — fueled by ZIRP" />
+                  <HistRow val={erpBps!=null?(erpBps/100).toFixed(2)+"%":"—"} event="Today" note={erpBps!=null&&erpBps<500?"Watch — below healthy threshold":"Healthy premium"} active />
+                  <HistRow val="5%+" event="Healthy threshold" note="Adequate compensation for equity risk" />
+                </div>
+              </MCard>
+              <ActionCard>ERP at {erpBps!=null?(erpBps/100).toFixed(2):"—"}% is {erpBps!=null&&erpBps<500?"below the 5% watch threshold. Equities are not offering a compelling premium over bonds at current rates. This supports a cautious stance on adding new equity exposure.":"above 5% — equities are offering adequate risk compensation."}</ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      {/* 10Y NOMINAL MODAL */}
+      {modal==="nom10y" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="10Y Treasury Yield — Nominal" sub="US 10-Year Treasury Note Yield · The single most important price in global finance">
+          <ModalGrid
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>
+                {nom10y.toFixed(2)}<span style={{ fontSize:22 }}>%</span>
+              </div>
+              <Tag label={nom10y>4.5?"Restrictive — Equity Headwind":nom10y>4?"Elevated — Watch":"Neutral"} color={nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80"} bg={nom10y>4.5?"rgba(255,79,114,0.15)":nom10y>4?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
+              <BC>The nominal 10Y yield is the benchmark for all asset valuations. Every percentage point rise in the 10Y directly increases the discount rate applied to future earnings — compressing equity multiples.</BC>
+              <BandTrack
+                segs={[{w:"33%",color:"#047857"},{w:"17%",color:"#4ade80"},{w:"25%",color:"#f59e0b"},{w:"25%",color:"#ef4444"}]}
+                needle={Math.max(0,Math.min((nom10y/6)*100,99))}
+                scaleNums={["2%","3%","4%","5%","6%"]}
+                scaleNames={["Accommodative","Neutral","Elevated","Restrictive","Crisis"]}
+              />
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
+                <SH>Rate decomposition</SH>
+                <div style={{ display:"grid", gap:6, marginTop:6, fontSize:12 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#64748b" }}>Nominal 10Y</span><span style={{ color:"#fff", fontWeight:600 }}>{nom10y.toFixed(2)}%</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#64748b" }}>Real Rate (TIPS)</span><span style={{ color:"#fff", fontWeight:600 }}>{real10y.toFixed(2)}%</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between", borderTop:"0.5px solid rgba(255,255,255,0.08)", paddingTop:6 }}><span style={{ color:"#64748b" }}>Inflation Premium</span><span style={{ color:"#fbbf24", fontWeight:600 }}>{(nom10y-real10y).toFixed(2)}%</span></div>
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>Why it matters</SH>
+                <BC>The 10Y yield is the "gravity" for all asset prices. When it rises, it raises the hurdle rate for every investment — stocks, real estate, private equity. The move from 0.5% in 2020 to 4%+ today represents one of the largest tightening cycles in history, and is the primary reason equity multiples have compressed.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical context</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="0.52%" event="Aug 2020 low" note="Pandemic lows · ZIRP era" />
+                  <HistRow val="1.5%" event="2021 avg" note="Still accommodative · bull market" />
+                  <HistRow val="4.25%" event="Oct 2022 breakout" note="Fed hiking · first major move" />
+                  <HistRow val="5.02%" event="Oct 2023 peak" note="Highest since 2007" />
+                  <HistRow val={nom10y.toFixed(2)+"%"} event="Today" note={nom10y>4.5?"Restrictive — headwind for equities":"Elevated but easing"} active />
+                  <HistRow val="3.0%" event="Neutral estimate" note="Fed long-run estimate" />
+                </div>
+              </MCard>
+              <ActionCard>{nom10y>4.5?`At ${nom10y.toFixed(2)}%, the 10Y is firmly in restrictive territory. This directly compresses equity P/E multiples and makes bonds a genuine alternative to stocks. Watch for moves above 4.75% as a further headwind.`:`At ${nom10y.toFixed(2)}%, the 10Y is elevated but not yet at the most restrictive levels seen in 2023. Monitor for a break above 4.5% which would increase pressure on equity valuations.`}</ActionCard>
+            </>}
           />
         </ModalWrapper>
       )}
