@@ -512,21 +512,16 @@ export default function Page() {
                 <div className="status" style={{ color:erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80" }}>
                   {erpBps==null?"Loading":erpBps<200?"Danger":erpBps<500?"Watch":"Healthy"}
                 </div>
-                <div style={{ position:"relative", height:4, borderRadius:9999, background:"#202a64", marginTop:10, overflow:"hidden" }}>
-                  {/* Red segment: always 0% to 2% (25% of 8% scale) */}
-                  <div style={{ position:"absolute", left:0, top:0, height:4, width:"25%", background:"#ef4444", borderRadius:"9999px 0 0 9999px" }} />
-                  {/* Amber segment: 2% to current value */}
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:"25%", background:"#ef4444", borderRadius:"9999px 0 0 9999px", overflow:"hidden" }} />
                   {erpBps!=null && erpBps>200 && (
-                    <div style={{ position:"absolute", left:"25%", top:0, height:4, width:`${Math.max(0,Math.min(((erpBps-200)/800)*100,75))}%`, background:"#fbbf24" }} />
+                    <div style={{ position:"absolute", left:"25%", top:0, height:6, width:`${Math.max(0,Math.min(((erpBps-200)/800)*100,75))}%`, background:"#fbbf24" }} />
                   )}
-                  {/* Tick at 2% danger */}
-                  <div style={{ position:"absolute", top:-5, left:"25%", width:1.5, height:14, background:"rgba(255,255,255,0.5)", borderRadius:1, zIndex:2 }} />
-                  {/* Tick at 5% healthy */}
-                  <div style={{ position:"absolute", top:-5, left:"62.5%", width:1.5, height:14, background:"rgba(255,255,255,0.3)", borderRadius:1, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-6, left:"25%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:"62.5%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div style={{ marginTop:5, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>2% danger</span><span>5% healthy</span><span>8%+</span></div>
-                <div style={{ fontSize:10, marginTop:5, color: erpBps!=null && erpBps<200 ? "#ff6b88" : erpBps!=null && erpBps < 230 ? "#fbbf24" : "#475569" }}>
-                  {erpBps!=null && erpBps<200 ? "▼ In danger zone" : erpBps!=null && erpBps<230 ? `▼ ${((erpBps-200)/100).toFixed(2)}% from danger zone` : erpBps!=null && erpBps<500 ? `▼ ${((erpBps-200)/100).toFixed(2)}% above danger · ${((500-erpBps)/100).toFixed(2)}% to healthy` : "Above healthy threshold"}
+                <div style={{ fontSize:11, marginTop:8, fontWeight:600, color: erpBps!=null && erpBps<200 ? "#ff6b88" : erpBps!=null && erpBps<230 ? "#fbbf24" : "#64748b" }}>
+                  {erpBps!=null && erpBps<200 ? "▼ In danger zone" : erpBps!=null && erpBps<500 ? `▼ ${((erpBps-200)/100).toFixed(2)}% from red / danger` : "Above healthy threshold"}
                 </div>
               </div>
               {/* 2. VIX */}
