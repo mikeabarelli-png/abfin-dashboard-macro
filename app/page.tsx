@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 
 type AnyObj = Record<string, any>;
-type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | null;
+type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | null;
 
 export default function Page() {
   const [modal, setModal] = useState<Modal>(null);
@@ -83,6 +83,7 @@ export default function Page() {
   const putCallRatio = getNum(metrics?.put_call_ratio, marketData?.put_call_ratio);
   const erpBps = getNum(metrics?.erp_bps, marketData?.erp_bps);
   const trailingPE = getNum(metrics?.trailing_pe, marketData?.trailing_pe);
+  const capeRatio = getNum(metrics?.cape_ratio, marketData?.cape_ratio) ?? 40.2;
 
   const fmtWhole = (n: number) => Math.round(n).toLocaleString();
   const fmt1 = (n: number) => n.toFixed(1);
@@ -125,6 +126,11 @@ export default function Page() {
   };
 
   const damageCount = [spxVs(spx20), spxVs(spx50), spxVs(spx100), spxVs(spx200)].filter(v => v != null && v < 0).length;
+
+  // ── 200-DMA breach state ──────────────────────────────────────────────────
+  const spx200Pct = spxVs(spx200);
+  const is200Broken = spx200Pct != null && spx200Pct < 0;
+  // ─────────────────────────────────────────────────────────────────────────
 
   const systemPrompt = `You are an AI Wealth Strategist on a macro dashboard. Investor rules: Defensive trigger = two consecutive Friday closes below SPX 200-DMA (${fmtWhole(spx200)}) AND VIX>30 OR HY>400bps. VIX>30 = pause new equity buying. Current data: SPX ${spxPrice != null ? fmtWhole(spxPrice) : "loading"} (${spxDailyPct != null ? spxDailyPct.toFixed(2) : "?"}% today, ${spxYtd.toFixed(2)}% YTD), VIX ${vixValue != null ? fmt1(vixValue) : "loading"}, vs 20-DMA: ${spxVs(spx20) != null ? fmtSigned1(spxVs(spx20)!) : "?"}, vs 50-DMA: ${spxVs(spx50) != null ? fmtSigned1(spxVs(spx50)!) : "?"}, vs 100-DMA: ${spxVs(spx100) != null ? fmtSigned1(spxVs(spx100)!) : "?"}, vs 200-DMA: ${spxVs(spx200) != null ? fmtSigned1(spxVs(spx200)!) : "?"}, HY Spread: ${hySpread}%, Yield Curve: ${yieldCurve}%, ERP: ${erpBps != null ? erpBps + "bps" : "unavailable"}, ${damageCount}/4 DMAs broken. Ivy Portfolio: all 5 positions invested. Valuation: 4/5 models overvalued. Be direct, specific, use actual numbers. No fluff.`;
 
@@ -248,7 +254,6 @@ export default function Page() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const prices = spxHistory.length >= 50 ? spxHistory : (() => {
-      // fallback mock data anchored to current price
       const pts: number[] = []; let p = (spxPrice ?? 6637) * 0.9;
       for (let i = 290; i >= 0; i--) { p *= (1+(Math.random()-0.484)*0.013); pts.push(Math.round(p*100)/100); }
       const scale = (spxPrice ?? 6637) / pts[pts.length-1];
@@ -281,7 +286,6 @@ export default function Page() {
       const Chart = (window as any).Chart;
       if (!Chart) return;
 
-      // Destroy existing
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
       if (rsiRef.current) { rsiRef.current.destroy(); rsiRef.current = null; }
       if (macdRef.current) { macdRef.current.destroy(); macdRef.current = null; }
@@ -432,12 +436,15 @@ export default function Page() {
               <div className="damage">{damageCount} / 4 short-term trends broken</div>
             </div>
             <div className="grid5" style={{ marginBottom:8 }}>
+              {/* SPX Price tile */}
               <div className="tile">
                 <div className="tileTop"><span className="lbl">S&P 500</span><span className="ytd">{spxYtd > 0 ? "+" : ""}{spxYtd.toFixed(2)}% YTD</span></div>
                 <div className="valHero">{spxPrice != null ? fmtWhole(spxPrice) : "—"}</div>
                 <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(spxTrend, spxDailyPct != null && spxDailyPct >= 0 ? "#4ade80" : "#ff6b88") }} />
                 <div className="subSpx">{spxDailyPct != null ? `${spxDailyPct >= 0 ? "▲" : "▼"} ${Math.abs(spxDailyPct).toFixed(1)}% today` : "Waiting for live price"}</div>
               </div>
+
+              {/* 20 / 50 / 100-DMA tiles */}
               {[{ label:"20-DMA", level:spx20 }, { label:"50-DMA", level:spx50 }, { label:"100-DMA", level:spx100 }].map(d => {
                 const pct = spxVs(d.level); const tone = dmaTone(pct);
                 return (
@@ -449,19 +456,52 @@ export default function Page() {
                   </div>
                 );
               })}
-              <div className="tile tile200" style={{ cursor:"pointer" }} onClick={() => setModal("dma200")}>
-                <div className="tileTop"><span className="lbl" style={{ color:"#f59e0b" }}>200-DMA</span><span className="badge" style={{ background:"#f59e0b", color:"#000" }}>!</span></div>
+
+              {/* ── 200-DMA tile — red when broken, amber when testing/above ── */}
+              <div
+                className={is200Broken ? "tile tile200Red" : "tile tile200"}
+                style={{ cursor:"pointer" }}
+                onClick={() => setModal("dma200")}
+              >
+                <div className="tileTop">
+                  <span className="lbl" style={{ color: is200Broken ? "#ff6b88" : "#f59e0b" }}>200-DMA</span>
+                  <span className="badge" style={{ background: is200Broken ? "#ef4444" : "#f59e0b", color: is200Broken ? "#fff" : "#000" }}>!</span>
+                </div>
                 <div className="valHero">{fmtWhole(spx200)}</div>
-                <div className="status" style={{ color:"#fbbf24" }}>{dmaState(spxVs(spx200), true)}</div>
-                <div className="sub" style={{ color:"#f59e0b" }}>{spxVs(spx200) != null ? `SPX ${fmtSigned1(spxVs(spx200)!)} above` : "Waiting"}</div>
+                <div className="status" style={{ color: is200Broken ? "#ff6b88" : "#fbbf24" }}>
+                  {dmaState(spx200Pct, true)}
+                </div>
+                <div className="sub" style={{ color: is200Broken ? "#ff6b88" : "#f59e0b" }}>
+                  {spx200Pct != null
+                    ? `SPX ${fmtSigned1(spx200Pct)} ${spx200Pct >= 0 ? "above" : "below"}`
+                    : "Waiting"}
+                </div>
                 <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
               </div>
             </div>
-            <div className="alertStrip">
-              <span className="alertDot" />
-              <span className="alertTitle">200-DMA Proximity — Immediate Watch</span>
-              <span className="alertBody">{spxPrice != null ? `Only ${Math.abs(((spxPrice-spx200)/spx200)*100).toFixed(1)}% above (${fmtWhole(spx200)}) · ${Math.abs(spxPrice-spx200).toFixed(0)} pts gap · Trigger: 2 Friday closes below + VIX >30 or HY >400bps` : "Waiting..."}</span>
-            </div>
+
+            {/* ── Alert strip — critical red when broken, amber watch when above ── */}
+            {is200Broken ? (
+              <div className="alertStripCritical">
+                <span className="alertDotRed" />
+                <span className="alertTitleRed">⚠ 200-DMA Breached — Critical</span>
+                <span className="alertBodyRed">
+                  {spxPrice != null
+                    ? `SPX ${fmtSigned1(spx200Pct!)} below 200-DMA (${fmtWhole(spx200)}) · ${Math.abs(spxPrice - spx200).toFixed(0)} pts below · Watch: 2 Friday closes below + VIX >30 or HY >400bps triggers defensive posture`
+                    : "Waiting..."}
+                </span>
+              </div>
+            ) : (
+              <div className="alertStrip">
+                <span className="alertDot" />
+                <span className="alertTitle">200-DMA Proximity — Immediate Watch</span>
+                <span className="alertBody">
+                  {spxPrice != null
+                    ? `Only ${Math.abs(((spxPrice-spx200)/spx200)*100).toFixed(1)}% above (${fmtWhole(spx200)}) · ${Math.abs(spxPrice-spx200).toFixed(0)} pts gap · Trigger: 2 Friday closes below + VIX >30 or HY >400bps`
+                    : "Waiting..."}
+                </span>
+              </div>
+            )}
           </section>
 
           {/* ② SPX TECHNICAL CHART */}
@@ -503,7 +543,7 @@ export default function Page() {
             {/* Row 1: Critical Risk */}
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Critical Risk</div>
             <div className="grid5" style={{ marginBottom:8 }}>
-              {/* 1. ERP — most critical */}
+              {/* 1. ERP */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("erp")}>
                 <div className="lbl" style={{ marginBottom:6 }}>Equity Risk Premium</div>
                 <div className="valHero" style={{ color:"#fff" }}>
@@ -584,7 +624,29 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Row 2: Stability & Context */}
+            {/* Row 1b: Valuation Risk */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6, marginTop:10 }}>Valuation Risk</div>
+            <div className="grid5" style={{ marginBottom:8 }}>
+              {/* CAPE Ratio */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("cape")}>
+                <div className="lbl" style={{ marginBottom:6 }}>CAPE Ratio (Shiller P/E)</div>
+                <div className="valHero" style={{ color:"#fff" }}>
+                  {capeRatio.toFixed(1)}<span style={{ fontSize:20, fontWeight:600 }}>x</span>
+                </div>
+                <div className="status" style={{ color:capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80" }}>
+                  {capeRatio>35?"Extreme":capeRatio>25?"Overvalued":capeRatio>20?"Elevated":"Fairly Valued"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((capeRatio-5)/45)*100,100))}%`, borderRadius:9999, background:capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((20-5)/45)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.5)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:`${((35-5)/45)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>5x</span><span>20x</span><span>35x</span><span>50x</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {capeRatio>35 ? `▲ ${(capeRatio-16).toFixed(1)}x above hist. avg (16x)` : `Hist. avg ~16x · Dot-com peak 44x`}
+                </div>
+              </div>
+            </div>
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Stability &amp; Context</div>
             <div className="grid5">
               {/* 6. HY Spread */}
@@ -980,7 +1042,6 @@ export default function Page() {
         </ModalWrapper>
       )}
 
-      {/* 10Y NOMINAL MODAL */}
       {modal==="nom10y" && (
         <ModalWrapper onClose={()=>setModal(null)} title="10Y Treasury Yield — Nominal" sub="US 10-Year Treasury Yield · The gravity of all asset valuations">
           <ModalGrid
@@ -988,7 +1049,7 @@ export default function Page() {
               <SH>Current reading</SH>
               <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{nom10y.toFixed(2)}<span style={{ fontSize:22 }}>%</span></div>
               <Tag label={nom10y>4.5?"Restrictive — Equity Headwind":nom10y>4?"Elevated — Watch":"Neutral"} color={nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80"} bg={nom10y>4.5?"rgba(255,79,114,0.15)":nom10y>4?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
-              <BC>{nom10y>4?"At {nom10y.toFixed(2)}%, the 10Y yield is creating real competition for equities. Every dollar in bonds earns more than at any point in the 2010s — raising the bar for equity returns.":"Nominal yield is in a relatively neutral range — limited pressure on equity valuations."}</BC>
+              <BC>{nom10y>4?"At "+nom10y.toFixed(2)+"%, the 10Y yield is creating real competition for equities. Every dollar in bonds earns more than at any point in the 2010s — raising the bar for equity returns.":"Nominal yield is in a relatively neutral range — limited pressure on equity valuations."}</BC>
               <BandTrack
                 segs={[{w:"33%",color:"#047857"},{w:"34%",color:"#f59e0b"},{w:"33%",color:"#ef4444"}]}
                 needle={Math.max(0,Math.min(nom10y/6*100,99))}
@@ -1028,7 +1089,6 @@ export default function Page() {
         </ModalWrapper>
       )}
 
-      {/* ERP MODAL */}
       {modal==="erp" && (
         <ModalWrapper onClose={()=>setModal(null)} title="Equity Risk Premium" sub="Earnings Yield minus Real 10Y Rate · The core math of equity vs bond valuation">
           <ModalGrid
@@ -1077,49 +1137,46 @@ export default function Page() {
         </ModalWrapper>
       )}
 
-      {/* 10Y NOMINAL MODAL */}
-      {modal==="nom10y" && (
-        <ModalWrapper onClose={()=>setModal(null)} title="10Y Treasury Yield — Nominal" sub="US 10-Year Treasury Note Yield · The single most important price in global finance">
+      {modal==="cape" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="CAPE Ratio — Cyclically Adjusted P/E" sub="Shiller P/E · 10-year inflation-adjusted earnings · Long-run valuation benchmark">
           <ModalGrid
             left={<>
               <SH>Current reading</SH>
               <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>
-                {nom10y.toFixed(2)}<span style={{ fontSize:22 }}>%</span>
+                {capeRatio.toFixed(1)}<span style={{ fontSize:22 }}>x</span>
               </div>
-              <Tag label={nom10y>4.5?"Restrictive — Equity Headwind":nom10y>4?"Elevated — Watch":"Neutral"} color={nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80"} bg={nom10y>4.5?"rgba(255,79,114,0.15)":nom10y>4?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
-              <BC>The nominal 10Y yield is the benchmark for all asset valuations. Every percentage point rise in the 10Y directly increases the discount rate applied to future earnings — compressing equity multiples.</BC>
+              <Tag label={capeRatio>35?"Extreme — Historically Dangerous":capeRatio>25?"Overvalued — Watch":"Elevated"} color={capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80"} bg={capeRatio>35?"rgba(255,79,114,0.15)":capeRatio>25?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
+              <BC>At {capeRatio.toFixed(1)}x, CAPE is {(capeRatio/16).toFixed(1)}x the historical average of ~16x. Only the 2000 dot-com peak ({">"}44x) and late 2021 (~38x) have been higher. This level has historically preceded below-average 10-year forward returns.</BC>
               <BandTrack
-                segs={[{w:"33%",color:"#047857"},{w:"17%",color:"#4ade80"},{w:"25%",color:"#f59e0b"},{w:"25%",color:"#ef4444"}]}
-                needle={Math.max(0,Math.min((nom10y/6)*100,99))}
-                scaleNums={["2%","3%","4%","5%","6%"]}
-                scaleNames={["Accommodative","Neutral","Elevated","Restrictive","Crisis"]}
+                segs={[{w:"33%",color:"#047857"},{w:"22%",color:"#4ade80"},{w:"22%",color:"#f59e0b"},{w:"23%",color:"#ef4444"}]}
+                needle={Math.max(0,Math.min(((capeRatio-5)/45)*100,99))}
+                scaleNums={["5x","15x","25x","35x","50x"]}
+                scaleNames={["Cheap","Fair","Elevated","Expensive","Extreme"]}
               />
               <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
-                <SH>Rate decomposition</SH>
-                <div style={{ display:"grid", gap:6, marginTop:6, fontSize:12 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#64748b" }}>Nominal 10Y</span><span style={{ color:"#fff", fontWeight:600 }}>{nom10y.toFixed(2)}%</span></div>
-                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#64748b" }}>Real Rate (TIPS)</span><span style={{ color:"#fff", fontWeight:600 }}>{real10y.toFixed(2)}%</span></div>
-                  <div style={{ display:"flex", justifyContent:"space-between", borderTop:"0.5px solid rgba(255,255,255,0.08)", paddingTop:6 }}><span style={{ color:"#64748b" }}>Inflation Premium</span><span style={{ color:"#fbbf24", fontWeight:600 }}>{(nom10y-real10y).toFixed(2)}%</span></div>
+                <SH>10-year forward return implication</SH>
+                <div style={{ fontSize:13, lineHeight:1.7, color:"#cbd5e1" }}>
+                  At CAPE {">"} 30x, historical median 10-year annualized real returns have been ~0–2%. At current {capeRatio.toFixed(1)}x, the market is pricing in near-perfection — any mean reversion compresses returns significantly.
                 </div>
               </div>
             </>}
             right={<>
               <MCard>
-                <SH>Why it matters</SH>
-                <BC>The 10Y yield is the "gravity" for all asset prices. When it rises, it raises the hurdle rate for every investment — stocks, real estate, private equity. The move from 0.5% in 2020 to 4%+ today represents one of the largest tightening cycles in history, and is the primary reason equity multiples have compressed.</BC>
+                <SH>What it measures</SH>
+                <BC>CAPE divides the S&P 500 price by 10 years of inflation-adjusted earnings, smoothing out business cycle noise. Created by Robert Shiller (Nobel laureate), it is the most cited long-run valuation metric. High CAPE does not predict the timing of a crash — but it reliably predicts below-average long-run returns from that level.</BC>
               </MCard>
               <MCard>
                 <SH>Historical context</SH>
                 <div style={{ display:"grid", gap:5, marginTop:8 }}>
-                  <HistRow val="0.52%" event="Aug 2020 low" note="Pandemic lows · ZIRP era" />
-                  <HistRow val="1.5%" event="2021 avg" note="Still accommodative · bull market" />
-                  <HistRow val="4.25%" event="Oct 2022 breakout" note="Fed hiking · first major move" />
-                  <HistRow val="5.02%" event="Oct 2023 peak" note="Highest since 2007" />
-                  <HistRow val={nom10y.toFixed(2)+"%"} event="Today" note={nom10y>4.5?"Restrictive — headwind for equities":"Elevated but easing"} active />
-                  <HistRow val="3.0%" event="Neutral estimate" note="Fed long-run estimate" />
+                  <HistRow val="44x" event="Dot-com peak 2000" note="S&P fell ~50% over 2 years" />
+                  <HistRow val="38x" event="Late 2021 peak" note="2022 bear market followed · -25%" />
+                  <HistRow val="32x" event="Pre-GFC 2007" note="Financial crisis · -57% followed" />
+                  <HistRow val="27x" event="Black Tuesday 1929" note="Great Depression followed" />
+                  <HistRow val={capeRatio.toFixed(1)+"x"} event="Today" note={capeRatio>35?"Extreme — near dot-com territory":"Overvalued — elevated risk"} active />
+                  <HistRow val="16x" event="Historical average" note="Long-run mean since 1871" />
                 </div>
               </MCard>
-              <ActionCard>{nom10y>4.5?`At ${nom10y.toFixed(2)}%, the 10Y is firmly in restrictive territory. This directly compresses equity P/E multiples and makes bonds a genuine alternative to stocks. Watch for moves above 4.75% as a further headwind.`:`At ${nom10y.toFixed(2)}%, the 10Y is elevated but not yet at the most restrictive levels seen in 2023. Monitor for a break above 4.5% which would increase pressure on equity valuations.`}</ActionCard>
+              <ActionCard>CAPE at {capeRatio.toFixed(1)}x is in the top 5% of all historical readings. This is not a timing signal — markets stayed expensive for years in the late 1990s. But it means the margin of safety is thin and the probability of below-average 10-year returns is elevated. Weight new equity purchases accordingly.</ActionCard>
             </>}
           />
         </ModalWrapper>
@@ -1153,6 +1210,7 @@ export default function Page() {
         .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
         .tile{background:#050a35;border-radius:10px;padding:12px;border:0.5px solid rgba(255,255,255,0.04);}
         .tile200{background:rgba(245,158,11,0.07)!important;border:1.5px solid rgba(245,158,11,0.4)!important;}
+        .tile200Red{background:rgba(239,68,68,0.07)!important;border:1.5px solid rgba(239,68,68,0.5)!important;}
         .tileTop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;}
         .lbl{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;}
         .ytd{font-size:11px;font-weight:600;color:#64748b;}
@@ -1167,6 +1225,10 @@ export default function Page() {
         .alertDot{width:7px;height:7px;border-radius:50%;background:#f59e0b;flex-shrink:0;box-shadow:0 0 5px #f59e0b;display:inline-block;}
         .alertTitle{font-size:12px;font-weight:700;color:#f59e0b;white-space:nowrap;}
         .alertBody{font-size:12px;color:#94a3b8;}
+        .alertStripCritical{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.45);border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+        .alertDotRed{width:7px;height:7px;border-radius:50%;background:#ef4444;flex-shrink:0;box-shadow:0 0 6px #ef4444;display:inline-block;animation:pulse 1.5s infinite;}
+        .alertTitleRed{font-size:12px;font-weight:700;color:#ff6b88;white-space:nowrap;}
+        .alertBodyRed{font-size:12px;color:#fca5a5;}
         .meterTrack{position:relative;height:4px;border-radius:9999px;background:#202a64;margin-top:10px;}
         .meterFill{position:absolute;left:0;top:0;height:4px;border-radius:9999px;}
         .meterMarker{position:absolute;top:50%;width:2px;height:16px;transform:translateY(-50%);background:#f8fafc;}
@@ -1201,7 +1263,7 @@ export default function Page() {
         .spinner{display:inline-block;width:11px;height:11px;border:2px solid rgba(255,255,255,0.15);border-top-color:#93c5fd;border-radius:50%;animation:spin .7s linear infinite;margin-right:5px;vertical-align:middle;}
         @keyframes spin{to{transform:rotate(360deg)}}
         @media(max-width:900px){.title{font-size:22px;}.valHero{font-size:28px;}}
-        @media(max-width:700px){.topBar,.panelHeader{flex-direction:column;align-items:flex-start;}.grid5,.grid4{grid-template-columns:repeat(2,minmax(0,1fr));}.grid3{grid-template-columns:1fr;}.alertStrip{flex-direction:column;align-items:flex-start;gap:4px;}}
+        @media(max-width:700px){.topBar,.panelHeader{flex-direction:column;align-items:flex-start;}.grid5,.grid4{grid-template-columns:repeat(2,minmax(0,1fr));}.grid3{grid-template-columns:1fr;}.alertStrip,.alertStripCritical{flex-direction:column;align-items:flex-start;gap:4px;}}
       `}} />
     </>
   );
