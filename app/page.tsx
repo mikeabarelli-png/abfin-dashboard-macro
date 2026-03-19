@@ -510,26 +510,38 @@ export default function Page() {
                   {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
                 </div>
                 <div className="status" style={{ color:erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80" }}>
-                  {erpBps==null?"Loading":erpBps<200?"Danger":erpBps<500?"Watch — Below 5.0%":"Healthy"}
+                  {erpBps==null?"Loading":erpBps<200?"Danger":erpBps<500?"Watch":"Healthy"}
                 </div>
-                <div style={{ position:"relative", height:4, borderRadius:9999, background:"#202a64", marginTop:10 }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:4, borderRadius:9999, width:`${Math.max(0,Math.min((erpBps??0)/8,100))}%`, background:erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80" }} />
-                  <div style={{ position:"absolute", top:-5, left:"62.5%", width:1.5, height:14, background:"rgba(255,255,255,0.35)", borderRadius:1 }} />
+                <div style={{ position:"relative", height:4, borderRadius:9999, background:"#202a64", marginTop:10, overflow:"hidden" }}>
+                  {/* Red segment: always 0% to 2% (25% of 8% scale) */}
+                  <div style={{ position:"absolute", left:0, top:0, height:4, width:"25%", background:"#ef4444", borderRadius:"9999px 0 0 9999px" }} />
+                  {/* Amber segment: 2% to current value */}
+                  {erpBps!=null && erpBps>200 && (
+                    <div style={{ position:"absolute", left:"25%", top:0, height:4, width:`${Math.max(0,Math.min(((erpBps-200)/800)*100,75))}%`, background:"#fbbf24" }} />
+                  )}
+                  {/* Tick at 2% danger */}
+                  <div style={{ position:"absolute", top:-5, left:"25%", width:1.5, height:14, background:"rgba(255,255,255,0.5)", borderRadius:1, zIndex:2 }} />
+                  {/* Tick at 5% healthy */}
+                  <div style={{ position:"absolute", top:-5, left:"62.5%", width:1.5, height:14, background:"rgba(255,255,255,0.3)", borderRadius:1, zIndex:2 }} />
                 </div>
-                <div style={{ marginTop:5, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>5% warning</span><span>8%+</span></div>
-                <div style={{ fontSize:10, color:"#334155", marginTop:4 }}>Earnings yield minus real 10Y</div>
+                <div style={{ marginTop:5, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>2% danger</span><span>5% healthy</span><span>8%+</span></div>
+                <div style={{ fontSize:10, marginTop:5, color: erpBps!=null && erpBps<200 ? "#ff6b88" : erpBps!=null && erpBps < 230 ? "#fbbf24" : "#475569" }}>
+                  {erpBps!=null && erpBps<200 ? "▼ In danger zone" : erpBps!=null && erpBps<230 ? `▼ ${((erpBps-200)/100).toFixed(2)}% from danger zone` : erpBps!=null && erpBps<500 ? `▼ ${((erpBps-200)/100).toFixed(2)}% above danger · ${((500-erpBps)/100).toFixed(2)}% to healthy` : "Above healthy threshold"}
+                </div>
               </div>
               {/* 2. VIX */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("vix")}>
                 <div className="lbl" style={{ marginBottom:6 }}>VIX</div>
                 <div className="valHero">{vixValue != null ? fmt1(vixValue) : "—"}</div>
-                <div className="status" style={{ color:vixStatus.color }}>{vixStatus.label}</div>
+                <div className="status" style={{ color:vixStatus.color }}>{vixValue==null?"Loading":vixValue>=30?"Danger":vixValue>=20?"Watch":"Normal"}</div>
                 <div style={{ position:"relative", height:4, borderRadius:9999, background:"#202a64", marginTop:12 }}>
                   <div style={{ position:"absolute", left:0, top:0, height:4, width:`${Math.min(vixValue??0,100)}%`, borderRadius:9999, background:vixStatus.color }} />
                   <div style={{ position:"absolute", top:-5, left:"30%", width:1.5, height:14, background:"rgba(255,255,255,0.35)", borderRadius:1 }} />
                 </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>100</span></div>
-                <div style={{ fontSize:10, color:vixValue!=null&&vixValue>=30?"#ff6b88":"#64748b", marginTop:4 }}>{vixStatus.sub||"Click for detail"}</div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>30 trigger</span><span>100</span></div>
+                <div style={{ fontSize:10, marginTop:5, color: vixValue!=null && vixValue>=30 ? "#ff6b88" : vixValue!=null && vixValue>=25 ? "#fbbf24" : "#475569" }}>
+                  {vixValue!=null && vixValue>=30 ? "▲ Trigger active — pause buying" : vixValue!=null && vixValue>=25 ? `▲ ${(30-vixValue).toFixed(1)} pts to pause trigger` : vixValue!=null ? `▲ ${(30-vixValue).toFixed(1)} pts to trigger` : ""}
+                </div>
               </div>
               {/* 3. 10Y Nominal */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("nom10y")}>
@@ -582,10 +594,12 @@ export default function Page() {
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("hy")}>
                 <div className="lbl" style={{ marginBottom:6 }}>HY Spread</div>
                 <div className="valHero">{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
-                <div className="status" style={{ color:hySpread>=4?"#fbbf24":"#94a3b8" }}>{hySpread>=4?"Watch — Above 400bps":"Firm"}</div>
-                <div className="meterTrack"><div className="meterFill" style={{ width:`${Math.max(0,Math.min(((hySpread-2)/4)*100,100))}%`, background:hySpread>=4?"#fbbf24":"#94a3b8" }} /><div className="meterMarker" style={{ left:`${Math.max(0,Math.min(((hySpread-2)/4)*100,100))}%` }} /></div>
-                <div className="meterScale"><span>200</span><span>400⚡</span><span>600</span></div>
-                <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail · trigger: 400bps</div>
+                <div className="status" style={{ color:hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#94a3b8" }}>{hySpread>=4?"Danger":hySpread>=3.5?"Watch":"Firm"}</div>
+                <div className="meterTrack"><div className="meterFill" style={{ width:`${Math.max(0,Math.min(((hySpread-2)/4)*100,100))}%`, background:hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#94a3b8" }} /><div className="meterMarker" style={{ left:`${Math.max(0,Math.min(((hySpread-2)/4)*100,100))}%` }} /></div>
+                <div className="meterScale"><span>200</span><span>400 trigger</span><span>600</span></div>
+                <div style={{ fontSize:10, marginTop:5, color: hySpread>=4 ? "#ff6b88" : hySpread>=3.5 ? "#fbbf24" : "#475569" }}>
+                  {hySpread>=4 ? "▲ Trigger active — stress confirmed" : `▲ ${Math.round((4-hySpread)*100)}bps to trigger`}
+                </div>
               </div>
               {/* 7. Real 10Y */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("real10y")}>
