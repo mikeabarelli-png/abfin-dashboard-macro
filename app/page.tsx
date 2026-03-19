@@ -516,8 +516,8 @@ export default function Page() {
                   <div style={{ position:"absolute", left:0, top:0, height:4, borderRadius:9999, width:`${Math.max(0,Math.min((erpBps??0)/8,100))}%`, background:erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80" }} />
                   <div style={{ position:"absolute", top:-5, left:"62.5%", width:1.5, height:14, background:"rgba(255,255,255,0.35)", borderRadius:1 }} />
                 </div>
-                <div style={{ marginTop:5, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>5%⚡</span><span>8%+</span></div>
-                <div style={{ fontSize:10, color:"#334155", marginTop:4 }}>Earnings yield minus real 10Y · Click for detail</div>
+                <div style={{ marginTop:5, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>5% warning</span><span>8%+</span></div>
+                <div style={{ fontSize:10, color:"#334155", marginTop:4 }}>Earnings yield minus real 10Y</div>
               </div>
               {/* 2. VIX */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("vix")}>
@@ -547,7 +547,7 @@ export default function Page() {
               </div>
               {/* 4. 5Y Breakeven */}
               <div className="tile">
-                <div className="lbl" style={{ marginBottom:6 }}>5Y Breakeven Inflation</div>
+                <div className="lbl" style={{ marginBottom:6 }}>5Y Breakeven Infl.</div>
                 <div className="valHero" style={{ color:"#fff" }}>{breakeven5y.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
                 <div className="status" style={{ color:breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }}>
                   {breakeven5y>2.5?"Above Target — Watch":breakeven5y>2?"Near Target":"Below Target"}
@@ -951,56 +951,6 @@ export default function Page() {
         </ModalWrapper>
       )}
 
-      {/* ERP MODAL */}
-      {modal==="erp" && (
-        <ModalWrapper onClose={()=>setModal(null)} title="Equity Risk Premium" sub="Earnings Yield minus Real 10Y Rate · The reward for owning stocks over bonds">
-          <ModalGrid
-            left={<>
-              <SH>Current reading</SH>
-              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>
-                {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:22 }}>%</span>
-              </div>
-              <Tag label={erpBps==null?"Loading":erpBps<200?"Danger — Near Zero":erpBps<500?"Watch — Below 5%":"Healthy"} color={erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80"} bg={erpBps==null?"rgba(148,163,184,0.12)":erpBps<200?"rgba(255,79,114,0.15)":erpBps<500?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
-              <BC>{erpBps!=null&&erpBps<500?"The premium for owning equities over risk-free bonds is historically thin. In a high-rate environment, this is a major warning of equity overvaluation.":"Equity premium above 5% — stocks offer meaningful compensation over bonds."}</BC>
-              <BandTrack
-                segs={[{w:"25%",color:"#ef4444"},{w:"37.5%",color:"#f59e0b"},{w:"37.5%",color:"#047857"}]}
-                needle={Math.max(0,Math.min((erpBps??0)/8,99))}
-                scaleNums={["0%","2%","5%","8%+"]}
-                scaleNames={["Danger","Watch","Healthy",""]}
-              />
-              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
-                <SH>How it&apos;s calculated</SH>
-                <div style={{ display:"grid", gap:6, marginTop:8, fontSize:13, color:"#cbd5e1", lineHeight:1.7 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Trailing P/E</span><span style={{ color:"#fff", fontWeight:600 }}>{trailingPE!=null?trailingPE.toFixed(1)+"x":"~24x"}</span></div>
-                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Earnings Yield (1÷PE)</span><span style={{ color:"#fff", fontWeight:600 }}>{trailingPE!=null?((1/trailingPE)*100).toFixed(2)+"%":"~4.17%"}</span></div>
-                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Real 10Y Rate</span><span style={{ color:"#fff", fontWeight:600 }}>{real10y.toFixed(2)}%</span></div>
-                  <div style={{ height:1, background:"rgba(255,255,255,0.08)", margin:"4px 0" }} />
-                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600 }}>ERP = Earnings Yield − Real Rate</span><span style={{ color:erpBps!=null&&erpBps<500?"#fbbf24":"#4ade80", fontWeight:700 }}>{erpBps!=null?(erpBps/100).toFixed(2)+"%":"—"}</span></div>
-                </div>
-              </div>
-            </>}
-            right={<>
-              <MCard>
-                <SH>Why it matters</SH>
-                <BC>ERP is the "smart money math check." When it collapses below 2%, a rational institutional investor has almost no incentive to own equities over Treasuries. Why accept a 30-40% drawdown risk for less than 2% extra yield? Short-term bonds yield ~5% with zero equity risk.</BC>
-              </MCard>
-              <MCard>
-                <SH>Historical context</SH>
-                <div style={{ display:"grid", gap:5, marginTop:8 }}>
-                  <HistRow val="7.2%" event="2009 bottom" note="Stocks screaming cheap vs bonds" />
-                  <HistRow val="3.5%" event="2012-2019 avg" note="Healthy bull market premium" />
-                  <HistRow val="-2.1%" event="2000 Dot-Com" note="Bonds yielded more — 50% crash followed" />
-                  <HistRow val="~0%" event="2021 peak" note="ZIRP distorted — ERP near zero" />
-                  <HistRow val={erpBps!=null?(erpBps/100).toFixed(2)+"%":"—"} event="Today" note={erpBps!=null&&erpBps<500?"Near historical danger zone":"Reasonable premium"} active />
-                  <HistRow val="5%+" event="Healthy target" note="Adequate compensation for equity risk" />
-                </div>
-              </MCard>
-              <ActionCard>{erpBps!=null&&erpBps<200?"ERP is dangerously low. Bonds are nearly as attractive as stocks on a risk-adjusted basis. This is a structural argument for reducing equity exposure.":erpBps!=null&&erpBps<500?`ERP at ${(erpBps/100).toFixed(2)}% is below the 5% watch level. The high-rate environment is compressing the reward for equity risk. Watch for further compression as rates or CAPE changes.`:"ERP above 5% — stocks offer adequate compensation over bonds. No valuation concern from this metric."}</ActionCard>
-            </>}
-          />
-        </ModalWrapper>
-      )}
-
       {/* 10Y NOMINAL MODAL */}
       {modal==="nom10y" && (
         <ModalWrapper onClose={()=>setModal(null)} title="10Y Treasury Yield — Nominal" sub="US 10-Year Treasury Yield · The gravity of all asset valuations">
@@ -1069,14 +1019,12 @@ export default function Page() {
                   <div style={{ borderTop:"0.5px solid rgba(255,255,255,0.08)", marginTop:6, paddingTop:6 }}>ERP = {trailingPE!=null?(100/trailingPE).toFixed(2):"4.13"}% − {real10y.toFixed(2)}% = <span style={{ color:erpBps!=null&&erpBps<500?"#fbbf24":"#4ade80", fontWeight:700 }}>{erpBps!=null?(erpBps/100).toFixed(2):"—"}%</span></div>
                 </div>
               </div>
-              <div style={{ marginTop:14, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
-                <SH>Warning threshold</SH>
-                <div style={{ height:8, borderRadius:9999, background:"#1e2a5e", overflow:"hidden", margin:"8px 0" }}>
-                  <div style={{ height:8, borderRadius:9999, background:erpBps!=null&&erpBps<200?"#ff6b88":erpBps!=null&&erpBps<500?"#fbbf24":"#4ade80", width:`${Math.max(0,Math.min((erpBps??0)/8,100))}%` }} />
-                  <div style={{ position:"relative" }}><div style={{ position:"absolute", top:-12, left:"62.5%", width:1.5, height:14, background:"rgba(255,255,255,0.4)" }} /></div>
-                </div>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>5%⚡ warning</span><span>8%+</span></div>
-              </div>
+              <BandTrack
+                segs={[{w:"25%",color:"#ef4444"},{w:"37.5%",color:"#f59e0b"},{w:"37.5%",color:"#047857"}]}
+                needle={Math.max(0,Math.min((erpBps??0)/8,99))}
+                scaleNums={["0%","2%","5%","8%+"]}
+                scaleNames={["Danger","Watch","Healthy",""]}
+              />
             </>}
             right={<>
               <MCard>
