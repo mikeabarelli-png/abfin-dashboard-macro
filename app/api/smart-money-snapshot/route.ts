@@ -105,15 +105,17 @@ export async function GET() {
   const diagnostics: Record<string, string> = {};
 
   // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
-  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, peData] = await Promise.all([
+  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
     fetchChart("DX=F", 5),       // Dollar Index futures
-    fetchChart("^CPCE", 5),       // CBOE Equity Put/Call Ratio
-    fetchFred("DFII10"),           // Real 10Y TIPS yield
-    fetchFred("DGS10"),            // Nominal 10Y Treasury yield
-    fetchFred("BAMLH0A0HYM2"),    // ICE BofA HY OAS
-    fetchFred("T10Y2Y"),           // 10Y-2Y spread
+    fetchChart("^CPCE", 5),      // CBOE Equity Put/Call Ratio
+    fetchFred("DFII10"),          // Real 10Y TIPS yield
+    fetchFred("DGS10"),           // Nominal 10Y Treasury yield
+    fetchFred("BAMLH0A0HYM2"),   // ICE BofA HY OAS
+    fetchFred("T10Y2Y"),          // 10Y-2Y spread
+    fetchFred("FEDFUNDS"),        // Fed Funds Rate
+    fetchFred("T5YIE"),           // 5Y Breakeven Inflation
     fetchPE(),
   ]);
 
@@ -125,6 +127,8 @@ export async function GET() {
   if (fredNom10y.error) diagnostics["nom10y"] = fredNom10y.error;
   if (fredHY.error) diagnostics["hy"] = fredHY.error;
   if (fredYC.error) diagnostics["yc"] = fredYC.error;
+  if (fredFedFunds.error) diagnostics["fedfunds"] = fredFedFunds.error;
+  if (fredBreakeven.error) diagnostics["breakeven"] = fredBreakeven.error;
   if (peData.error) diagnostics["pe"] = peData.error;
 
   const spxCloses = spx.closes;
@@ -151,8 +155,10 @@ export async function GET() {
 
   const real10y: number = fredReal10y.value ?? 1.92;
   const nom10y: number = fredNom10y.value ?? 4.30;
-  const hySpread: number = fredHY.value ?? 3.28; // FRED returns value already in % (e.g. 3.28)
+  const hySpread: number = fredHY.value ?? 3.28;
   const yieldCurve: number = fredYC.value ?? 0.55;
+  const fedFunds: number = fredFedFunds.value ?? 4.33;
+  const breakeven5y: number = fredBreakeven.value ?? 2.45;
 
   // DXY — Dollar Index current price
   const dxyPrice: number | null = dxy.meta.regularMarketPrice ?? dxy.closes[dxy.closes.length - 1] ?? null;
@@ -162,7 +168,8 @@ export async function GET() {
   // Put/Call Ratio
   const putCallRatio: number | null = putCall.meta.regularMarketPrice ?? putCall.closes[putCall.closes.length - 1] ?? null;
 
-  const trailingPE: number | null = peData.value ?? spx.meta.trailingPE ?? null;
+  const MANUAL_PE_FALLBACK = 24.2; // SPX trailing P/E — update manually each Saturday
+  const trailingPE: number | null = peData.value ?? spx.meta.trailingPE ?? MANUAL_PE_FALLBACK;
   let erp: number | null = null;
   if (trailingPE != null && trailingPE > 0) {
     const earningsYield = (1 / trailingPE) * 100;
@@ -215,6 +222,8 @@ export async function GET() {
       yield_curve_10y_2y: yieldCurve,
       real_10y: real10y,
       nom_10y: nom10y,
+      fed_funds: fedFunds,
+      breakeven_5y: breakeven5y,
       dxy: dxyPrice,
       dxy_change_pct: dxyChangePct,
       put_call_ratio: putCallRatio,
