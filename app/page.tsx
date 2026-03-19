@@ -521,21 +521,21 @@ export default function Page() {
                   <div style={{ position:"absolute", top:-4, left:"62.5%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
                 </div>
                 <div style={{ fontSize:11, marginTop:8, fontWeight:600, color: erpBps!=null && erpBps<200 ? "#ff6b88" : erpBps!=null && erpBps<230 ? "#fbbf24" : "#64748b" }}>
-                  {erpBps!=null && erpBps<200 ? "▼ In danger zone" : erpBps!=null && erpBps<500 ? `▼ ${((erpBps-200)/100).toFixed(2)}% from red / danger` : "Above healthy threshold"}
+                  {erpBps!=null && erpBps<200 ? "▼ In danger zone" : erpBps!=null && erpBps<500 ? `▼ ${((erpBps-200)/100).toFixed(2)}% from danger` : "Above healthy threshold"}
                 </div>
               </div>
               {/* 2. VIX */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("vix")}>
                 <div className="lbl" style={{ marginBottom:6 }}>VIX</div>
                 <div className="valHero">{vixValue != null ? fmt1(vixValue) : "—"}</div>
-                <div className="status" style={{ color:vixStatus.color }}>{vixValue==null?"Loading":vixValue>=30?"Danger":vixValue>=20?"Watch":"Normal"}</div>
-                <div style={{ position:"relative", height:4, borderRadius:9999, background:"#202a64", marginTop:12 }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:4, width:`${Math.min(vixValue??0,100)}%`, borderRadius:9999, background:vixStatus.color }} />
-                  <div style={{ position:"absolute", top:-5, left:"30%", width:1.5, height:14, background:"rgba(255,255,255,0.35)", borderRadius:1 }} />
+                <div className="status" style={{ color:vixStatus.color }}>{vixValue==null?"Loading":vixValue>=30?"Stress":vixValue>=20?"Watch":"Normal"}</div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min((vixValue??0)/50*100,100)}%`, borderRadius:9999, background:vixValue!=null&&vixValue>=30?"#ff6b88":vixValue!=null&&vixValue>=20?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:"60%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>30 trigger</span><span>100</span></div>
-                <div style={{ fontSize:10, marginTop:5, color: vixValue!=null && vixValue>=30 ? "#ff6b88" : vixValue!=null && vixValue>=25 ? "#fbbf24" : "#475569" }}>
-                  {vixValue!=null && vixValue>=30 ? "▲ Trigger active — pause buying" : vixValue!=null && vixValue>=25 ? `▲ ${(30-vixValue).toFixed(1)} pts to pause trigger` : vixValue!=null ? `▲ ${(30-vixValue).toFixed(1)} pts to trigger` : ""}
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>30</span><span>50</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color: vixValue!=null&&vixValue>=30?"#ff6b88":vixValue!=null&&vixValue>=25?"#fbbf24":"#64748b" }}>
+                  {vixValue!=null&&vixValue>=30 ? "▲ Stress — pause buying" : vixValue!=null ? `▲ ${(30-vixValue).toFixed(1)} pts from Stress` : ""}
                 </div>
               </div>
               {/* 3. 10Y Nominal */}
