@@ -101,11 +101,33 @@ async function fetchPE(): Promise<{ value: number | null; error?: string }> {
   }
 }
 
+async function fetchCape(): Promise<{ value: number | null; error?: string }> {
+  const apiKey = process.env.NASDAQ_API_KEY;
+  if (!apiKey) return { value: null, error: "NASDAQ_API_KEY not set" };
+  const url = `https://data.nasdaq.com/api/v3/datasets/MULTPL/SP500_SHILLER_PE_RATIO_MONTH.json?rows=1&api_key=${apiKey}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return { value: null, error: `Nasdaq CAPE: HTTP ${res.status}` };
+    const data = await res.json();
+    // Response shape: { dataset: { data: [["2026-03-01", 40.2], ...] } }
+    const latest = data?.dataset?.data?.[0]?.[1];
+    const val = latest != null ? parseFloat(latest) : null;
+    console.log(`CAPE: ${val}`);
+    return { value: val };
+  } catch (err: any) {
+    return { value: null, error: `CAPE fetch: ${err?.message}` };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function GET() {
   const diagnostics: Record<string, string> = {};
 
   // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
-  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData] = await Promise.all([
+  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
     fetchChart("DX=F", 5),       // Dollar Index futures
@@ -117,6 +139,7 @@ export async function GET() {
     fetchFred("FEDFUNDS"),        // Fed Funds Rate
     fetchFred("T5YIE"),           // 5Y Breakeven Inflation
     fetchPE(),
+    fetchCape(),
   ]);
 
   if (spx.error) diagnostics["spx"] = spx.error;
@@ -130,6 +153,7 @@ export async function GET() {
   if (fredFedFunds.error) diagnostics["fedfunds"] = fredFedFunds.error;
   if (fredBreakeven.error) diagnostics["breakeven"] = fredBreakeven.error;
   if (peData.error) diagnostics["pe"] = peData.error;
+  if (capeData.error) diagnostics["cape"] = capeData.error;
 
   const spxCloses = spx.closes;
   const spxPrice: number | null = spx.meta.regularMarketPrice ?? spxCloses[spxCloses.length - 1] ?? null;
@@ -176,6 +200,11 @@ export async function GET() {
     erp = Math.round((earningsYield - real10y) * 100);
     console.log(`ERP: ${erp} bps`);
   }
+
+  // CAPE (Shiller P/E) — Nasdaq Data Link, updated monthly
+  // Falls back to manual constant if API key missing or fetch fails
+  const MANUAL_CAPE_FALLBACK = 40.2; // Last manually verified: Mar 19 2026
+  const capeRatio: number = capeData.value ?? MANUAL_CAPE_FALLBACK;
 
   let spxYtdPct: number | null = null;
   try {
@@ -229,6 +258,7 @@ export async function GET() {
       put_call_ratio: putCallRatio,
       erp_bps: erp,
       trailing_pe: trailingPE,
+      cape_ratio: capeRatio,
     },
   }, { status: 200 });
 }
