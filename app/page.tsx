@@ -644,49 +644,19 @@ RESPONSE RULES:
             )}
           </section>
 
-          {/* ② SPX TECHNICAL CHART */}
-          <section className="panel">
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <div>
-                <div className="panelTitle">S&P 500 — Technical Chart</div>
-                <div className="panelSub">Price · Moving Averages · Bollinger Bands · RSI · MACD</div>
-              </div>
-              <div style={{ display:"flex", gap:6 }}>
-                {rangeBtn("1M",21)}{rangeBtn("3M",63)}{rangeBtn("6M",126)}{rangeBtn("1Y",252)}
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:16, marginBottom:10, flexWrap:"wrap" }}>
-              {[["SPX","#60a5fa"],["20-DMA","#fbbf24"],["50-DMA","#a78bfa"],["100-DMA","#f97316"],["200-DMA","#ef4444"]].map(([l,c])=>(
-                <span key={l} style={{ fontSize:11, color:"#94a3b8", display:"flex", alignItems:"center", gap:5 }}>
-                  <span style={{ width:18, height:2, background:c, display:"inline-block" }} />{l}
-                </span>
-              ))}
-              <span style={{ fontSize:11, color:"#94a3b8", display:"flex", alignItems:"center", gap:5 }}>
-                <span style={{ width:18, height:4, background:"rgba(148,163,184,0.2)", display:"inline-block", borderRadius:1 }} />Bollinger
-              </span>
-            </div>
-            <div style={{ position:"relative", width:"100%", height:320 }}><canvas id="spxPriceChart" /></div>
-            <div style={{ marginTop:4 }}>
-              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", margin:"8px 0 3px" }}>RSI (14)</div>
-              <div style={{ position:"relative", width:"100%", height:80 }}><canvas id="spxRsiChart" /></div>
-            </div>
-            <div style={{ marginTop:4 }}>
-              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", margin:"8px 0 3px" }}>MACD (12, 26, 9)</div>
-              <div style={{ position:"relative", width:"100%", height:90 }}><canvas id="spxMacdChart" /></div>
-            </div>
-          </section>
-
-          {/* ③ MARKET STRESS */}
+          {/* ② STRESS CONFIRMATION */}
           <section className="panel">
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-              <div className="panelTitle">Market Stress</div>
+              <div>
+                <div className="panelTitle">Stress Confirmation</div>
+                <div className="panelSub">5 signals that confirm whether a 200-DMA break is a crash or a head-fake</div>
+              </div>
               {is200Broken && (
                 <div style={{ background:"rgba(239,68,68,0.12)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:8, padding:"5px 12px", fontSize:11, fontWeight:700, color:"#ff6b88" }}>
-                  ⚠ 200-DMA Breached — Check Confirmation Row
+                  ⚠ 200-DMA Breached — Confirmation Active
                 </div>
               )}
             </div>
-
             {/* ── ROW 1: Market Stress Confirmation ── */}
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>
               Market Stress Confirmation
@@ -869,6 +839,43 @@ RESPONSE RULES:
               </div>
             </div>
 
+          </section>
+
+          {/* ③ SPX TECHNICAL CHART */}
+          <section className="panel">
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div>
+                <div className="panelTitle">S&P 500 — Technical Chart</div>
+                <div className="panelSub">Price · Moving Averages · Bollinger Bands · RSI · MACD</div>
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                {rangeBtn("1M",21)}{rangeBtn("3M",63)}{rangeBtn("6M",126)}{rangeBtn("1Y",252)}
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:16, marginBottom:10, flexWrap:"wrap" }}>
+              {[["SPX","#60a5fa"],["20-DMA","#fbbf24"],["50-DMA","#a78bfa"],["100-DMA","#f97316"],["200-DMA","#ef4444"]].map(([l,c])=>(
+                <span key={l} style={{ fontSize:11, color:"#94a3b8", display:"flex", alignItems:"center", gap:5 }}>
+                  <span style={{ width:18, height:2, background:c, display:"inline-block" }} />{l}
+                </span>
+              ))}
+              <span style={{ fontSize:11, color:"#94a3b8", display:"flex", alignItems:"center", gap:5 }}>
+                <span style={{ width:18, height:4, background:"rgba(148,163,184,0.2)", display:"inline-block", borderRadius:1 }} />Bollinger
+              </span>
+            </div>
+            <div style={{ position:"relative", width:"100%", height:320 }}><canvas id="spxPriceChart" /></div>
+            <div style={{ marginTop:4 }}>
+              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", margin:"8px 0 3px" }}>RSI (14)</div>
+              <div style={{ position:"relative", width:"100%", height:80 }}><canvas id="spxRsiChart" /></div>
+            </div>
+            <div style={{ marginTop:4 }}>
+              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", margin:"8px 0 3px" }}>MACD (12, 26, 9)</div>
+              <div style={{ position:"relative", width:"100%", height:90 }}><canvas id="spxMacdChart" /></div>
+            </div>
+          </section>
+
+          {/* ④ MARKET STRESS — CONTEXT */}
+          <section className="panel">
+            <div className="panelTitle" style={{ marginBottom:10 }}>Market Stress — Context</div>
             {/* ── ROW 2: Policy & Rates ── */}
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6, marginTop:10 }}>Policy &amp; Rates</div>
             <div className="grid5" style={{ marginBottom:8 }}>
@@ -994,7 +1001,7 @@ RESPONSE RULES:
             </div>
           </section>
 
-          {/* ④ ECONOMY */}
+          {/* ⑤ ECONOMY */}
           <section className="panel">
             <div className="panelHeader"><div><div className="panelTitle">Economy</div><div className="panelSub">Macro Conditions · 3-Month Trend</div></div><div className="pstamp">FRED &amp; ISM · weekly/monthly</div></div>
             <div className="grid5" style={{ marginBottom:8 }}>
@@ -1043,7 +1050,7 @@ RESPONSE RULES:
             </div>
           </section>
 
-          {/* ⑤ BREADTH */}
+          {/* ⑥ BREADTH */}
           <section className="panel">
             <div className="panelHeader"><div><div className="panelTitle">Market Breadth</div><div className="panelSub">% of S&P 500 stocks above key moving averages</div></div><div className="pstamp">Updated daily</div></div>
             <div className="grid5" style={{ marginBottom:8 }}>
@@ -1103,7 +1110,7 @@ RESPONSE RULES:
             </div>
           </section>
 
-          {/* ⑥ VTI */}
+          {/* ⑦ VTI */}
           <section className="panel">
             <div className="panelHeader"><div><div className="panelTitle">VTI — Total Market Trend</div><div className="panelSub">Vanguard Total Market ETF · Key Moving Averages</div></div><div className="pstamp">LIVE · Yahoo Finance</div></div>
             <div className="grid5">
@@ -1130,7 +1137,7 @@ RESPONSE RULES:
             </div>
           </section>
 
-          {/* ⑦ VALUATION */}
+          {/* ⑧ VALUATION */}
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Valuation, Recession &amp; Sentiment Models</div><div className="panelSub">Sigma scores vs historical norm · Standard deviation from mean</div></div>
@@ -1260,7 +1267,7 @@ RESPONSE RULES:
             </div>
           </section>
 
-          {/* ⑧ IVY */}
+          {/* ⑨ IVY */}
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Ivy Portfolio</div><div className="panelSub">10-Month SMA Signals · Mebane Faber Model · End-of-month rule</div></div>
