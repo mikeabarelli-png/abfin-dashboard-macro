@@ -646,59 +646,9 @@ RESPONSE RULES:
 
           {/* ② STRESS CONFIRMATION */}
           <section className="panel">
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-              <div>
-                <div className="panelTitle">Stress Confirmation</div>
-                <div className="panelSub">5 signals that confirm whether a 200-DMA break is a crash or a head-fake</div>
-              </div>
-              {is200Broken && (
-                <div style={{ background:"rgba(239,68,68,0.12)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:8, padding:"5px 12px", fontSize:11, fontWeight:700, color:"#ff6b88" }}>
-                  ⚠ 200-DMA Breached — Confirmation Active
-                </div>
-              )}
+            <div className="panelHeader">
+              <div><div className="panelTitle">Stress Confirmation</div><div className="panelSub">5 signals — is the 200-DMA break real or a head-fake?</div></div>
             </div>
-            {/* ── ROW 1: Market Stress Confirmation ── */}
-            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>
-              Market Stress Confirmation
-              <span style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0, marginLeft:8 }}>
-                — 5 signals that confirm whether a 200-DMA break is a crash or a head-fake
-              </span>
-            </div>
-
-            {/* Confluence Score Banner — only shows when 200-DMA is broken */}
-            {is200Broken && (() => {
-              const signals = [
-                hySpread < 4,
-                vixValue != null && vixValue < 30,
-                erpBps != null && erpBps >= 300,
-                dxy != null && dxy < 104,
-                adLine?.signal === "bullish_divergence" || adLine?.signal === "neutral",
-              ];
-              const greenCount = signals.filter(Boolean).length;
-              const verdict = greenCount >= 4
-                ? { label:"Head-Fake — Credit Not Confirming", color:"#4ade80", bg:"rgba(74,222,128,0.08)", border:"rgba(74,222,128,0.3)" }
-                : greenCount >= 3
-                ? { label:"Mixed — Monitor Closely", color:"#fbbf24", bg:"rgba(245,158,11,0.08)", border:"rgba(245,158,11,0.3)" }
-                : { label:"Confirmed Stress — Defense Mode", color:"#ff6b88", bg:"rgba(239,68,68,0.08)", border:"rgba(239,68,68,0.35)" };
-              const labels = ["HY","VIX","ERP","DXY","P/C"];
-              return (
-                <div style={{ background:verdict.bg, border:`1px solid ${verdict.border}`, borderRadius:10, padding:"10px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:14 }}>
-                  <div style={{ flexShrink:0 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>Confluence</div>
-                    <div style={{ fontSize:28, fontWeight:700, color:verdict.color, lineHeight:1 }}>{greenCount}<span style={{ fontSize:14 }}>/5</span></div>
-                  </div>
-                  <div style={{ width:1, height:36, background:"rgba(255,255,255,0.08)" }} />
-                  <div>
-                    <div style={{ fontSize:13, fontWeight:700, color:verdict.color }}>{verdict.label}</div>
-                    <div style={{ fontSize:11, color:"#94a3b8", marginTop:2 }}>
-                      {signals.map((g, i) => (
-                        <span key={i} style={{ marginRight:8, color: g ? "#4ade80" : "#ff6b88" }}>{g ? "✓" : "✗"} {labels[i]}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
 
             <div className="grid5" style={{ marginBottom:8 }}>
               {/* 1. HY Spread */}
@@ -838,6 +788,37 @@ RESPONSE RULES:
                 <div style={{ fontSize:9, color:"#334155", marginTop:4 }}>Updated {adLine?.updatedDate ?? "—"} · Manual</div>
               </div>
             </div>
+
+            {/* ── Confluence banner — below tiles, mirrors Market Structure alert strip ── */}
+            {(() => {
+              const signals = [
+                hySpread < 4,
+                vixValue != null && vixValue < 30,
+                erpBps != null && erpBps >= 300,
+                dxy != null && dxy < 104,
+                adLine?.signal === "bullish_divergence" || adLine?.signal === "neutral",
+              ];
+              const greenCount = signals.filter(Boolean).length;
+              const labels = ["HY","VIX","ERP","DXY","A/D"];
+              const verdict = is200Broken
+                ? (greenCount >= 4
+                  ? { label:"Head-Fake — Credit Not Confirming Break", dot:"#4ade80", titleColor:"#4ade80", borderColor:"rgba(74,222,128,0.35)" }
+                  : greenCount >= 3
+                  ? { label:"Mixed — Monitor Closely", dot:"#fbbf24", titleColor:"#fbbf24", borderColor:"rgba(245,158,11,0.35)" }
+                  : { label:"Confirmed Stress — Defense Mode", dot:"#ff6b88", titleColor:"#ff6b88", borderColor:"rgba(239,68,68,0.5)" })
+                : { label:"200-DMA intact — signals for context only", dot:"#475569", titleColor:"#64748b", borderColor:"rgba(71,85,105,0.3)" };
+              return (
+                <div style={{ background:"#0f172a", border:`1px solid ${verdict.borderColor}`, borderRadius:10, padding:"10px 14px", marginTop:0, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" as const }}>
+                  <span style={{ width:8, height:8, borderRadius:"50%", background:verdict.dot, flexShrink:0, display:"inline-block" }} />
+                  <span style={{ fontSize:12, fontWeight:700, color:verdict.titleColor }}>{greenCount}/5 signals healthy · {verdict.label}</span>
+                  <span style={{ fontSize:11, color:"#475569" }}>
+                    {signals.map((g, i) => (
+                      <span key={i} style={{ marginRight:8, color: g ? "#4ade80" : "#ff6b88" }}>{g ? "✓" : "✗"} {labels[i]}</span>
+                    ))}
+                  </span>
+                </div>
+              );
+            })()}
 
           </section>
 
@@ -1752,7 +1733,7 @@ RESPONSE RULES:
         .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
         .tile{background:#050a35;border-radius:10px;padding:12px;border:0.5px solid rgba(255,255,255,0.04);}
         .tile200{background:rgba(245,158,11,0.07)!important;border:1.5px solid rgba(245,158,11,0.4)!important;}
-        .tile200Red{background:rgba(239,68,68,0.07)!important;border:1.5px solid rgba(239,68,68,0.5)!important;}
+        .tile200Red{background:#1a0a0a!important;border:1.5px solid rgba(239,68,68,0.6)!important;}
         .tileTop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;}
         .lbl{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;}
         .ytd{font-size:11px;font-weight:600;color:#64748b;}
@@ -1763,11 +1744,11 @@ RESPONSE RULES:
         .status{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin-top:6px;}
         .sub{font-size:11px;color:#64748b;margin-top:3px;}
         .subSpx{font-size:11px;font-weight:600;color:#f8d7df;margin-top:3px;}
-        .alertStrip{background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+        .alertStrip{background:#0f172a;border:1px solid rgba(245,158,11,0.35);border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
         .alertDot{width:7px;height:7px;border-radius:50%;background:#f59e0b;flex-shrink:0;box-shadow:0 0 5px #f59e0b;display:inline-block;}
         .alertTitle{font-size:12px;font-weight:700;color:#f59e0b;white-space:nowrap;}
         .alertBody{font-size:12px;color:#94a3b8;}
-        .alertStripCritical{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.45);border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+        .alertStripCritical{background:#0f172a;border:1px solid rgba(239,68,68,0.5);border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
         .alertDotRed{width:7px;height:7px;border-radius:50%;background:#ef4444;flex-shrink:0;box-shadow:0 0 6px #ef4444;display:inline-block;animation:pulse 1.5s infinite;}
         .alertTitleRed{font-size:12px;font-weight:700;color:#ff6b88;white-space:nowrap;}
         .alertBodyRed{font-size:12px;color:#fca5a5;}
