@@ -153,11 +153,95 @@ async function fetchFearGreed(): Promise<{ value: number | null; rating: string 
   }
 }
 
+// ── Ivy Portfolio — 10-month SMA computation ─────────────────────────────────
+// Fetches ~220 calendar days of daily closes, identifies the last trading day
+// of each of the past 10 calendar months, averages those 10 month-end closes.
+// The Ivy rule: if month-end close > 10-mo SMA → Invest; otherwise → Cash.
+
+function computeMonthEndSma(
+  closes: number[],
+  timestamps: number[],  // Unix seconds, one per close
+  months: number = 10
+): { sma: number | null; monthEndCloses: number[] } {
+  if (closes.length < months || timestamps.length !== closes.length) {
+    return { sma: null, monthEndCloses: [] };
+  }
+
+  // Build map: "YYYY-MM" → last close in that month
+  const monthMap: Record<string, number> = {};
+  for (let i = 0; i < closes.length; i++) {
+    const d = new Date(timestamps[i] * 1000);
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    monthMap[key] = closes[i]; // later entries overwrite earlier → last trading day wins
+  }
+
+  // Sort keys descending, take the most recent `months` months
+  const sortedKeys = Object.keys(monthMap).sort().reverse();
+  const recentKeys = sortedKeys.slice(0, months);
+  if (recentKeys.length < months) return { sma: null, monthEndCloses: [] };
+
+  const monthEndCloses = recentKeys.map(k => monthMap[k]);
+  const sma = monthEndCloses.reduce((s, v) => s + v, 0) / months;
+  return { sma: Math.round(sma * 100) / 100, monthEndCloses };
+}
+
+async function fetchIvyPosition(ticker: string): Promise<{
+  price: number | null;
+  sma: number | null;
+  variancePct: number | null;
+  signal: "Invest" | "Cash" | null;
+  error?: string;
+}> {
+  // 320 calendar days ≈ 220 trading days ≈ 10.5 months — enough for 10 full month-ends
+  const end = Math.floor(Date.now() / 1000);
+  const start = end - 320 * 24 * 60 * 60;
+  const url = `${BASE}/${encodeURIComponent(ticker)}?period1=${start}&period2=${end}&interval=1d&includePrePost=false`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "application/json",
+      },
+    });
+    if (!res.ok) return { price: null, sma: null, variancePct: null, signal: null, error: `Yahoo ${ticker}: HTTP ${res.status}` };
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) return { price: null, sma: null, variancePct: null, signal: null, error: `${ticker}: no result` };
+
+    const timestamps: number[] = result.timestamp ?? [];
+    const rawCloses: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
+    const closes = rawCloses.map((c, i) => ({ c, t: timestamps[i] }))
+      .filter(x => x.c != null && Number.isFinite(x.c!))
+      .map(x => ({ c: Math.round(x.c! * 100) / 100, t: x.t }));
+
+    if (closes.length < 20) return { price: null, sma: null, variancePct: null, signal: null, error: `${ticker}: insufficient data` };
+
+    const price = result.meta.regularMarketPrice ?? closes[closes.length - 1].c;
+    const { sma } = computeMonthEndSma(closes.map(x => x.c), closes.map(x => x.t));
+
+    if (sma == null || price == null) return { price, sma: null, variancePct: null, signal: null };
+
+    const variancePct = Math.round(((price - sma) / sma) * 1000) / 10; // 1 decimal
+    const signal: "Invest" | "Cash" = price >= sma ? "Invest" : "Cash";
+    console.log(`Ivy ${ticker}: price=${price} sma=${sma} variance=${variancePct}% → ${signal}`);
+    return { price, sma, variancePct, signal };
+  } catch (err: any) {
+    const msg = err?.name === "AbortError" ? `${ticker}: timeout` : `${ticker}: ${err?.message}`;
+    return { price: null, sma: null, variancePct: null, signal: null, error: msg };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function GET() {
   const diagnostics: Record<string, string> = {};
 
   // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
-  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData] = await Promise.all([
+  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
     fetchChart("DX=F", 5),
@@ -171,6 +255,11 @@ export async function GET() {
     fetchPE(),
     fetchCape(),
     fetchFearGreed(),
+    fetchIvyPosition("VTI"),
+    fetchIvyPosition("VEU"),
+    fetchIvyPosition("IEF"),
+    fetchIvyPosition("VNQ"),
+    fetchIvyPosition("DBC"),
   ]);
 
   if (spx.error) diagnostics["spx"] = spx.error;
@@ -186,6 +275,11 @@ export async function GET() {
   if (peData.error) diagnostics["pe"] = peData.error;
   if (capeData.error) diagnostics["cape"] = capeData.error;
   if (fearGreedData.error) diagnostics["feargreed"] = fearGreedData.error;
+  if (ivyVTI.error) diagnostics["ivy_vti"] = ivyVTI.error;
+  if (ivyVEU.error) diagnostics["ivy_veu"] = ivyVEU.error;
+  if (ivyIEF.error) diagnostics["ivy_ief"] = ivyIEF.error;
+  if (ivyVNQ.error) diagnostics["ivy_vnq"] = ivyVNQ.error;
+  if (ivyDBC.error) diagnostics["ivy_dbc"] = ivyDBC.error;
 
   const spxCloses = spx.closes;
   const spxPrice: number | null = spx.meta.regularMarketPrice ?? spxCloses[spxCloses.length - 1] ?? null;
@@ -299,6 +393,13 @@ export async function GET() {
       cape_ratio: capeRatio,
       fear_greed_score: fearGreedScore,
       fear_greed_rating: fearGreedRating,
+      ivy: {
+        vti: { price: ivyVTI.price, sma: ivyVTI.sma, variance: ivyVTI.variancePct, signal: ivyVTI.signal },
+        veu: { price: ivyVEU.price, sma: ivyVEU.sma, variance: ivyVEU.variancePct, signal: ivyVEU.signal },
+        ief: { price: ivyIEF.price, sma: ivyIEF.sma, variance: ivyIEF.variancePct, signal: ivyIEF.signal },
+        vnq: { price: ivyVNQ.price, sma: ivyVNQ.sma, variance: ivyVNQ.variancePct, signal: ivyVNQ.signal },
+        dbc: { price: ivyDBC.price, sma: ivyDBC.sma, variance: ivyDBC.variancePct, signal: ivyDBC.signal },
+      },
     },
   }, { status: 200 });
 }
