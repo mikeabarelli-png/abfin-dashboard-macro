@@ -167,7 +167,7 @@ PORTFOLIO INTERPRETATION FOR AI:
 
 FRAMING RULE: Every recommendation must answer "given that this investor is 5 years from retirement with a 40/60 portfolio already positioned defensively, does this change anything — and if so, specifically what and why?"`;
 
-  const systemPrompt = `You are a Personal Wealth Strategist — a single synthesized voice drawing from the frameworks of ten of the world's most respected market thinkers: Lance Roberts (technical discipline, trend analysis), Howard Marks (risk-first, probabilistic thinking), Stanley Druckenmiller (asymmetric macro positioning), Warren Buffett (patience, valuation, burden of proof), Ray Dalio (debt cycle awareness, structural risk), John Hussman (valuation math, internals as timing filter), James Stack (capital preservation, checklist discipline), Rick Rieder (credit markets, dispersion regime), Jeremy Grantham (bubble anatomy, mean reversion gravity), Peter Leyden (secular bull case, productivity supercycle), Doug Noland (credit plumbing, leverage unwind risk), and Pieter Slegers (quality framework, moat durability).
+  const systemPrompt = `You are a Personal Wealth Strategist — a single synthesized voice drawing from the frameworks of twelve of the world's most respected market thinkers: Lance Roberts (technical discipline, trend analysis), Howard Marks (risk-first, probabilistic thinking), Stanley Druckenmiller (asymmetric macro positioning), Warren Buffett (patience, valuation, burden of proof), Ray Dalio (debt cycle awareness, structural risk), John Hussman (valuation math, internals as timing filter), James Stack (capital preservation, checklist discipline), Rick Rieder (credit markets, dispersion regime), Jeremy Grantham (bubble anatomy, mean reversion gravity), Peter Leyden (secular bull case, productivity supercycle), Doug Noland (credit plumbing, leverage unwind risk), Pieter Slegers (quality framework, moat durability), and Henrik Zeberg (Elliott Wave structure, sentiment cycles, contrarian rally thesis).
 
 ${investorProfile}
 
@@ -185,6 +185,18 @@ CORE FRAMEWORKS YOU APPLY:
 8. DEBT CYCLE AWARENESS (Dalio): The most dangerous period for equities is 12-18 months AFTER the yield curve un-inverts, not during inversion. The lagged effects of prior tightening are still working through the economy. Foreign confidence in US assets (watch DXY) is a structural risk.
 9. DISPERSION REGIME (Rieder): The easy money from generic index investing is over. Labor softening is the key pothole to watch. Balance sheet quality — free cash flow, low debt — matters more in a higher-for-longer rate environment. Idiosyncratic risk is rising.
 10. LEVERAGE UNWIND RISK (Noland): When crowded levered trades break, correlations go to 1. Diversification fails exactly when needed. External shocks don't create vulnerabilities — they reveal ones already there.
+11. SENTIMENT & WAVE STRUCTURE (Zeberg): Markets move on expectations and positioning, not just fundamentals. When sentiment is extremely bearish and positioning is defensively crowded, the path of least resistance is often a sharp counter-trend rally — the "most hated rally" — before the fundamental thesis ultimately plays out. The 2007 analog: Nasdaq rallied 25% August–October while recession was already inevitable. Wave 5 structures in long-term bull markets are characterized by acceleration, narrative dominance, and overconfidence — then severe structural correction. Current tech bull market (2002–2026) shows Wave 5 exhaustion characteristics. The contrarian read: extreme fear and defensive positioning can fuel violent short-term rallies that feel like confirmation the system is holding — but are actually the final phase. Do not panic-sell into maximum fear, but do not interpret the resulting rally as an all-clear. Use Zeberg's framework to AVOID reactive decisions at emotional extremes in either direction.
+12. CDX / CREDIT LEADING INDICATOR (Roberts — Mar 21 2026): The CDX Index (credit default swaps) is the bond market's real stress gauge — harder to manipulate than equities, not susceptible to retail momentum. KEY SIGNAL: When CDX hits a 9-month high while SPX is within 5% of its all-time high, a bear market has followed every single time over 20 years (2007 → GFC, 2015 → correction, 2022 → -25% bear). This signal is currently ACTIVE in 2026. Direction of travel matters more than absolute level — don't wait for the spike, act on the trend. Current backdrop per Roberts (Mar 21 2026): S&P closed at 6,506, down 7.1% from January ATH of 7,002. Fourth consecutive weekly loss. 200-DMA (~6,620) decisively broken and failed every attempt to reclaim. Failed mid-week bull trap (Monday/Tuesday relief rally reversed violently on Fed Wednesday). PPI +0.7% MoM hottest since July 2025, pipeline inflation building. Fed hawkish hold at 3.5-3.75%, dot plot pointing to just 1 cut in 2026, 7 participants signaling zero cuts. Powell: "not as much progress as we had hoped." Private credit deteriorating quietly — Blackstone, Blue Owl, BlackRock redemption requests approaching 5% threshold. Iraq force majeure on oil fields broadening Hormuz disruption. Brent above $108. Technical composite at 23.98 — very oversold, reflexive rally odds increasing. Roberts' framework: "This is a shopping list market, not a buy-everything market. Accumulate quality at pre-defined levels (6,400 then 6,300). Treat every bounce as suspect until VIX sustains below 20 and oil finds a ceiling. Defense over offense." Oil is the master switch — Brent below $95 gives Fed breathing room; above $110 keeps Fed frozen and deepens the landing.
+
+OUTPUT FORMAT — CRITICAL INSTRUCTION:
+Respond in structured bullet points, NOT long narrative paragraphs. Use this format:
+
+**[SECTION HEADER]**
+• Bullet point with specific number or fact
+• Bullet point with specific number or fact
+• Bullet point with specific number or fact
+
+Use 3-5 sections maximum. Each bullet should be one crisp sentence with a specific data point. No paragraph prose. No filler sentences. Lead with the most important signal. End with a clear action or watch item in bold.
 
 CURRENT DASHBOARD DATA (live):
 - SPX: ${spxPrice != null ? fmtWhole(spxPrice) : "loading"} | Today: ${spxDailyPct != null ? spxDailyPct.toFixed(2) + "%" : "?"} | YTD: ${spxYtd.toFixed(2)}%
@@ -234,24 +246,24 @@ RESPONSE RULES:
   };
 
   useEffect(() => {
-    callClaude("Synthesize the current dashboard into a 4-5 sentence market summary. Apply the full framework: what is the tape saying technically (Roberts), what is valuation saying (Hussman/Grantham/Buffett), what is credit signaling (Noland/Rieder), and what is the single most important thing to watch right now. Use specific numbers. End with the key level or indicator that resolves current uncertainty.", "summary");
+    callClaude("Give me a bullet-point market summary using the live dashboard data. Format: **TAPE** (2-3 bullets on SPX vs DMAs, trend status), **CREDIT & STRESS** (2-3 bullets on HY spread, CDX signal, VIX), **VALUATION** (2 bullets on CAPE and ERP), **KEY WATCH** (1-2 bullets on the single most important level or signal right now). Use specific numbers. One crisp sentence per bullet. No narrative prose.", "summary");
   }, []);
 
   const handleAiTab = (tab: string) => {
     setAiTab(tab);
     const prompts: Record<string, string> = {
-      summary: "3-4 sentence market summary: SPX vs key MAs, VIX and HY spread signal, single most important thing to watch. Direct.",
-      action: "Based on my rules: (1) current mode, (2) what to do or not do, (3) what level changes that. Direct and specific.",
-      triggers: "Which triggers closest to firing? How many SPX points to 200-DMA breach? What activates defensive posture? Specific numbers.",
+      summary: "Give me a bullet-point market summary using the live dashboard data. Format: **TAPE** (2-3 bullets on SPX vs DMAs, trend status), **CREDIT & STRESS** (2-3 bullets on HY spread, CDX signal, VIX), **VALUATION** (2 bullets on CAPE and ERP), **KEY WATCH** (1-2 bullets on the single most important level or signal right now). Use specific numbers. One crisp sentence per bullet. No narrative prose.",
+      action: "Give me a bullet-point action recommendation. Format: **CURRENT POSTURE** (1-2 bullets — what mode are we in and why, with specific levels), **WHAT TO DO** (2-3 bullets — concrete actions or inactions for my specific 40/60 portfolio, referencing my positions by name), **WHAT CHANGES THIS** (2 bullets — the exact price level or indicator reading that shifts the recommendation). No prose paragraphs. Specific numbers only.",
+      triggers: "Give me a bullet-point trigger analysis. Format: **DEFENSIVE TRIGGER STATUS** (2-3 bullets — exact distance to each component of the 2-Friday-close + VIX/HY rule), **WARNING SIGNALS ACTIVE** (2-3 bullets — which Hussman/Roberts/Noland conditions are currently firing), **CDX & CREDIT WATCH** (2 bullets — HY spread direction, private credit stress, CDX signal status), **THE NUMBER THAT MATTERS MOST** (1 bullet — single most important level and why). Specific numbers, no prose.",
     };
     if (tab !== "chat" && !aiCache[tab]) callClaude(prompts[tab], tab);
   };
 
   const refreshAiTab = () => {
     const prompts: Record<string, string> = {
-      summary: "Synthesize the current dashboard into a 4-5 sentence market summary. Apply the full framework: what is the tape saying technically (Roberts), what is valuation saying (Hussman/Grantham/Buffett), what is credit signaling (Noland/Rieder), and what is the single most important thing to watch right now. Use specific numbers. End with the key level or indicator that resolves current uncertainty.",
-      action: "Give me a clear recommended action based on the current dashboard. Structure it as: (1) CURRENT POSTURE — what mode are we in and why, referencing specific levels. (2) WHAT TO DO — concrete action or inaction with the reasoning behind it. (3) WHAT CHANGES THIS — the specific price level, indicator reading, or trigger that would shift the recommendation. Apply Stack's capital preservation discipline, Marks' risk pricing logic, and Roberts' trend rules. Be direct. No hedging for its own sake.",
-      triggers: "Run a full trigger analysis using the dashboard data. Cover: (1) DEFENSIVE TRIGGER STATUS — how close are we to the 2-Friday-close + VIX/HY rule firing, with exact numbers. (2) WARNING SIGNALS ACTIVE — which of Hussman's overvalued/overbought/overbullish conditions are present. (3) CREDIT STRESS MONITOR — where HY spread, yield curve, and real rates stand relative to danger thresholds. (4) THE LEVEL THAT CHANGES EVERYTHING — the single most important number to watch and why. Be precise — specific points, percentages, and distances to each threshold.",
+      summary: "Give me a bullet-point market summary using the live dashboard data. Format: **TAPE** (2-3 bullets on SPX vs DMAs, trend status), **CREDIT & STRESS** (2-3 bullets on HY spread, CDX signal, VIX), **VALUATION** (2 bullets on CAPE and ERP), **KEY WATCH** (1-2 bullets on the single most important level or signal right now). Use specific numbers. One crisp sentence per bullet. No narrative prose.",
+      action: "Give me a bullet-point action recommendation. Format: **CURRENT POSTURE** (1-2 bullets — what mode are we in and why, with specific levels), **WHAT TO DO** (2-3 bullets — concrete actions or inactions for my specific 40/60 portfolio, referencing my positions by name), **WHAT CHANGES THIS** (2 bullets — the exact price level or indicator reading that shifts the recommendation). No prose paragraphs. Specific numbers only.",
+      triggers: "Give me a bullet-point trigger analysis. Format: **DEFENSIVE TRIGGER STATUS** (2-3 bullets — exact distance to each component of the 2-Friday-close + VIX/HY rule), **WARNING SIGNALS ACTIVE** (2-3 bullets — which Hussman/Roberts/Noland conditions are currently firing), **CDX & CREDIT WATCH** (2 bullets — HY spread direction, private credit stress, CDX signal status), **THE NUMBER THAT MATTERS MOST** (1 bullet — single most important level and why). Specific numbers, no prose.",
     };
     if (aiTab !== "chat") {
       setAiCache(prev => { const n = {...prev}; delete n[aiTab]; return n; });
@@ -1000,7 +1012,7 @@ RESPONSE RULES:
           <section className="panel panelAI">
             <div className="aiHeader">
               <div className="aiIcon">✦</div>
-              <div><div className="panelTitle">AI Wealth Strategist</div><div className="aiSub">Powered by Claude · Reads live dashboard data · Loads on demand</div></div>
+              <div><div className="panelTitle">AI Wealth Strategist</div><div className="aiSub">Roberts · Marks · Druckenmiller · Buffett · Dalio · Hussman · Stack · Rieder · Grantham · Leyden · Noland · Slegers · Zeberg</div></div>
             </div>
             <div className="aiTabs">
               {(["summary","action","triggers","chat"] as const).map(t => (
@@ -1051,17 +1063,57 @@ RESPONSE RULES:
         </ModalWrapper>
       )}
       {modal==="hy" && (
-        <ModalWrapper onClose={()=>setModal(null)} title="HY Spread — High Yield Credit Spread" sub="ICE BofA US High Yield Spread · Measures corporate credit stress">
+        <ModalWrapper onClose={()=>setModal(null)} title="HY Spread — High Yield Credit Spread" sub="ICE BofA US High Yield Spread · The bond market's early warning system">
           <ModalGrid
-            left={<><SH>Current reading</SH><div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{fmt2(hySpread)}<span style={{ fontSize:22 }}>%</span></div><Tag label={hySpread>=4?"Watch — Above Threshold":"Firm — Below Threshold"} color={hySpread>=4?"#fbbf24":"#4ade80"} bg={hySpread>=4?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} /><BC>{hySpread>=4?"Credit markets showing stress. HY spreads above 4% can confirm a defensive trigger alongside VIX >30.":"Credit markets are not signaling stress. Investors comfortable taking corporate credit risk."}</BC>
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{fmt2(hySpread)}<span style={{ fontSize:22 }}>%</span></div>
+              <Tag label={hySpread>=4?"Danger — Above Trigger":hySpread>=3.5?"Watch — Approaching Trigger":"Firm — Below Threshold"} color={hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80"} bg={hySpread>=4?"rgba(255,79,114,0.15)":hySpread>=3.5?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
+              <BC>{hySpread>=4?"Credit markets confirming stress. HY spreads above 4% alongside VIX >30 activates your defensive posture.":hySpread>=3.5?"Credit stress building. Direction of travel matters — watch for continued widening.":"Credit markets not signaling stress. Investors comfortable taking corporate risk."}</BC>
               <BandTrack segs={[{w:"35%",color:"#047857"},{w:"30%",color:"#4ade80"},{w:"20%",color:"#f59e0b"},{w:"15%",color:"#ef4444"}]} needle={Math.max(0,Math.min(((hySpread-2)/8)*100,99))} scaleNums={["2%","3%","4%","6%","10%+"]} scaleNames={["Tight","Firm","Watch","Stress","Crisis"]} />
-              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:14 }}>
                 <SH>Your trigger threshold</SH>
-                <div style={{ fontSize:13, lineHeight:1.7, color:"#cbd5e1" }}>HY Spread &gt;400bps (4.0%) is your stress confirmation. Current {fmt2(hySpread)}% is {((4.0-hySpread)*100).toFixed(0)}bps {hySpread<4?"below":"above"} that level.</div>
-              </div></>}
-            right={<><MCard><SH>What it measures</SH><BC>The HY spread is the extra yield investors demand to hold junk-rated corporate bonds vs. Treasuries. When spreads widen, credit investors are pricing more risk — often leading equity stress by weeks.</BC></MCard>
-              <MCard><SH>Historical context</SH><div style={{ display:"grid", gap:5, marginTop:8 }}><HistRow val="20%+" event="GFC 2008-09" note="Credit markets frozen" /><HistRow val="10.9%" event="COVID Mar 2020" note="Sharp spike · rapid recovery" /><HistRow val="8.4%" event="Energy crisis 2016" note="Oil-driven stress" /><HistRow val="5.8%" event="2022 rate shock" note="Fed hiking cycle peak" /><HistRow val={`${fmt2(hySpread)}%`} event="Today" note={hySpread>=4?"Above trigger · stress confirmed":"Firm · no stress signal"} active /><HistRow val="3.0%" event="Historical tight" note="Bull market complacency zone" /></div></MCard>
-              <ActionCard>HY Spread {hySpread>=4?"is above 4% — stress confirmation active. Combined with VIX >30 this would trigger your defensive posture.":`below 4% trigger. Credit not confirming stress. Both VIX >30 AND HY >400bps must be true to activate defensive posture.`}</ActionCard></>}
+                <div style={{ fontSize:13, lineHeight:1.7, color:"#cbd5e1" }}>HY Spread &gt;400bps (4.0%) is your stress confirmation. Current {fmt2(hySpread)}% is <span style={{ color: hySpread>=4?"#ff6b88":"#fbbf24", fontWeight:700 }}>{Math.abs((4.0-hySpread)*100).toFixed(0)}bps {hySpread<4?"below":"above"}</span> that level.</div>
+              </div>
+              <div style={{ marginTop:12, background:"#141b47", border:"1px solid rgba(239,68,68,0.25)", borderRadius:10, padding:14 }}>
+                <SH>⚠ CDX Warning Signal</SH>
+                <div style={{ fontSize:12, lineHeight:1.7, color:"#cbd5e1" }}>
+                  The CDX Index (institutional credit default swaps) is the bond market's real-time stress gauge. When CDX hits a 9-month high while the S&P 500 is within 5% of its all-time high, it has preceded a bear market <span style={{ color:"#ff6b88", fontWeight:700 }}>every single time</span> over the past 20 years — 2007, 2015, 2022, and now 2026. This signal is active. HY spread direction of travel matters more than absolute level. Credit stress doesn't arrive fully formed — it builds.
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>What it measures — and why it leads equities</SH>
+                <BC>HY spread is the extra yield investors demand to hold junk-rated corporate bonds vs. Treasuries. Credit is the lifeblood of the economy — businesses borrow to operate, consumers borrow to spend. When lenders get nervous, credit conditions tighten weeks before equities reprice. The bond market is harder to talk up than stocks and is not susceptible to retail momentum. When credit speaks, listen.</BC>
+              </MCard>
+              <MCard>
+                <SH>The 6 warning signs of credit stress</SH>
+                <div style={{ fontSize:12, lineHeight:1.8, color:"#cbd5e1", marginTop:6 }}>
+                  <div>📉 <span style={{ color:"#ff6b88", fontWeight:600 }}>Liquidity drain</span> — capital flees to Treasuries, corporate bond liquidity shrinks</div>
+                  <div>🏦 <span style={{ color:"#ff6b88", fontWeight:600 }}>Solvency concern</span> — rising spreads signal debt-servicing worry</div>
+                  <div>😨 <span style={{ color:"#fbbf24", fontWeight:600 }}>Risk sentiment shift</span> — credit markets price risk before equities do</div>
+                  <div>📊 <span style={{ color:"#fbbf24", fontWeight:600 }}>Earnings compression</span> — high-yield issuers can't refinance cheaply</div>
+                  <div>🐌 <span style={{ color:"#fbbf24", fontWeight:600 }}>Growth slowing</span> — tighter credit = less investment and spending</div>
+                  <div>📈 <span style={{ color:"#94a3b8", fontWeight:600 }}>Volatility rising</span> — risk appetite declining = VIX moving higher</div>
+                </div>
+              </MCard>
+              <MCard>
+                <SH>Historical CDX warning instances</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="2007" event="CDX 9-mo high · SPX near highs" note="GFC followed · -57%" />
+                  <HistRow val="2015" event="CDX 9-mo high · SPX near highs" note="Sharp correction · -15%" />
+                  <HistRow val="2022" event="CDX 9-mo high · SPX near highs" note="Bear market · -25%" />
+                  <HistRow val="2026" event="CDX signal active NOW" note="Outcome TBD · signal valid" active />
+                  <HistRow val="3.0%" event="Historical tight spread" note="Bull market complacency zone" />
+                </div>
+              </MCard>
+              <ActionCard>
+                {hySpread>=4
+                  ? `HY at ${fmt2(hySpread)}% — trigger active. Combined with VIX >30 this fires your defensive posture. Reduce equity exposure per your rules.`
+                  : `HY at ${fmt2(hySpread)}% — below 4% trigger but CDX warning signal is active. Direction of travel is the key watch. Don't wait for the spike — act on the trend. Both VIX >30 AND HY >400bps must confirm to activate defensive posture. Monitor weekly.`}
+              </ActionCard>
+            </>}
           />
         </ModalWrapper>
       )}
