@@ -244,7 +244,7 @@ export async function GET() {
   const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
-    fetchChart("DX=F", 5),
+    fetchChart("DX-Y.NYB", 5),
     fetchChart("^CPCE", 5),
     fetchFred("DFII10"),
     fetchFred("DGS10"),
@@ -332,6 +332,19 @@ export async function GET() {
   const MANUAL_CAPE_FALLBACK = 40.2; // Last manually verified: Mar 19 2026
   const capeRatio: number = capeData.value ?? MANUAL_CAPE_FALLBACK;
 
+  // NYSE Advance/Decline Line — manually updated weekly (Saturday)
+  // Source: stockcharts.com $NYAD or barchart.com — cumulative breadth line
+  // signal: "bullish_divergence" | "neutral" | "confirming_weakness"
+  // adTrend: direction over last 4 weeks: "higher_lows" | "flat" | "lower_lows"
+  // adVsSpx: how A/D is behaving relative to SPX: "diverging_up" | "tracking" | "diverging_down"
+  const MANUAL_AD = {
+    signal: "confirming_weakness" as "bullish_divergence" | "neutral" | "confirming_weakness",
+    adTrend: "lower_lows" as "higher_lows" | "flat" | "lower_lows",
+    adVsSpx: "diverging_down" as "diverging_up" | "tracking" | "diverging_down",
+    note: "A/D line declining with SPX — broad-based selling",
+    updatedDate: "Mar 21",
+  };
+
   // CNN Fear & Greed Index — live fetch with manual fallback
   // Update MANUAL_FEAR_GREED_FALLBACK each Saturday if live fetch fails
   const MANUAL_FEAR_GREED_FALLBACK = 15; // Last manually verified: Mar 20 2026 — Extreme Fear
@@ -393,6 +406,7 @@ export async function GET() {
       cape_ratio: capeRatio,
       fear_greed_score: fearGreedScore,
       fear_greed_rating: fearGreedRating,
+      ad_line: MANUAL_AD,
       ivy: {
         vti: { price: ivyVTI.price, sma: ivyVTI.sma, variance: ivyVTI.variancePct, signal: ivyVTI.signal },
         veu: { price: ivyVEU.price, sma: ivyVEU.sma, variance: ivyVEU.variancePct, signal: ivyVEU.signal },
