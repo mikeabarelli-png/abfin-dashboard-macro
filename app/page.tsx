@@ -89,6 +89,15 @@ export default function Page() {
 
   // Live Ivy Portfolio data from route.ts
   const ivyData = metrics?.ivy ?? marketData?.ivy ?? null;
+
+  // Official last month-end signals — update each month when Advisor Perspectives publishes
+  // Source: advisorperspectives.com/dshort · Last updated: Feb 28, 2026
+  const ivyOfficialSignals: Record<string, "Invest" | "Cash"> = {
+    vti: "Invest", veu: "Invest", ief: "Invest", vnq: "Invest", dbc: "Invest"
+  };
+  const ivyOfficialDate = "Feb 28";
+  const ivyEOMDate = "Mar 31";
+
   const ivyPositions = [
     { ticker:"VTI", name:"US Stocks",     key:"vti" },
     { ticker:"VEU", name:"Intl Stocks",   key:"veu" },
@@ -98,14 +107,28 @@ export default function Page() {
   ].map(p => {
     const d = ivyData?.[p.key];
     const variance: number | null = d?.variance ?? null;
-    const signal: string = d?.signal ?? (variance != null ? (variance >= 0 ? "Invest" : "Cash") : "Loading");
     const sma: number | null = d?.sma ?? null;
     const price: number | null = d?.price ?? null;
-    // bar fill: cap at 100%, scale 0–30% variance → 0–100% bar
+    const officialSignal = ivyOfficialSignals[p.key];
+    // Forecast: what is the risk of March 31 flipping?
+    const forecastLabel = variance == null ? "Loading"
+      : variance <= -2   ? "Exit Risk High"
+      : variance <= 0    ? "Flip Risk"
+      : variance <= 2    ? "Watch"
+      : "On Track";
+    const forecastColor = variance == null ? "#475569"
+      : variance <= 0    ? "#ff6b88"
+      : variance <= 2    ? "#fbbf24"
+      : "#4ade80";
+    const forecastPill = variance == null ? ""
+      : variance <= 0    ? "pillR"
+      : variance <= 2    ? "pillA"
+      : "pillG";
     const pct = variance != null ? Math.max(0, Math.min(Math.abs(variance) / 30 * 100, 100)) : 32;
-    return { ...p, variance, signal, sma, price, pct };
+    return { ...p, variance, sma, price, officialSignal, forecastLabel, forecastColor, forecastPill, pct };
   });
-  const ivyInvestedCount = ivyPositions.filter(p => p.signal === "Invest").length;
+  const ivyInvestedCount = Object.values(ivyOfficialSignals).filter(s => s === "Invest").length;
+  const ivyAtRiskCount = ivyPositions.filter(p => p.variance != null && p.variance <= 0).length;
   const ivyLive = ivyData != null;
 
   const fmtWhole = (n: number) => Math.round(n).toLocaleString();
@@ -1116,54 +1139,71 @@ RESPONSE RULES:
             <div className="panelHeader">
               <div><div className="panelTitle">Ivy Portfolio</div><div className="panelSub">10-Month SMA Signals · Mebane Faber Model · End-of-month rule</div></div>
               <div style={{ textAlign:"right" }}>
-                <div className="pstamp">{ivyLive ? "LIVE · Yahoo Finance" : "Feb 2026 · Fallback data"}</div>
-                <div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Signal valid at month-end close only</div>
+                <div className="pstamp">{ivyLive ? "LIVE · Yahoo Finance" : "Fallback data"}</div>
+                <div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Signal fires at month-end close only</div>
               </div>
             </div>
             <table className="ivyTable">
               <thead>
                 <tr>
-                  <th>Fund</th>
-                  <th>Name</th>
-                  <th>Position</th>
-                  <th>Variance vs 10-mo SMA</th>
-                  <th style={{ textAlign:"right" }}>Signal</th>
+                  <th style={{ width:"10%" }}>Fund</th>
+                  <th style={{ width:"18%" }}>Name</th>
+                  <th style={{ width:"18%", textAlign:"center" }}>
+                    Current Position
+                    <div style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0 }}>as of {ivyOfficialDate}</div>
+                  </th>
+                  <th style={{ width:"28%", textAlign:"center" }}>
+                    {ivyEOMDate} Forecast
+                    <div style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0 }}>live price vs 10-mo SMA</div>
+                  </th>
+                  <th style={{ width:"26%" }}>Variance vs SMA</th>
                 </tr>
               </thead>
               <tbody>
                 {ivyPositions.map(r => {
-                  const isInvest = r.signal === "Invest" || r.signal === "Loading";
-                  const isNearSignal = r.variance != null && Math.abs(r.variance) < 2;
-                  const varColor = r.signal === "Cash" ? "#ff6b88" : isNearSignal ? "#fbbf24" : "#4ade80";
+                  const isAtRisk = r.variance != null && r.variance <= 0;
+                  const isWatch = r.variance != null && r.variance > 0 && r.variance <= 2;
                   return (
-                    <tr key={r.ticker} style={{ background: isNearSignal ? "rgba(245,158,11,0.04)" : "transparent" }}>
-                      <td style={{ fontWeight:700, color:"#cbd5e1" }}>
-                        {r.ticker}
-                        {isNearSignal && <span style={{ fontSize:9, background:"rgba(245,158,11,0.2)", color:"#fbbf24", borderRadius:4, padding:"1px 5px", marginLeft:6, fontWeight:700 }}>WATCH</span>}
-                      </td>
+                    <tr key={r.ticker} style={{ background: isAtRisk ? "rgba(239,68,68,0.03)" : isWatch ? "rgba(245,158,11,0.03)" : "transparent" }}>
+                      {/* Fund */}
+                      <td style={{ fontWeight:700, color:"#cbd5e1" }}>{r.ticker}</td>
+                      {/* Name + SMA */}
                       <td style={{ color:"#64748b", fontSize:12 }}>
                         {r.name}
-                        {r.sma != null && <span style={{ color:"#334155", marginLeft:6 }}>SMA: {r.sma.toFixed(2)}</span>}
+                        {r.sma != null && <div style={{ fontSize:10, color:"#334155", marginTop:1 }}>SMA: {r.sma.toFixed(2)}</div>}
                       </td>
-                      <td style={{ fontWeight:700, color: isInvest ? "#4ade80" : "#ff6b88" }}>
-                        {r.signal === "Loading" ? "—" : isInvest ? "Invested" : "⚠ Exit"}
+                      {/* Current Official Position */}
+                      <td style={{ textAlign:"center" }}>
+                        <span style={{ fontWeight:700, color:"#4ade80", fontSize:13 }}>
+                          ✓ {r.officialSignal}
+                        </span>
                       </td>
-                      <td>
-                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                          <div className="bbar" style={{ width:120, flexShrink:0 }}>
-                            <div className="bbarFill" style={{ width:`${r.pct}%`, background: varColor }} />
+                      {/* EOM Forecast */}
+                      <td style={{ textAlign:"center" }}>
+                        <span className={r.forecastPill || "pillG"} style={{ fontSize:11 }}>
+                          {r.forecastLabel}
+                        </span>
+                        {r.variance != null && r.variance <= 0 && (
+                          <div style={{ fontSize:10, color:"#ff6b88", marginTop:3 }}>
+                            {Math.abs(r.variance).toFixed(1)}% below SMA now
                           </div>
-                          <span style={{ fontSize:12, fontWeight:600, color: varColor }}>
+                        )}
+                        {r.variance != null && r.variance > 0 && r.variance <= 2 && (
+                          <div style={{ fontSize:10, color:"#fbbf24", marginTop:3 }}>
+                            only {r.variance.toFixed(1)}% above SMA
+                          </div>
+                        )}
+                      </td>
+                      {/* Variance bar */}
+                      <td>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <div className="bbar" style={{ width:100, flexShrink:0 }}>
+                            <div className="bbarFill" style={{ width:`${r.pct}%`, background: r.forecastColor }} />
+                          </div>
+                          <span style={{ fontSize:12, fontWeight:600, color: r.forecastColor }}>
                             {r.variance != null ? `${r.variance >= 0 ? "+" : ""}${r.variance.toFixed(1)}%` : "—"}
                           </span>
                         </div>
-                      </td>
-                      <td style={{ textAlign:"right" }}>
-                        {r.signal === "Cash"
-                          ? <span className="pillR">Exit</span>
-                          : isNearSignal
-                          ? <span className="pillA">Watch</span>
-                          : <span className="pillG">Hold</span>}
                       </td>
                     </tr>
                   );
@@ -1171,29 +1211,29 @@ RESPONSE RULES:
               </tbody>
             </table>
 
-            {/* Sneak peek warning for positions near signal line */}
-            {ivyLive && ivyPositions.some(p => p.variance != null && Math.abs(p.variance) < 2 && p.signal !== "Cash") && (
-              <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
-                <span style={{ fontSize:16, flexShrink:0 }}>⚠</span>
+            {/* EOM Risk Summary */}
+            {ivyLive && ivyAtRiskCount > 0 && (
+              <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.35)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
+                <span style={{ fontSize:15, flexShrink:0 }}>🔴</span>
                 <div>
-                  <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:3 }}>March Sneak Peek — Signal at Risk</div>
-                  <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>
-                    {ivyPositions.filter(p => p.variance != null && Math.abs(p.variance) < 2 && p.signal !== "Cash").map(p =>
-                      `${p.ticker} is only ${p.variance != null ? Math.abs(p.variance).toFixed(1) : "?"}% ${(p.variance ?? 0) >= 0 ? "above" : "below"} its 10-mo SMA`
-                    ).join(" · ")} · If March 31 closes here or lower, signal flips to Cash. Rule fires at month-end close only.
+                  <div style={{ fontSize:12, fontWeight:700, color:"#ff6b88", marginBottom:3 }}>
+                    {ivyAtRiskCount} position{ivyAtRiskCount > 1 ? "s" : ""} below SMA — {ivyEOMDate} flip risk
+                  </div>
+                  <div style={{ fontSize:12, color:"#fca5a5", lineHeight:1.6 }}>
+                    <strong>{ivyPositions.filter(p => p.variance != null && p.variance <= 0).map(p => p.ticker).join(", ")}</strong> are currently trading below their 10-month SMA. If they close below on {ivyEOMDate}, the Ivy rule signals Cash. Official position remains <strong>Invested</strong> until month-end close confirms.
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Cash signal alert */}
-            {ivyLive && ivyPositions.some(p => p.signal === "Cash") && (
-              <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
-                <span style={{ fontSize:16, flexShrink:0 }}>🔴</span>
+            {/* Watch warning */}
+            {ivyLive && ivyAtRiskCount === 0 && ivyPositions.some(p => p.variance != null && p.variance > 0 && p.variance <= 2) && (
+              <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
+                <span style={{ fontSize:15, flexShrink:0 }}>⚠️</span>
                 <div>
-                  <div style={{ fontSize:12, fontWeight:700, color:"#ff6b88", marginBottom:3 }}>Ivy Cash Signal Active</div>
-                  <div style={{ fontSize:12, color:"#fca5a5", lineHeight:1.6 }}>
-                    {ivyPositions.filter(p => p.signal === "Cash").map(p => p.ticker).join(", ")} closed below 10-month SMA. Per Ivy rules: sell and hold cash until month-end close reclaims the SMA.
+                  <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:3 }}>Near-Signal Watch</div>
+                  <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>
+                    {ivyPositions.filter(p => p.variance != null && p.variance > 0 && p.variance <= 2).map(p => `${p.ticker} (+${p.variance?.toFixed(1)}%)`).join(", ")} within 2% of signal line. Monitor into {ivyEOMDate} close.
                   </div>
                 </div>
               </div>
@@ -1201,14 +1241,14 @@ RESPONSE RULES:
 
             <div className="sumBar" style={{ marginTop:8 }}>
               <span className="sumBarLabel">Ivy Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color: ivyInvestedCount === 5 ? "#4ade80" : ivyInvestedCount >= 3 ? "#fbbf24" : "#ff6b88" }}>
-                {ivyLive ? `${ivyInvestedCount} / 5 assets Invested` : "5 / 5 assets Invested"}
+              <span style={{ fontSize:12, fontWeight:700, color: ivyAtRiskCount === 0 ? "#4ade80" : "#fbbf24" }}>
+                {ivyInvestedCount} / 5 Invested
               </span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>
-                {ivyLive
-                  ? "Live 10-month SMA · Signal is advisory only — rule fires at month-end close."
-                  : "All positions above 10-month SMA. Valid until Mar 31, 2026."}
+              <span style={{ fontSize:12, color: ivyAtRiskCount > 0 ? "#fbbf24" : "#94a3b8" }}>
+                {ivyLive && ivyAtRiskCount > 0
+                  ? `⚠ ${ivyAtRiskCount} position${ivyAtRiskCount > 1 ? "s" : ""} at risk of flipping on ${ivyEOMDate} — official signal fires at month-end close only`
+                  : `Official positions as of ${ivyOfficialDate} · Next reading: ${ivyEOMDate}`}
               </span>
             </div>
           </section>
