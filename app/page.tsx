@@ -81,6 +81,7 @@ export default function Page() {
   const dxy = getNum(metrics?.dxy, marketData?.dxy);
   const dxyChangePct = getNum(metrics?.dxy_change_pct, marketData?.dxy_change_pct);
   const putCallRatio = getNum(metrics?.put_call_ratio, marketData?.put_call_ratio);
+  const adLine = metrics?.ad_line ?? marketData?.ad_line ?? null;
   const erpBps = getNum(metrics?.erp_bps, marketData?.erp_bps);
   const trailingPE = getNum(metrics?.trailing_pe, marketData?.trailing_pe);
   const capeRatio = getNum(metrics?.cape_ratio, marketData?.cape_ratio) ?? 40.2;
@@ -701,7 +702,7 @@ RESPONSE RULES:
                 vixValue != null && vixValue < 30,
                 erpBps != null && erpBps >= 300,
                 dxy != null && dxy < 104,
-                putCallRatio != null && putCallRatio > 0.8,
+                adLine?.signal === "bullish_divergence" || adLine?.signal === "neutral",
               ];
               const greenCount = signals.filter(Boolean).length;
               const verdict = greenCount >= 4
@@ -826,20 +827,45 @@ RESPONSE RULES:
                   {dxyChangePct!=null?`${dxyChangePct>0?"▲":"▼"} ${Math.abs(dxyChangePct).toFixed(2)}% today`:"↑ Dollar = tighter liquidity"}
                 </div>
               </div>
-              {/* 5. Put/Call */}
+              {/* 5. Advance/Decline Line */}
               <div className="tile">
-                <div className="lbl" style={{ marginBottom:6 }}>Put / Call Ratio</div>
-                <div className="valHero" style={{ color:"#fff" }}>{putCallRatio!=null?putCallRatio.toFixed(2):"—"}</div>
-                <div className="status" style={{ color:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }}>
-                  {putCallRatio==null?"Loading":putCallRatio>1.2?"Fearful":putCallRatio>0.9?"Neutral":putCallRatio>0.7?"Complacency":"Extreme"}
+                <div className="lbl" style={{ marginBottom:6 }}>Advance / Decline</div>
+                <div className="valHero" style={{ fontSize:22, color:
+                  adLine?.signal === "bullish_divergence" ? "#4ade80"
+                  : adLine?.signal === "confirming_weakness" ? "#ff6b88" : "#fbbf24" }}>
+                  {adLine?.signal === "bullish_divergence" ? "Diverging ↑"
+                  : adLine?.signal === "confirming_weakness" ? "Confirming ↓" : "Neutral"}
                 </div>
-                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((putCallRatio??0.9)-0.4)/1.2*100,100))}%`, borderRadius:9999, background:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }} />
-                  <div style={{ position:"absolute", top:-6, left:`${((0.7-0.4)/1.2)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
-                  <div style={{ position:"absolute", top:-6, left:`${((1.0-0.4)/1.2)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                <div className="status" style={{ color:
+                  adLine?.signal === "bullish_divergence" ? "#4ade80"
+                  : adLine?.signal === "confirming_weakness" ? "#ff6b88" : "#fbbf24" }}>
+                  {adLine?.signal === "bullish_divergence" ? "Hidden Strength"
+                  : adLine?.signal === "confirming_weakness" ? "Broad Selling" : "Tracking SPX"}
                 </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0.4</span><span>0.7</span><span>1.0</span><span>1.6</span></div>
-                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>&gt;1.0 contrarian buy · &lt;0.7 complacency</div>
+                <div style={{ marginTop:10, display:"grid", gridTemplateColumns:"1fr 1fr", gap:5 }}>
+                  <div style={{ background:"#141b47", borderRadius:6, padding:"5px 8px" }}>
+                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>A/D Trend</div>
+                    <div style={{ fontSize:11, fontWeight:700, marginTop:2, color:
+                      adLine?.adTrend === "higher_lows" ? "#4ade80"
+                      : adLine?.adTrend === "lower_lows" ? "#ff6b88" : "#fbbf24" }}>
+                      {adLine?.adTrend === "higher_lows" ? "↗ Higher Lows"
+                      : adLine?.adTrend === "lower_lows" ? "↘ Lower Lows" : "→ Flat"}
+                    </div>
+                  </div>
+                  <div style={{ background:"#141b47", borderRadius:6, padding:"5px 8px" }}>
+                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>vs SPX</div>
+                    <div style={{ fontSize:11, fontWeight:700, marginTop:2, color:
+                      adLine?.adVsSpx === "diverging_up" ? "#4ade80"
+                      : adLine?.adVsSpx === "diverging_down" ? "#ff6b88" : "#94a3b8" }}>
+                      {adLine?.adVsSpx === "diverging_up" ? "↑ Diverging"
+                      : adLine?.adVsSpx === "diverging_down" ? "↓ Confirming" : "Tracking"}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize:11, marginTop:8, color:"#64748b", fontWeight:600, lineHeight:1.4 }}>
+                  {adLine?.note ?? "NYSE breadth — manual weekly update"}
+                </div>
+                <div style={{ fontSize:9, color:"#334155", marginTop:4 }}>Updated {adLine?.updatedDate ?? "—"} · Manual</div>
               </div>
             </div>
 
@@ -920,6 +946,21 @@ RESPONSE RULES:
                 <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
                   {yieldCurve>=0?`Re-steepened ${fmt2(yieldCurve)}% from inversion`:`Inverted ${fmt2(Math.abs(yieldCurve))}%`}
                 </div>
+              </div>
+              {/* Put/Call Ratio */}
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom:6 }}>Put / Call Ratio</div>
+                <div className="valHero" style={{ color:"#fff" }}>{putCallRatio!=null?putCallRatio.toFixed(2):"—"}</div>
+                <div className="status" style={{ color:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }}>
+                  {putCallRatio==null?"Loading":putCallRatio>1.2?"Fearful":putCallRatio>0.9?"Neutral":putCallRatio>0.7?"Complacency":"Extreme"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((putCallRatio??0.9)-0.4)/1.2*100,100))}%`, borderRadius:9999, background:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((0.7-0.4)/1.2)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((1.0-0.4)/1.2)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0.4</span><span>0.7</span><span>1.0</span><span>1.6</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>&gt;1.0 contrarian buy · &lt;0.7 complacency</div>
               </div>
             </div>
 
