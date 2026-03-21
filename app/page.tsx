@@ -677,30 +677,91 @@ RESPONSE RULES:
 
           {/* ③ MARKET STRESS */}
           <section className="panel">
-            <div className="panelTitle" style={{ marginBottom:10 }}>Market Stress</div>
-
-            {/* Row 1: Critical Risk */}
-            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Critical Risk</div>
-            <div className="grid5" style={{ marginBottom:8 }}>
-              {/* 1. ERP */}
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("erp")}>
-                <div className="lbl" style={{ marginBottom:6 }}>Equity Risk Premium</div>
-                <div className="valHero" style={{ color:"#fff" }}>
-                  {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <div className="panelTitle">Market Stress</div>
+              {is200Broken && (
+                <div style={{ background:"rgba(239,68,68,0.12)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:8, padding:"5px 12px", fontSize:11, fontWeight:700, color:"#ff6b88" }}>
+                  ⚠ 200-DMA Breached — Check Confirmation Row
                 </div>
-                <div className="status" style={{ color:erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80" }}>
-                  {erpBps==null?"Loading":erpBps<200?"Danger":erpBps<500?"Watch":"Healthy"}
+              )}
+            </div>
+
+            {/* ── ROW 1: Market Stress Confirmation ── */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>
+              Market Stress Confirmation
+              <span style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0, marginLeft:8 }}>
+                — 5 signals that confirm whether a 200-DMA break is a crash or a head-fake
+              </span>
+            </div>
+
+            {/* Confluence Score Banner — only shows when 200-DMA is broken */}
+            {is200Broken && (() => {
+              const signals = [
+                hySpread < 4,
+                vixValue != null && vixValue < 30,
+                erpBps != null && erpBps >= 300,
+                dxy != null && dxy < 104,
+                putCallRatio != null && putCallRatio > 0.8,
+              ];
+              const greenCount = signals.filter(Boolean).length;
+              const verdict = greenCount >= 4
+                ? { label:"Head-Fake — Credit Not Confirming", color:"#4ade80", bg:"rgba(74,222,128,0.08)", border:"rgba(74,222,128,0.3)" }
+                : greenCount >= 3
+                ? { label:"Mixed — Monitor Closely", color:"#fbbf24", bg:"rgba(245,158,11,0.08)", border:"rgba(245,158,11,0.3)" }
+                : { label:"Confirmed Stress — Defense Mode", color:"#ff6b88", bg:"rgba(239,68,68,0.08)", border:"rgba(239,68,68,0.35)" };
+              const labels = ["HY","VIX","ERP","DXY","P/C"];
+              return (
+                <div style={{ background:verdict.bg, border:`1px solid ${verdict.border}`, borderRadius:10, padding:"10px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:14 }}>
+                  <div style={{ flexShrink:0 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>Confluence</div>
+                    <div style={{ fontSize:28, fontWeight:700, color:verdict.color, lineHeight:1 }}>{greenCount}<span style={{ fontSize:14 }}>/5</span></div>
+                  </div>
+                  <div style={{ width:1, height:36, background:"rgba(255,255,255,0.08)" }} />
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:verdict.color }}>{verdict.label}</div>
+                    <div style={{ fontSize:11, color:"#94a3b8", marginTop:2 }}>
+                      {signals.map((g, i) => (
+                        <span key={i} style={{ marginRight:8, color: g ? "#4ade80" : "#ff6b88" }}>{g ? "✓" : "✗"} {labels[i]}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="grid5" style={{ marginBottom:8 }}>
+              {/* 1. HY Spread */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("hy")}>
+                <div className="lbl" style={{ marginBottom:6 }}>HY Spread</div>
+                <div className="valHero" style={{ color:"#fff" }}>{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
+                <div className="status" style={{ color:hySpread>=5?"#ff6b88":hySpread>=4?"#fbbf24":hySpread>=3.5?"#fbbf24":"#94a3b8" }}>
+                  {hySpread>=5?"Stress":hySpread>=4?"⚠ Trigger":hySpread>=3.5?"Caution":"Firm"}
                 </div>
                 <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:6, width:"25%", background:"#ef4444", borderRadius:"9999px 0 0 9999px", overflow:"hidden" }} />
-                  {erpBps!=null && erpBps>200 && (
-                    <div style={{ position:"absolute", left:"25%", top:0, height:6, width:`${Math.max(0,Math.min(((erpBps-200)/800)*100,75))}%`, background:"#fbbf24" }} />
-                  )}
-                  <div style={{ position:"absolute", top:-6, left:"25%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
-                  <div style={{ position:"absolute", top:-4, left:"62.5%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                  {(() => {
+                    const toPos = (v: number) =>
+                      v <= 3.5 ? Math.max(0,(v-2)/1.5*30)
+                      : v <= 4.5 ? 30+(v-3.5)*20
+                      : v <= 5   ? 50+(v-4.5)*20
+                      : v <= 7   ? 60+(v-5)/2*25
+                      : Math.min(100, 85+(v-7)/3*15);
+                    const pos = toPos(hySpread);
+                    const p400 = toPos(4); const p500 = toPos(5);
+                    return <>
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos,p400)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {hySpread>4 && <div style={{ position:"absolute", left:`${p400}%`, top:0, height:6, width:`${Math.min(pos,p500)-p400}%`, background:"#fbbf24" }} />}
+                      {hySpread>5 && <div style={{ position:"absolute", left:`${p500}%`, top:0, height:6, width:`${pos-p500}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                    </>;
+                  })()}
+                  <div style={{ position:"absolute", top:-6, left:"40%", width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:"60%", width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div style={{ fontSize:11, marginTop:8, fontWeight:600, color: erpBps!=null && erpBps<200 ? "#ff6b88" : erpBps!=null && erpBps<230 ? "#fbbf24" : "#64748b" }}>
-                  {erpBps!=null && erpBps<200 ? "▼ In danger zone" : erpBps!=null && erpBps<500 ? `▼ ${((erpBps-200)/100).toFixed(2)}% from danger` : "Above healthy threshold"}
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}>
+                  <span>200</span><span>400↑</span><span>500</span><span>700</span><span>1000+</span>
+                </div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {hySpread>=4 ? `▲ Trigger active · ${Math.round((5-hySpread)*100)}bps to red line`
+                  : `▲ ${Math.round((4-hySpread)*100)}bps to trigger · ${Math.round((5-hySpread)*100)}bps to red line`}
                 </div>
               </div>
               {/* 2. VIX */}
@@ -711,30 +772,81 @@ RESPONSE RULES:
                 <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
                   {(() => {
                     const v = vixValue ?? 0;
-                    const toPos = (x: number) => Math.min(x/50*100, 100);
-                    const pos = toPos(v);
-                    const pos20 = toPos(20); // 40%
-                    const pos30 = toPos(30); // 60%
+                    const pos = Math.min(v/50*100,100);
+                    const p20 = 40; const p30 = 60;
                     return <>
-                      {/* Green: 0 → min(pos, 20) */}
-                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos, pos20)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
-                      {/* Amber: 20 → min(pos, 30) */}
-                      {v > 20 && <div style={{ position:"absolute", left:`${pos20}%`, top:0, height:6, width:`${Math.min(pos, pos30) - pos20}%`, background:"#fbbf24" }} />}
-                      {/* Red: 30 → pos */}
-                      {v > 30 && <div style={{ position:"absolute", left:`${pos30}%`, top:0, height:6, width:`${pos - pos30}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos,p20)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {v>20 && <div style={{ position:"absolute", left:`${p20}%`, top:0, height:6, width:`${Math.min(pos,p30)-p20}%`, background:"#fbbf24" }} />}
+                      {v>30 && <div style={{ position:"absolute", left:`${p30}%`, top:0, height:6, width:`${pos-p30}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
                     </>;
                   })()}
-                  {/* Elevated tick at 20 */}
                   <div style={{ position:"absolute", top:-4, left:"40%", width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
-                  {/* Stress trigger tick at 30 */}
                   <div style={{ position:"absolute", top:-6, left:"60%", width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
                 </div>
                 <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>20</span><span>30↑</span><span>50</span></div>
                 <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
-                  {vixValue!=null&&vixValue>=30 ? "▲ Stress — pause buying" : vixValue!=null ? `▲ ${(30-vixValue).toFixed(1)} pts from Stress` : ""}
+                  {vixValue!=null&&vixValue>=30?"▲ Stress — pause buying":vixValue!=null?`▲ ${(30-vixValue).toFixed(1)} pts from Stress`:""}
                 </div>
               </div>
-              {/* 3. 10Y Nominal */}
+              {/* 3. ERP */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("erp")}>
+                <div className="lbl" style={{ marginBottom:6 }}>Equity Risk Premium</div>
+                <div className="valHero" style={{ color:"#fff" }}>
+                  {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
+                </div>
+                <div className="status" style={{ color:erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80" }}>
+                  {erpBps==null?"Loading":erpBps<200?"Danger":erpBps<500?"Watch":"Healthy"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:"25%", background:"#ef4444", borderRadius:"9999px 0 0 9999px" }} />
+                  {erpBps!=null && erpBps>200 && (
+                    <div style={{ position:"absolute", left:"25%", top:0, height:6, width:`${Math.max(0,Math.min(((erpBps-200)/800)*100,75))}%`, background:"#fbbf24" }} />
+                  )}
+                  <div style={{ position:"absolute", top:-6, left:"25%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:"62.5%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ fontSize:11, marginTop:8, fontWeight:600, color:erpBps!=null&&erpBps<200?"#ff6b88":erpBps!=null&&erpBps<230?"#fbbf24":"#64748b" }}>
+                  {erpBps!=null&&erpBps<200?"▼ In danger zone":erpBps!=null&&erpBps<500?`▼ ${((erpBps-200)/100).toFixed(2)}% from danger`:"Above healthy threshold"}
+                </div>
+              </div>
+              {/* 4. DXY */}
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom:6 }}>US Dollar (DXY)</div>
+                <div className="valHero" style={{ color:"#fff" }}>{dxy!=null?dxy.toFixed(2):"—"}</div>
+                <div className="status" style={{ color:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }}>
+                  {dxy==null?"Loading":dxy>104?"Strong":dxy>100?"Elevated":"Neutral"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((dxy??100)-88)/32*100,100))}%`, borderRadius:9999, background:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((100-88)/32)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.5)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:`${((104-88)/32)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>88</span><span>100</span><span>104</span><span>120</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {dxyChangePct!=null?`${dxyChangePct>0?"▲":"▼"} ${Math.abs(dxyChangePct).toFixed(2)}% today`:"↑ Dollar = tighter liquidity"}
+                </div>
+              </div>
+              {/* 5. Put/Call */}
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom:6 }}>Put / Call Ratio</div>
+                <div className="valHero" style={{ color:"#fff" }}>{putCallRatio!=null?putCallRatio.toFixed(2):"—"}</div>
+                <div className="status" style={{ color:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }}>
+                  {putCallRatio==null?"Loading":putCallRatio>1.2?"Fearful":putCallRatio>0.9?"Neutral":putCallRatio>0.7?"Complacency":"Extreme"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((putCallRatio??0.9)-0.4)/1.2*100,100))}%`, borderRadius:9999, background:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((0.7-0.4)/1.2)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((1.0-0.4)/1.2)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0.4</span><span>0.7</span><span>1.0</span><span>1.6</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>&gt;1.0 contrarian buy · &lt;0.7 complacency</div>
+              </div>
+            </div>
+
+            {/* ── ROW 2: Policy & Rates ── */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6, marginTop:10 }}>Policy &amp; Rates</div>
+            <div className="grid5" style={{ marginBottom:8 }}>
+              {/* 10Y Nominal */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("nom10y")}>
                 <div className="lbl" style={{ marginBottom:6 }}>10Y Yield (Nominal)</div>
                 <div className="valHero" style={{ color:"#fff" }}>{nom10y.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
@@ -749,121 +861,7 @@ RESPONSE RULES:
                 <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>2%</span><span>4%</span><span>4.5%</span><span>6%</span></div>
                 <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Real: {real10y.toFixed(2)}% · Premium: {(nom10y-real10y).toFixed(2)}%</div>
               </div>
-              {/* 4. 5Y Breakeven */}
-              <div className="tile">
-                <div className="lbl" style={{ marginBottom:6 }}>5Y Breakeven Infl.</div>
-                <div className="valHero" style={{ color:"#fff" }}>{breakeven5y.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
-                <div className="status" style={{ color:breakeven5y>3?"#ff6b88":breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }}>
-                  {breakeven5y>3?"Danger":breakeven5y>2.5?"Watch":breakeven5y>2?"On Target":"Low"}
-                </div>
-                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((breakeven5y/4)*100,100))}%`, borderRadius:9999, background:breakeven5y>3?"#ff6b88":breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }} />
-                  <div style={{ position:"absolute", top:-6, left:"62.5%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
-                  <div style={{ position:"absolute", top:-4, left:"50%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
-                </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>2%</span><span>2.5%</span><span>4%</span></div>
-                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Market-implied inflation · Fed target: 2%</div>
-              </div>
-              {/* 5. Fed Funds */}
-              <div className="tile">
-                <div className="lbl" style={{ marginBottom:6 }}>Fed Funds Rate</div>
-                <div className="valHero" style={{ color:"#fff" }}>{fedFunds.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
-                <div className="status" style={{ color:fedFunds>4.5?"#ff6b88":fedFunds>3?"#fbbf24":"#4ade80" }}>
-                  {fedFunds>4.5?"Restrictive":fedFunds>3?"Elevated":"Accommodative"}
-                </div>
-                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((fedFunds/6)*100,100))}%`, borderRadius:9999, background:fedFunds>4.5?"#ff6b88":fedFunds>3?"#fbbf24":"#4ade80" }} />
-                  <div style={{ position:"absolute", top:-6, left:`${(4.5/6)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
-                </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>3%</span><span>4.5%</span><span>6%</span></div>
-                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Real rate: {(fedFunds-breakeven5y).toFixed(2)}%</div>
-              </div>
-            </div>
-
-            {/* Row 1b: Valuation Risk */}
-            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6, marginTop:10 }}>Valuation Risk</div>
-            <div className="grid5" style={{ marginBottom:8 }}>
-              {/* CAPE Ratio */}
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("cape")}>
-                <div className="lbl" style={{ marginBottom:6 }}>CAPE Ratio (Shiller P/E)</div>
-                <div className="valHero" style={{ color:"#fff" }}>
-                  {capeRatio.toFixed(1)}<span style={{ fontSize:20, fontWeight:600 }}>x</span>
-                </div>
-                <div className="status" style={{ color:capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80" }}>
-                  {capeRatio>35?"Extreme":capeRatio>25?"Overvalued":capeRatio>20?"Elevated":"Fairly Valued"}
-                </div>
-                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  {(() => {
-                    // Scale: 5x → 0%, 50x → 100% (linear, 45 range)
-                    const toPos = (x: number) => Math.max(0, Math.min((x-5)/45*100, 100));
-                    const pos = toPos(capeRatio);
-                    const pos25 = toPos(25); // ~44%
-                    const pos35 = toPos(35); // ~67%
-                    return <>
-                      {/* Green: 5 → min(cape, 25) */}
-                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos, pos25)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
-                      {/* Amber: 25 → min(cape, 35) */}
-                      {capeRatio > 25 && <div style={{ position:"absolute", left:`${pos25}%`, top:0, height:6, width:`${Math.min(pos, pos35) - pos25}%`, background:"#fbbf24" }} />}
-                      {/* Red: 35 → cape */}
-                      {capeRatio > 35 && <div style={{ position:"absolute", left:`${pos35}%`, top:0, height:6, width:`${pos - pos35}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
-                    </>;
-                  })()}
-                  {/* Overvalued tick at 25x */}
-                  <div style={{ position:"absolute", top:-4, left:`${(25-5)/45*100}%`, width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
-                  {/* Extreme tick at 35x */}
-                  <div style={{ position:"absolute", top:-6, left:`${(35-5)/45*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
-                </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>5x</span><span>25x</span><span>35x↑</span><span>50x</span></div>
-                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
-                  {capeRatio>35 ? `▲ ${(capeRatio-16).toFixed(1)}x above hist. avg (16x)` : `Hist. avg ~16x · Dot-com peak 44x`}
-                </div>
-              </div>
-            </div>
-            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Stability &amp; Context</div>
-            <div className="grid5">
-              {/* 6. HY Spread */}
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("hy")}>
-                <div className="lbl" style={{ marginBottom:6 }}>HY Spread</div>
-                <div className="valHero" style={{ color:"#fff" }}>{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
-                <div className="status" style={{ color:hySpread>=7?"#ff6b88":hySpread>=5?"#ff6b88":hySpread>=4?"#fbbf24":hySpread>=3.5?"#fbbf24":"#94a3b8" }}>
-                  {hySpread>=7?"Crisis":hySpread>=5?"Stress":hySpread>=4?"⚠ Your Trigger":hySpread>=3.5?"Caution":"Firm"}
-                </div>
-                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  {/* Helper: convert spread value to bar % position using piecewise scale */}
-                  {(() => {
-                    const toPos = (v: number) =>
-                      v <= 3.5 ? Math.max(0,(v-2)/1.5*30)
-                      : v <= 4.5 ? 30+(v-3.5)*20
-                      : v <= 5   ? 50+(v-4.5)*20
-                      : v <= 7   ? 60+(v-5)/2*25
-                      : Math.min(100, 85+(v-7)/3*15);
-                    const pos = toPos(hySpread);
-                    const pos400 = toPos(4);   // ~40%
-                    const pos500 = toPos(5);   // ~60%
-                    return <>
-                      {/* Green segment: 0 → min(pos, pos400) */}
-                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos, pos400)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
-                      {/* Amber segment: pos400 → min(pos, pos500) — only if spread > 400 */}
-                      {hySpread > 4 && <div style={{ position:"absolute", left:`${pos400}%`, top:0, height:6, width:`${Math.min(pos, pos500) - pos400}%`, background:"#fbbf24" }} />}
-                      {/* Red segment: pos500 → pos — only if spread > 500 */}
-                      {hySpread > 5 && <div style={{ position:"absolute", left:`${pos500}%`, top:0, height:6, width:`${pos - pos500}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
-                    </>;
-                  })()}
-                  {/* Your trigger tick at 400bps */}
-                  <div style={{ position:"absolute", top:-6, left:"40%", width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
-                  {/* Industry red line tick at 500bps */}
-                  <div style={{ position:"absolute", top:-4, left:"60%", width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
-                </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}>
-                  <span>200</span><span>400↑</span><span>500</span><span>700</span><span>1000+</span>
-                </div>
-                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
-                  {hySpread>=5 ? "▲ Above industry red line (500bps)"
-                  : hySpread>=4 ? `▲ Trigger active · ${Math.round((5-hySpread)*100)}bps to industry red line`
-                  : `▲ ${Math.round((4-hySpread)*100)}bps to your trigger · ${Math.round((5-hySpread)*100)}bps to red line`}
-                </div>
-              </div>
-              {/* 7. Real 10Y */}
+              {/* Real 10Y */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("real10y")}>
                 <div className="lbl" style={{ marginBottom:6 }}>Real 10Y</div>
                 <div className="valHero" style={{ color:"#fff" }}>{fmt2(real10y)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
@@ -878,24 +876,36 @@ RESPONSE RULES:
                 <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>1.5%</span><span>2.5%</span><span>3%</span></div>
                 <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Equity headwind above 1.5%</div>
               </div>
-              {/* 8. DXY */}
+              {/* Fed Funds */}
               <div className="tile">
-                <div className="lbl" style={{ marginBottom:6 }}>US Dollar (DXY)</div>
-                <div className="valHero" style={{ color:"#fff" }}>{dxy!=null?dxy.toFixed(2):"—"}</div>
-                <div className="status" style={{ color:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }}>
-                  {dxy==null?"Loading":dxy>104?"Strong":dxy>100?"Elevated":"Neutral"}
+                <div className="lbl" style={{ marginBottom:6 }}>Fed Funds Rate</div>
+                <div className="valHero" style={{ color:"#fff" }}>{fedFunds.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                <div className="status" style={{ color:fedFunds>4.5?"#ff6b88":fedFunds>3?"#fbbf24":"#4ade80" }}>
+                  {fedFunds>4.5?"Restrictive":fedFunds>3?"Elevated":"Accommodative"}
                 </div>
                 <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((dxy??100)-88)/32*100,100))}%`, borderRadius:9999, background:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }} />
-                  <div style={{ position:"absolute", top:-6, left:`${((100-88)/32)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.5)", borderRadius:2, zIndex:2 }} />
-                  <div style={{ position:"absolute", top:-4, left:`${((104-88)/32)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((fedFunds/6)*100,100))}%`, borderRadius:9999, background:fedFunds>4.5?"#ff6b88":fedFunds>3?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(4.5/6)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>88</span><span>100</span><span>104</span><span>120</span></div>
-                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
-                  {dxyChangePct!=null ? `${dxyChangePct>0?"▲":"▼"} ${Math.abs(dxyChangePct).toFixed(2)}% today` : "↑ Dollar = tighter liquidity"}
-                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>3%</span><span>4.5%</span><span>6%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Real rate: {(fedFunds-breakeven5y).toFixed(2)}%</div>
               </div>
-              {/* 9. Yield Curve */}
+              {/* 5Y Breakeven */}
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom:6 }}>5Y Breakeven Infl.</div>
+                <div className="valHero" style={{ color:"#fff" }}>{breakeven5y.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                <div className="status" style={{ color:breakeven5y>3?"#ff6b88":breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }}>
+                  {breakeven5y>3?"Danger":breakeven5y>2.5?"Watch":breakeven5y>2?"On Target":"Low"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((breakeven5y/4)*100,100))}%`, borderRadius:9999, background:breakeven5y>3?"#ff6b88":breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }} />
+                  <div style={{ position:"absolute", top:-6, left:"62.5%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:"50%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>2%</span><span>2.5%</span><span>4%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Market-implied inflation · Fed target: 2%</div>
+              </div>
+              {/* Yield Curve */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("yc")}>
                 <div className="lbl" style={{ marginBottom:6 }}>Yield Curve</div>
                 <div className="valHero" style={{ color:"#fff" }}>{yieldCurve>0?"+":""}{fmt2(yieldCurve)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
@@ -908,23 +918,37 @@ RESPONSE RULES:
                 </div>
                 <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>-1.5%</span><span>0%</span><span>+1.5%</span></div>
                 <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
-                  {yieldCurve>=0 ? `Re-steepened ${fmt2(yieldCurve)}% from inversion` : `Inverted ${fmt2(Math.abs(yieldCurve))}%`}
+                  {yieldCurve>=0?`Re-steepened ${fmt2(yieldCurve)}% from inversion`:`Inverted ${fmt2(Math.abs(yieldCurve))}%`}
                 </div>
               </div>
-              {/* 10. Put/Call */}
-              <div className="tile">
-                <div className="lbl" style={{ marginBottom:6 }}>Put / Call Ratio</div>
-                <div className="valHero" style={{ color:"#fff" }}>{putCallRatio!=null?putCallRatio.toFixed(2):"—"}</div>
-                <div className="status" style={{ color:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }}>
-                  {putCallRatio==null?"Loading":putCallRatio>1.2?"Fearful":putCallRatio>0.9?"Neutral":putCallRatio>0.7?"Complacency":"Extreme"}
+            </div>
+
+            {/* ── ROW 3: Valuation Risk ── */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6, marginTop:10 }}>Valuation Risk</div>
+            <div className="grid5" style={{ marginBottom:8 }}>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("cape")}>
+                <div className="lbl" style={{ marginBottom:6 }}>CAPE Ratio (Shiller P/E)</div>
+                <div className="valHero" style={{ color:"#fff" }}>{capeRatio.toFixed(1)}<span style={{ fontSize:20, fontWeight:600 }}>x</span></div>
+                <div className="status" style={{ color:capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80" }}>
+                  {capeRatio>35?"Extreme":capeRatio>25?"Overvalued":capeRatio>20?"Elevated":"Fairly Valued"}
                 </div>
                 <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((putCallRatio??0.9)-0.4)/1.2*100,100))}%`, borderRadius:9999, background:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }} />
-                  <div style={{ position:"absolute", top:-6, left:`${((0.7-0.4)/1.2)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
-                  <div style={{ position:"absolute", top:-6, left:`${((1.0-0.4)/1.2)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                  {(() => {
+                    const toPos = (x: number) => Math.max(0,Math.min((x-5)/45*100,100));
+                    const pos=toPos(capeRatio), p25=toPos(25), p35=toPos(35);
+                    return <>
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos,p25)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {capeRatio>25 && <div style={{ position:"absolute", left:`${p25}%`, top:0, height:6, width:`${Math.min(pos,p35)-p25}%`, background:"#fbbf24" }} />}
+                      {capeRatio>35 && <div style={{ position:"absolute", left:`${p35}%`, top:0, height:6, width:`${pos-p35}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                    </>;
+                  })()}
+                  <div style={{ position:"absolute", top:-4, left:`${(25-5)/45*100}%`, width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(35-5)/45*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0.4</span><span>0.7</span><span>1.0</span><span>1.6</span></div>
-                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>&gt;1.0 contrarian buy · &lt;0.7 complacency</div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>5x</span><span>25x</span><span>35x↑</span><span>50x</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {capeRatio>35?`▲ ${(capeRatio-16).toFixed(1)}x above hist. avg (16x)`:"Hist. avg ~16x · Dot-com peak 44x"}
+                </div>
               </div>
             </div>
           </section>
