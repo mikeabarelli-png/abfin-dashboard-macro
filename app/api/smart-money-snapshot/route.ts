@@ -123,23 +123,54 @@ async function fetchCape(): Promise<{ value: number | null; error?: string }> {
   }
 }
 
+async function fetchFearGreed(): Promise<{ value: number | null; rating: string | null; error?: string }> {
+  // CNN Fear & Greed Index — undocumented endpoint, may break without notice
+  // Falls back to MANUAL_FEAR_GREED_FALLBACK if unavailable
+  const url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "application/json",
+        "Referer": "https://www.cnn.com/",
+        "Origin": "https://www.cnn.com",
+      },
+    });
+    if (!res.ok) return { value: null, rating: null, error: `CNN F&G: HTTP ${res.status}` };
+    const data = await res.json();
+    const score = data?.fear_and_greed?.score;
+    const rating = data?.fear_and_greed?.rating;
+    const value = score != null ? Math.round(parseFloat(score)) : null;
+    console.log(`Fear & Greed: ${value} (${rating})`);
+    return { value, rating: rating ?? null };
+  } catch (err: any) {
+    return { value: null, rating: null, error: `Fear & Greed: ${err?.message}` };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function GET() {
   const diagnostics: Record<string, string> = {};
 
   // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
-  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData] = await Promise.all([
+  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
-    fetchChart("DX=F", 5),       // Dollar Index futures
-    fetchChart("^CPCE", 5),      // CBOE Equity Put/Call Ratio
-    fetchFred("DFII10"),          // Real 10Y TIPS yield
-    fetchFred("DGS10"),           // Nominal 10Y Treasury yield
-    fetchFred("BAMLH0A0HYM2"),   // ICE BofA HY OAS
-    fetchFred("T10Y2Y"),          // 10Y-2Y spread
-    fetchFred("FEDFUNDS"),        // Fed Funds Rate
-    fetchFred("T5YIE"),           // 5Y Breakeven Inflation
+    fetchChart("DX=F", 5),
+    fetchChart("^CPCE", 5),
+    fetchFred("DFII10"),
+    fetchFred("DGS10"),
+    fetchFred("BAMLH0A0HYM2"),
+    fetchFred("T10Y2Y"),
+    fetchFred("FEDFUNDS"),
+    fetchFred("T5YIE"),
     fetchPE(),
     fetchCape(),
+    fetchFearGreed(),
   ]);
 
   if (spx.error) diagnostics["spx"] = spx.error;
@@ -154,6 +185,7 @@ export async function GET() {
   if (fredBreakeven.error) diagnostics["breakeven"] = fredBreakeven.error;
   if (peData.error) diagnostics["pe"] = peData.error;
   if (capeData.error) diagnostics["cape"] = capeData.error;
+  if (fearGreedData.error) diagnostics["feargreed"] = fearGreedData.error;
 
   const spxCloses = spx.closes;
   const spxPrice: number | null = spx.meta.regularMarketPrice ?? spxCloses[spxCloses.length - 1] ?? null;
@@ -205,6 +237,12 @@ export async function GET() {
   // Falls back to manual constant if API key missing or fetch fails
   const MANUAL_CAPE_FALLBACK = 40.2; // Last manually verified: Mar 19 2026
   const capeRatio: number = capeData.value ?? MANUAL_CAPE_FALLBACK;
+
+  // CNN Fear & Greed Index — live fetch with manual fallback
+  // Update MANUAL_FEAR_GREED_FALLBACK each Saturday if live fetch fails
+  const MANUAL_FEAR_GREED_FALLBACK = 15; // Last manually verified: Mar 20 2026 — Extreme Fear
+  const fearGreedScore: number = fearGreedData.value ?? MANUAL_FEAR_GREED_FALLBACK;
+  const fearGreedRating: string = fearGreedData.rating ?? "Extreme Fear";
 
   let spxYtdPct: number | null = null;
   try {
@@ -259,6 +297,8 @@ export async function GET() {
       erp_bps: erp,
       trailing_pe: trailingPE,
       cape_ratio: capeRatio,
+      fear_greed_score: fearGreedScore,
+      fear_greed_rating: fearGreedRating,
     },
   }, { status: 200 });
 }
