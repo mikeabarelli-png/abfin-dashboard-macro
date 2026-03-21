@@ -84,6 +84,8 @@ export default function Page() {
   const erpBps = getNum(metrics?.erp_bps, marketData?.erp_bps);
   const trailingPE = getNum(metrics?.trailing_pe, marketData?.trailing_pe);
   const capeRatio = getNum(metrics?.cape_ratio, marketData?.cape_ratio) ?? 40.2;
+  const fearGreedScore = getNum(metrics?.fear_greed_score, marketData?.fear_greed_score) ?? 15;
+  const fearGreedRating: string = metrics?.fear_greed_rating ?? marketData?.fear_greed_rating ?? "Extreme Fear";
 
   const fmtWhole = (n: number) => Math.round(n).toLocaleString();
   const fmt1 = (n: number) => n.toFixed(1);
@@ -212,6 +214,7 @@ CURRENT DASHBOARD DATA (live):
 - Fed Funds: ${fedFunds.toFixed(2)}% | 5Y Breakeven: ${breakeven5y.toFixed(2)}%
 - ERP: ${erpBps != null ? (erpBps/100).toFixed(2) + "%" : "unavailable"}
 - CAPE: ${capeRatio.toFixed(1)}x
+- Fear & Greed: ${Math.round(fearGreedScore)} — ${fearGreedRating} ${fearGreedScore <= 20 ? "⚠ EXTREME FEAR (contrarian rally setup — Zeberg)" : fearGreedScore >= 80 ? "⚠ EXTREME GREED (Grantham bubble warning)" : ""}
 - DXY: ${dxy != null ? dxy.toFixed(2) : "loading"}
 - Ivy Portfolio: all 5 positions invested (all above 10-month SMA)
 - Valuation models: 4/5 overvalued
@@ -960,29 +963,131 @@ RESPONSE RULES:
           {/* ⑦ VALUATION */}
           <section className="panel">
             <div className="panelHeader">
-              <div><div className="panelTitle">Valuation</div><div className="panelSub">Long-term market valuation · Sigma scores vs historical norm</div></div>
-              <div style={{ textAlign:"right" }}><div className="pstamp">Updated Mar 13 · Next: Mar 21</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
+              <div><div className="panelTitle">Valuation, Recession &amp; Sentiment Models</div><div className="panelSub">Sigma scores vs historical norm · Standard deviation from mean</div></div>
+              <div style={{ textAlign:"right" }}><div className="pstamp">Updated Mar 20 · Next: Mar 28</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
             </div>
-            <table className="valTable">
+
+            {/* Valuation Models */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Valuation Models</div>
+            <table className="valTable" style={{ marginBottom:8 }}>
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Buffett Indicator", rating:"Strongly Overvalued", score:"2.12", color:"#ff6b88" },
-                  { name:"Price/Earnings (CAPE)", rating:"Overvalued", score:"1.96", color:"#fbbf24" },
-                  { name:"Price/Sales", rating:"Strongly Overvalued", score:"2.20", color:"#ff6b88" },
-                  { name:"Interest Rate Model", rating:"Overvalued", score:"1.51", color:"#fbbf24" },
-                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.03", color:"#ff6b88" },
-                  { name:"Earnings Yield Gap", rating:"Fairly Valued", score:"0.31", color:"#94a3b8", muted:true },
+                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.02", color:"#ff6b88" },
+                  { name:"Price/Earnings (CAPE)",  rating:"Overvalued",          score:"1.88", color:"#fbbf24" },
+                  { name:"Price/Sales",            rating:"Strongly Overvalued", score:"2.00", color:"#ff6b88" },
+                  { name:"Interest Rate Model",    rating:"Overvalued",          score:"1.41", color:"#fbbf24" },
+                  { name:"S&P 500 Mean Reversion", rating:"Overvalued",          score:"1.94", color:"#fbbf24" },
+                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.27", color:"#94a3b8", muted:true },
                 ].map(r => (
-                  <tr key={r.name} style={{ opacity:r.muted?0.4:1 }}>
-                    <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:r.muted?"italic":"normal" }}>{r.name}</td>
+                  <tr key={r.name} style={{ opacity:(r as any).muted?0.4:1 }}>
+                    <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:(r as any).muted?"italic":"normal" }}>{r.name}</td>
                     <td style={{ fontWeight:700, color:r.color, fontSize:13 }}>{r.rating}</td>
                     <td style={{ fontWeight:700, color:r.color, fontSize:15, textAlign:"right" }}>{r.score}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div className="sumBar"><span className="sumBarLabel">Valuation Signal</span><span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>4 of 5 models overvalued</span><span style={{ fontSize:12, color:"#475569" }}>·</span><span style={{ fontSize:12, color:"#94a3b8" }}>Elevated valuations reduce margin of safety but don&apos;t predict timing.</span></div>
+            <div className="sumBar" style={{ marginBottom:16 }}>
+              <span className="sumBarLabel">Valuation Signal</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>5 of 5 models overvalued</span>
+              <span style={{ fontSize:12, color:"#475569" }}>·</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Elevated valuations reduce margin of safety but don&apos;t predict timing. Earnings Yield Gap fairly valued due to thin ERP.</span>
+            </div>
+
+            {/* Recession Models */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Recession Models</div>
+            <table className="valTable" style={{ marginBottom:8 }}>
+              <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
+              <tbody>
+                {[
+                  { name:"Yield Curve",       rating:"Very High Risk",  score:"2.56", color:"#ff6b88",  updated:"Mar 20" },
+                  { name:"Sahm Rule",         rating:"Normal",          score:"N/A",  color:"#4ade80",  updated:"Feb 28" },
+                  { name:"State Coincidence", rating:"Normal",          score:"0.66", color:"#4ade80",  updated:"Dec 31" },
+                ].map(r => (
+                  <tr key={r.name}>
+                    <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
+                      {r.name}
+                      <span style={{ fontSize:10, color:"#475569", marginLeft:8 }}>{r.updated}</span>
+                    </td>
+                    <td style={{ fontWeight:700, color:r.color, fontSize:13 }}>{r.rating}</td>
+                    <td style={{ fontWeight:700, color:r.color, fontSize:15, textAlign:"right" }}>{r.score}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="sumBar" style={{ marginBottom:16 }}>
+              <span className="sumBarLabel">Recession Signal</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Mixed — Yield Curve elevated</span>
+              <span style={{ fontSize:12, color:"#475569" }}>·</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Yield Curve at 2.56σ — re-steepening after inversion historically precedes recession 12–18 months out. Sahm Rule and State Coincidence not yet confirming.</span>
+            </div>
+
+            {/* Sentiment Models */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Sentiment Models</div>
+
+            {/* CNN Fear & Greed Live Gauge */}
+            <div style={{ background:"#050a35", borderRadius:10, padding:14, marginBottom:10, border:"0.5px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.04em" }}>CNN Fear &amp; Greed Index</div>
+                  <div style={{ fontSize:10, color:"#475569", marginTop:2 }}>Live · 0 = Max Fear · 100 = Max Greed</div>
+                </div>
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ fontSize:32, fontWeight:700, color: fearGreedScore <= 25 ? "#ff6b88" : fearGreedScore <= 45 ? "#fbbf24" : fearGreedScore <= 55 ? "#94a3b8" : fearGreedScore <= 75 ? "#4ade80" : "#22c55e", lineHeight:1 }}>{Math.round(fearGreedScore)}</div>
+                  <div style={{ fontSize:11, fontWeight:700, color: fearGreedScore <= 25 ? "#ff6b88" : fearGreedScore <= 45 ? "#fbbf24" : fearGreedScore <= 55 ? "#94a3b8" : "#4ade80", marginTop:2 }}>{fearGreedRating}</div>
+                </div>
+              </div>
+              {/* Gauge bar */}
+              <div style={{ position:"relative", height:8, borderRadius:9999, overflow:"hidden", background:"linear-gradient(to right, #ef4444 0%, #f97316 25%, #94a3b8 45%, #4ade80 65%, #22c55e 100%)" }}>
+                <div style={{ position:"absolute", top:0, left:`${Math.min(Math.max(fearGreedScore,0),100)}%`, width:3, height:8, background:"#fff", borderRadius:2, transform:"translateX(-50%)", boxShadow:"0 0 4px rgba(255,255,255,0.8)" }} />
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginTop:4 }}>
+                <span>Extreme Fear</span><span>Fear</span><span>Neutral</span><span>Greed</span><span>Extreme Greed</span>
+              </div>
+              {/* Contrarian note when extreme */}
+              {fearGreedScore <= 20 && (
+                <div style={{ marginTop:8, fontSize:11, fontWeight:600, color:"#4ade80" }}>
+                  ▲ Contrarian signal — readings ≤20 historically precede sharp short-term rallies (Zeberg &quot;most hated rally&quot; setup)
+                </div>
+              )}
+              {fearGreedScore >= 80 && (
+                <div style={{ marginTop:8, fontSize:11, fontWeight:600, color:"#ff6b88" }}>
+                  ▼ Extreme greed — historically precedes corrections. Grantham bubble warning applies.
+                </div>
+              )}
+            </div>
+
+            <table className="valTable" style={{ marginBottom:8 }}>
+              <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
+              <tbody>
+                {[
+                  { name:"Economic Uncertainty Index", rating:"Very Pessimistic", score:"12.64", color:"#4ade80",  updated:"Mar 13", note:"contrarian bullish" },
+                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.30", color:"#4ade80",  updated:"Mar 13", note:"contrarian bullish" },
+                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.12",  color:"#fbbf24",  updated:"Feb 28", note:"still elevated" },
+                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.78",  color:"#94a3b8",  updated:"Mar 20", note:"CDX warning active" },
+                  { name:"VIX Index",                  rating:"Neutral",          score:"0.60",  color:"#94a3b8",  updated:"Mar 20", note:"below 30 trigger" },
+                ].map(r => (
+                  <tr key={r.name}>
+                    <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
+                      {r.name}
+                      <span style={{ fontSize:10, color:"#475569", marginLeft:8 }}>{r.updated}</span>
+                    </td>
+                    <td>
+                      <span style={{ fontWeight:700, color:r.color, fontSize:13 }}>{r.rating}</span>
+                      <span style={{ fontSize:10, color:"#475569", marginLeft:8, fontStyle:"italic" }}>{r.note}</span>
+                    </td>
+                    <td style={{ fontWeight:700, color:r.color, fontSize:15, textAlign:"right" }}>{r.score}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="sumBar">
+              <span className="sumBarLabel">Sentiment Signal</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism — Contrarian Bullish Short-Term</span>
+              <span style={{ fontSize:12, color:"#475569" }}>·</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Economic Uncertainty 12.64σ and Consumer Confidence -2.30σ are historically extreme fear readings — Zeberg&apos;s &quot;most hated rally&quot; setup. Margin debt still elevated tempers the contrarian signal.</span>
+            </div>
           </section>
 
           {/* ⑧ IVY */}
