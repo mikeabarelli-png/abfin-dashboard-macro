@@ -1356,7 +1356,7 @@ RESPONSE RULES:
                 <div style={{ background:"#141b47", border:`1px solid ${hySpread>=4?"rgba(255,107,136,0.5)":"rgba(245,158,11,0.3)"}`, borderRadius:10, padding:12 }}>
                   <SH>Your trigger</SH>
                   <div style={{ fontSize:18, fontWeight:700, color: hySpread>=4?"#ff6b88":"#fbbf24" }}>400bps</div>
-                  <div style={{ fontSize:11, color:"#94a3b8", marginTop:3, lineHeight:1.5 }}>Conservative early warning. Combined with VIX >30 fires defensive posture.</div>
+                  <div style={{ fontSize:11, color:"#94a3b8", marginTop:3, lineHeight:1.5 }}>Conservative early warning. Combined with VIX &gt;30 fires defensive posture.</div>
                   <div style={{ fontSize:11, fontWeight:700, color: hySpread>=4?"#ff6b88":"#64748b", marginTop:4 }}>
                     {hySpread>=4 ? "⚠ ACTIVE" : `${Math.round((4-hySpread)*100)}bps away`}
                   </div>
