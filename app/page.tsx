@@ -709,10 +709,27 @@ RESPONSE RULES:
                 <div className="valHero">{vixValue != null ? fmt1(vixValue) : "—"}</div>
                 <div className="status" style={{ color:vixStatus.color }}>{vixValue==null?"Loading":vixValue>=30?"Stress":vixValue>=20?"Watch":"Normal"}</div>
                 <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min((vixValue??0)/50*100,100)}%`, borderRadius:9999, background:vixValue!=null&&vixValue>=30?"#ff6b88":vixValue!=null&&vixValue>=20?"#fbbf24":"#4ade80" }} />
-                  <div style={{ position:"absolute", top:-6, left:"60%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                  {(() => {
+                    const v = vixValue ?? 0;
+                    const toPos = (x: number) => Math.min(x/50*100, 100);
+                    const pos = toPos(v);
+                    const pos20 = toPos(20); // 40%
+                    const pos30 = toPos(30); // 60%
+                    return <>
+                      {/* Green: 0 → min(pos, 20) */}
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos, pos20)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {/* Amber: 20 → min(pos, 30) */}
+                      {v > 20 && <div style={{ position:"absolute", left:`${pos20}%`, top:0, height:6, width:`${Math.min(pos, pos30) - pos20}%`, background:"#fbbf24" }} />}
+                      {/* Red: 30 → pos */}
+                      {v > 30 && <div style={{ position:"absolute", left:`${pos30}%`, top:0, height:6, width:`${pos - pos30}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                    </>;
+                  })()}
+                  {/* Elevated tick at 20 */}
+                  <div style={{ position:"absolute", top:-4, left:"40%", width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
+                  {/* Stress trigger tick at 30 */}
+                  <div style={{ position:"absolute", top:-6, left:"60%", width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>30</span><span>50</span></div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>20</span><span>30↑</span><span>50</span></div>
                 <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
                   {vixValue!=null&&vixValue>=30 ? "▲ Stress — pause buying" : vixValue!=null ? `▲ ${(30-vixValue).toFixed(1)} pts from Stress` : ""}
                 </div>
@@ -776,11 +793,27 @@ RESPONSE RULES:
                   {capeRatio>35?"Extreme":capeRatio>25?"Overvalued":capeRatio>20?"Elevated":"Fairly Valued"}
                 </div>
                 <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((capeRatio-5)/45)*100,100))}%`, borderRadius:9999, background:capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80" }} />
-                  <div style={{ position:"absolute", top:-6, left:`${((20-5)/45)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.5)", borderRadius:2, zIndex:2 }} />
-                  <div style={{ position:"absolute", top:-4, left:`${((35-5)/45)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                  {(() => {
+                    // Scale: 5x → 0%, 50x → 100% (linear, 45 range)
+                    const toPos = (x: number) => Math.max(0, Math.min((x-5)/45*100, 100));
+                    const pos = toPos(capeRatio);
+                    const pos25 = toPos(25); // ~44%
+                    const pos35 = toPos(35); // ~67%
+                    return <>
+                      {/* Green: 5 → min(cape, 25) */}
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos, pos25)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {/* Amber: 25 → min(cape, 35) */}
+                      {capeRatio > 25 && <div style={{ position:"absolute", left:`${pos25}%`, top:0, height:6, width:`${Math.min(pos, pos35) - pos25}%`, background:"#fbbf24" }} />}
+                      {/* Red: 35 → cape */}
+                      {capeRatio > 35 && <div style={{ position:"absolute", left:`${pos35}%`, top:0, height:6, width:`${pos - pos35}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                    </>;
+                  })()}
+                  {/* Overvalued tick at 25x */}
+                  <div style={{ position:"absolute", top:-4, left:`${(25-5)/45*100}%`, width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
+                  {/* Extreme tick at 35x */}
+                  <div style={{ position:"absolute", top:-6, left:`${(35-5)/45*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>5x</span><span>20x</span><span>35x</span><span>50x</span></div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>5x</span><span>25x</span><span>35x↑</span><span>50x</span></div>
                 <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
                   {capeRatio>35 ? `▲ ${(capeRatio-16).toFixed(1)}x above hist. avg (16x)` : `Hist. avg ~16x · Dot-com peak 44x`}
                 </div>
@@ -796,17 +829,29 @@ RESPONSE RULES:
                   {hySpread>=7?"Crisis":hySpread>=5?"Stress":hySpread>=4?"⚠ Your Trigger":hySpread>=3.5?"Caution":"Firm"}
                 </div>
                 <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  {/* Segmented bar: <350 tight, 350-450 caution, 450-500 watch, 500-700 stress, 700+ crisis */}
-                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(
-                    hySpread <= 3.5 ? ((hySpread-2)/1.5)*30
-                    : hySpread <= 4.5 ? 30+((hySpread-3.5)/1)*20
-                    : hySpread <= 5 ? 50+((hySpread-4.5)/0.5)*10
-                    : hySpread <= 7 ? 60+((hySpread-5)/2)*25
-                    : 85+((hySpread-7)/3)*15
-                  ,100))}%`, borderRadius:9999, background:hySpread>=5?"#ff6b88":hySpread>=4?"#fbbf24":hySpread>=3.5?"#fbbf24":"#94a3b8" }} />
-                  {/* Your trigger at 400bps */}
+                  {/* Helper: convert spread value to bar % position using piecewise scale */}
+                  {(() => {
+                    const toPos = (v: number) =>
+                      v <= 3.5 ? Math.max(0,(v-2)/1.5*30)
+                      : v <= 4.5 ? 30+(v-3.5)*20
+                      : v <= 5   ? 50+(v-4.5)*20
+                      : v <= 7   ? 60+(v-5)/2*25
+                      : Math.min(100, 85+(v-7)/3*15);
+                    const pos = toPos(hySpread);
+                    const pos400 = toPos(4);   // ~40%
+                    const pos500 = toPos(5);   // ~60%
+                    return <>
+                      {/* Green segment: 0 → min(pos, pos400) */}
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos, pos400)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {/* Amber segment: pos400 → min(pos, pos500) — only if spread > 400 */}
+                      {hySpread > 4 && <div style={{ position:"absolute", left:`${pos400}%`, top:0, height:6, width:`${Math.min(pos, pos500) - pos400}%`, background:"#fbbf24" }} />}
+                      {/* Red segment: pos500 → pos — only if spread > 500 */}
+                      {hySpread > 5 && <div style={{ position:"absolute", left:`${pos500}%`, top:0, height:6, width:`${pos - pos500}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                    </>;
+                  })()}
+                  {/* Your trigger tick at 400bps */}
                   <div style={{ position:"absolute", top:-6, left:"40%", width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
-                  {/* Industry red line at 500bps */}
+                  {/* Industry red line tick at 500bps */}
                   <div style={{ position:"absolute", top:-4, left:"60%", width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
                 </div>
                 <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}>
@@ -1335,9 +1380,9 @@ RESPONSE RULES:
                 bg={hySpread>=4?"rgba(255,79,114,0.15)":hySpread>=3.5?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"}
               />
               <BC>{hySpread>=5?"Credit stress confirmed above industry red line. Serious default risk being priced. Both your trigger and the industry 500bps threshold are breached."
-                :hySpread>=4?"Above your 400bps trigger. Credit markets signaling stress. Combined with VIX >30 this activates your defensive posture."
+                :hySpread>=4?"Above your 400bps trigger. Credit markets signaling stress. Combined with VIX &gt;30 this activates your defensive posture."
                 :hySpread>=3.5?"Spreads widening toward caution zone. Direction of travel matters more than absolute level. Watch for continued widening toward 400bps."
-                :`At ${fmt2(hySpread)}%, spreads are historically tight — market priced for perfection. Any move toward 400bps would be a ~${Math.round((4-hySpread)*100/hySpread*100)}% widening from here.`}
+                :`At ${fmt2(hySpread)}%, spreads are historically tight — market priced for perfection. Any move toward 400bps would be a ~${Math.round((4-hySpread)/hySpread*100)}% widening from here.`}
               </BC>
               <BandTrack
                 segs={[{w:"30%",color:"#047857"},{w:"20%",color:"#4ade80"},{w:"10%",color:"#f59e0b"},{w:"25%",color:"#ef4444"},{w:"15%",color:"#7f1d1d"}]}
