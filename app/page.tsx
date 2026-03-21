@@ -792,14 +792,30 @@ RESPONSE RULES:
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("hy")}>
                 <div className="lbl" style={{ marginBottom:6 }}>HY Spread</div>
                 <div className="valHero" style={{ color:"#fff" }}>{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
-                <div className="status" style={{ color:hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#94a3b8" }}>{hySpread>=4?"Danger":hySpread>=3.5?"Watch":"Firm"}</div>
-                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((hySpread-2)/4)*100,100))}%`, borderRadius:9999, background:hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#94a3b8" }} />
-                  <div style={{ position:"absolute", top:-6, left:"50%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                <div className="status" style={{ color:hySpread>=7?"#ff6b88":hySpread>=5?"#ff6b88":hySpread>=4?"#fbbf24":hySpread>=3.5?"#fbbf24":"#94a3b8" }}>
+                  {hySpread>=7?"Crisis":hySpread>=5?"Stress":hySpread>=4?"⚠ Your Trigger":hySpread>=3.5?"Caution":"Firm"}
                 </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>200</span><span>400</span><span>600</span></div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  {/* Segmented bar: <350 tight, 350-450 caution, 450-500 watch, 500-700 stress, 700+ crisis */}
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(
+                    hySpread <= 3.5 ? ((hySpread-2)/1.5)*30
+                    : hySpread <= 4.5 ? 30+((hySpread-3.5)/1)*20
+                    : hySpread <= 5 ? 50+((hySpread-4.5)/0.5)*10
+                    : hySpread <= 7 ? 60+((hySpread-5)/2)*25
+                    : 85+((hySpread-7)/3)*15
+                  ,100))}%`, borderRadius:9999, background:hySpread>=5?"#ff6b88":hySpread>=4?"#fbbf24":hySpread>=3.5?"#fbbf24":"#94a3b8" }} />
+                  {/* Your trigger at 400bps */}
+                  <div style={{ position:"absolute", top:-6, left:"40%", width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
+                  {/* Industry red line at 500bps */}
+                  <div style={{ position:"absolute", top:-4, left:"60%", width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}>
+                  <span>200</span><span>400↑</span><span>500</span><span>700</span><span>1000+</span>
+                </div>
                 <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
-                  {hySpread>=4 ? "▲ Trigger active" : `▲ ${Math.round((4-hySpread)*100)}bps to trigger`}
+                  {hySpread>=5 ? "▲ Above industry red line (500bps)"
+                  : hySpread>=4 ? `▲ Trigger active · ${Math.round((5-hySpread)*100)}bps to industry red line`
+                  : `▲ ${Math.round((4-hySpread)*100)}bps to your trigger · ${Math.round((5-hySpread)*100)}bps to red line`}
                 </div>
               </div>
               {/* 7. Real 10Y */}
@@ -1313,17 +1329,45 @@ RESPONSE RULES:
             left={<>
               <SH>Current reading</SH>
               <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{fmt2(hySpread)}<span style={{ fontSize:22 }}>%</span></div>
-              <Tag label={hySpread>=4?"Danger — Above Trigger":hySpread>=3.5?"Watch — Approaching Trigger":"Firm — Below Threshold"} color={hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80"} bg={hySpread>=4?"rgba(255,79,114,0.15)":hySpread>=3.5?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
-              <BC>{hySpread>=4?"Credit markets confirming stress. HY spreads above 4% alongside VIX >30 activates your defensive posture.":hySpread>=3.5?"Credit stress building. Direction of travel matters — watch for continued widening.":"Credit markets not signaling stress. Investors comfortable taking corporate risk."}</BC>
-              <BandTrack segs={[{w:"35%",color:"#047857"},{w:"30%",color:"#4ade80"},{w:"20%",color:"#f59e0b"},{w:"15%",color:"#ef4444"}]} needle={Math.max(0,Math.min(((hySpread-2)/8)*100,99))} scaleNums={["2%","3%","4%","6%","10%+"]} scaleNames={["Tight","Firm","Watch","Stress","Crisis"]} />
-              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:14 }}>
-                <SH>Your trigger threshold</SH>
-                <div style={{ fontSize:13, lineHeight:1.7, color:"#cbd5e1" }}>HY Spread &gt;400bps (4.0%) is your stress confirmation. Current {fmt2(hySpread)}% is <span style={{ color: hySpread>=4?"#ff6b88":"#fbbf24", fontWeight:700 }}>{Math.abs((4.0-hySpread)*100).toFixed(0)}bps {hySpread<4?"below":"above"}</span> that level.</div>
-              </div>
-              <div style={{ marginTop:12, background:"#141b47", border:"1px solid rgba(239,68,68,0.25)", borderRadius:10, padding:14 }}>
-                <SH>⚠ CDX Warning Signal</SH>
-                <div style={{ fontSize:12, lineHeight:1.7, color:"#cbd5e1" }}>
-                  The CDX Index (institutional credit default swaps) is the bond market's real-time stress gauge. When CDX hits a 9-month high while the S&P 500 is within 5% of its all-time high, it has preceded a bear market <span style={{ color:"#ff6b88", fontWeight:700 }}>every single time</span> over the past 20 years — 2007, 2015, 2022, and now 2026. This signal is active. HY spread direction of travel matters more than absolute level. Credit stress doesn't arrive fully formed — it builds.
+              <Tag
+                label={hySpread>=5?"Stress — Above Industry Red Line":hySpread>=4?"⚠ Above Your Trigger":hySpread>=3.5?"Caution — Widening":"Firm — Historically Tight"}
+                color={hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80"}
+                bg={hySpread>=4?"rgba(255,79,114,0.15)":hySpread>=3.5?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"}
+              />
+              <BC>{hySpread>=5?"Credit stress confirmed above industry red line. Serious default risk being priced. Both your trigger and the industry 500bps threshold are breached."
+                :hySpread>=4?"Above your 400bps trigger. Credit markets signaling stress. Combined with VIX >30 this activates your defensive posture."
+                :hySpread>=3.5?"Spreads widening toward caution zone. Direction of travel matters more than absolute level. Watch for continued widening toward 400bps."
+                :`At ${fmt2(hySpread)}%, spreads are historically tight — market priced for perfection. Any move toward 400bps would be a ~${Math.round((4-hySpread)*100/hySpread*100)}% widening from here.`}
+              </BC>
+              <BandTrack
+                segs={[{w:"30%",color:"#047857"},{w:"20%",color:"#4ade80"},{w:"10%",color:"#f59e0b"},{w:"25%",color:"#ef4444"},{w:"15%",color:"#7f1d1d"}]}
+                needle={
+                  hySpread <= 3.5 ? Math.max(0,(hySpread-2)/1.5*30)
+                  : hySpread <= 4.5 ? 30+(hySpread-3.5)*20
+                  : hySpread <= 5   ? 50+(hySpread-4.5)*20
+                  : hySpread <= 7   ? 60+(hySpread-5)/2*25
+                  : Math.min(99, 85+(hySpread-7)/3*15)
+                }
+                scaleNums={["200","350","450","500","700","1000+"]}
+                scaleNames={["Tight","Firm","Caution","Red Line","Stress","Crisis"]}
+              />
+              {/* Dual threshold boxes */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
+                <div style={{ background:"#141b47", border:`1px solid ${hySpread>=4?"rgba(255,107,136,0.5)":"rgba(245,158,11,0.3)"}`, borderRadius:10, padding:12 }}>
+                  <SH>Your trigger</SH>
+                  <div style={{ fontSize:18, fontWeight:700, color: hySpread>=4?"#ff6b88":"#fbbf24" }}>400bps</div>
+                  <div style={{ fontSize:11, color:"#94a3b8", marginTop:3, lineHeight:1.5 }}>Conservative early warning. Combined with VIX >30 fires defensive posture.</div>
+                  <div style={{ fontSize:11, fontWeight:700, color: hySpread>=4?"#ff6b88":"#64748b", marginTop:4 }}>
+                    {hySpread>=4 ? "⚠ ACTIVE" : `${Math.round((4-hySpread)*100)}bps away`}
+                  </div>
+                </div>
+                <div style={{ background:"#141b47", border:`1px solid ${hySpread>=5?"rgba(255,107,136,0.5)":"rgba(148,163,184,0.2)"}`, borderRadius:10, padding:12 }}>
+                  <SH>Industry red line</SH>
+                  <div style={{ fontSize:18, fontWeight:700, color: hySpread>=5?"#ff6b88":"#94a3b8" }}>500bps</div>
+                  <div style={{ fontSize:11, color:"#94a3b8", marginTop:3, lineHeight:1.5 }}>Historical pivot — credit cycle turning. Long-term avg is ~540bps.</div>
+                  <div style={{ fontSize:11, fontWeight:700, color: hySpread>=5?"#ff6b88":"#64748b", marginTop:4 }}>
+                    {hySpread>=5 ? "⚠ BREACHED" : `${Math.round((5-hySpread)*100)}bps away`}
+                  </div>
                 </div>
               </div>
             </>}
@@ -1333,30 +1377,34 @@ RESPONSE RULES:
                 <BC>HY spread is the extra yield investors demand to hold junk-rated corporate bonds vs. Treasuries. Credit is the lifeblood of the economy — businesses borrow to operate, consumers borrow to spend. When lenders get nervous, credit conditions tighten weeks before equities reprice. The bond market is harder to talk up than stocks and is not susceptible to retail momentum. When credit speaks, listen.</BC>
               </MCard>
               <MCard>
-                <SH>The 6 warning signs of credit stress</SH>
-                <div style={{ fontSize:12, lineHeight:1.8, color:"#cbd5e1", marginTop:6 }}>
-                  <div>📉 <span style={{ color:"#ff6b88", fontWeight:600 }}>Liquidity drain</span> — capital flees to Treasuries, corporate bond liquidity shrinks</div>
-                  <div>🏦 <span style={{ color:"#ff6b88", fontWeight:600 }}>Solvency concern</span> — rising spreads signal debt-servicing worry</div>
-                  <div>😨 <span style={{ color:"#fbbf24", fontWeight:600 }}>Risk sentiment shift</span> — credit markets price risk before equities do</div>
-                  <div>📊 <span style={{ color:"#fbbf24", fontWeight:600 }}>Earnings compression</span> — high-yield issuers can't refinance cheaply</div>
-                  <div>🐌 <span style={{ color:"#fbbf24", fontWeight:600 }}>Growth slowing</span> — tighter credit = less investment and spending</div>
-                  <div>📈 <span style={{ color:"#94a3b8", fontWeight:600 }}>Volatility rising</span> — risk appetite declining = VIX moving higher</div>
+                <SH>The threshold framework</SH>
+                <div style={{ fontSize:12, lineHeight:1.9, color:"#cbd5e1", marginTop:6 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#4ade80" }}>{"<"}350bps</span><span>Tight · Risk-on · Priced for perfection</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#fbbf24" }}>350–400bps</span><span>Caution · Widening trend to watch</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#fbbf24", fontWeight:700 }}>400bps ←</span><span style={{ fontWeight:700 }}>Your defensive trigger</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#f97316" }}>450–500bps</span><span>Watch zone · Default risk rising</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#ff6b88", fontWeight:700 }}>500bps ←</span><span style={{ fontWeight:700 }}>Industry red line</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#ff6b88" }}>700bps+</span><span>Stress · Recession territory</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#7f1d1d" }}>1000bps+</span><span>Crisis · GFC / COVID level</span></div>
                 </div>
               </MCard>
               <MCard>
                 <SH>Historical CDX warning instances</SH>
                 <div style={{ display:"grid", gap:5, marginTop:8 }}>
-                  <HistRow val="2007" event="CDX 9-mo high · SPX near highs" note="GFC followed · -57%" />
-                  <HistRow val="2015" event="CDX 9-mo high · SPX near highs" note="Sharp correction · -15%" />
-                  <HistRow val="2022" event="CDX 9-mo high · SPX near highs" note="Bear market · -25%" />
-                  <HistRow val="2026" event="CDX signal active NOW" note="Outcome TBD · signal valid" active />
-                  <HistRow val="3.0%" event="Historical tight spread" note="Bull market complacency zone" />
+                  <HistRow val="20%+" event="GFC 2008-09" note="Credit markets frozen · 1000bps+" />
+                  <HistRow val="10.9%" event="COVID Mar 2020" note="Sharp spike · rapid recovery" />
+                  <HistRow val="8.4%" event="Energy crisis 2016" note="Oil-driven stress · 700bps" />
+                  <HistRow val="5.8%" event="2022 rate shock" note="Fed hiking cycle · 580bps peak" />
+                  <HistRow val={`${fmt2(hySpread)}%`} event="Today" note={hySpread>=4?"Above your trigger · stress building":"Historically tight · priced for perfection"} active />
+                  <HistRow val="5.4%" event="Long-run average" note="~540bps historical mean" />
                 </div>
               </MCard>
               <ActionCard>
-                {hySpread>=4
-                  ? `HY at ${fmt2(hySpread)}% — trigger active. Combined with VIX >30 this fires your defensive posture. Reduce equity exposure per your rules.`
-                  : `HY at ${fmt2(hySpread)}% — below 4% trigger but CDX warning signal is active. Direction of travel is the key watch. Don't wait for the spike — act on the trend. Both VIX >30 AND HY >400bps must confirm to activate defensive posture. Monitor weekly.`}
+                {hySpread>=5
+                  ? `HY at ${fmt2(hySpread)}% — above both your trigger AND the 500bps industry red line. Full defensive posture warranted if VIX >30 confirms.`
+                  : hySpread>=4
+                  ? `HY at ${fmt2(hySpread)}% — your trigger is active. ${Math.round((5-hySpread)*100)}bps from the industry red line. Combined with VIX >30 this fires your defensive posture.`
+                  : `HY at ${fmt2(hySpread)}% — ${Math.round((4-hySpread)*100)}bps below your 400bps trigger, ${Math.round((5-hySpread)*100)}bps below the 500bps industry red line. CDX warning signal is active — direction of travel matters. Monitor weekly. Both VIX >30 AND HY >400bps must confirm to activate defensive posture.`}
               </ActionCard>
             </>}
           />
