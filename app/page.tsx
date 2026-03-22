@@ -100,6 +100,11 @@ export default function Page() {
   const fearGreedScore = getNum(metrics?.fear_greed_score, marketData?.fear_greed_score) ?? 15;
   const fearGreedRating: string = metrics?.fear_greed_rating ?? marketData?.fear_greed_rating ?? "Extreme Fear";
 
+  // Fed Balance Sheet (WALCL)
+  const walclBn    = getNum(metrics?.walcl_bn,    marketData?.walcl_bn);     // billions
+  const walclChgBn = getNum(metrics?.walcl_chg_bn, marketData?.walcl_chg_bn); // WoW change, billions
+  const walclDirection: string = metrics?.walcl_direction ?? marketData?.walcl_direction ?? "";
+
   // Live Ivy Portfolio data from route.ts
   const ivyData = metrics?.ivy ?? marketData?.ivy ?? null;
 
@@ -273,6 +278,7 @@ CURRENT DASHBOARD DATA (live):
 - CAPE: ${capeRatio.toFixed(1)}x
 - Fear & Greed: ${Math.round(fearGreedScore)} — ${fearGreedRating} ${fearGreedScore <= 20 ? "⚠ EXTREME FEAR (contrarian rally setup — Zeberg)" : fearGreedScore >= 80 ? "⚠ EXTREME GREED (Grantham bubble warning)" : ""}
 - DXY: ${dxy != null ? dxy.toFixed(2) : "loading"}
+- Fed Balance Sheet (WALCL): ${walclBn != null ? `$${(walclBn/1000).toFixed(2)}T` : "loading"}${walclChgBn != null ? ` · ${walclChgBn > 0 ? "▲" : "▼"} $${Math.abs(walclChgBn)}B WoW · ${walclDirection}` : ""}
 - Ivy Portfolio: ${ivyInvestedCount}/5 assets Invested · ${ivyPositions.filter(p => p.variance != null && Math.abs(p.variance) < 2).map(p => p.ticker + " NEAR SIGNAL").join(", ") || "All clear of signal lines"}
 - Valuation models: 4/5 overvalued
 
@@ -804,47 +810,83 @@ RESPONSE RULES:
               </div>
               {/* 5. Advance/Decline Line */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("ad")}>
-                <div className="lbl" style={{ marginBottom:6 }}>Advance / Decline</div>
-                <div className="valHero" style={{ fontSize:22, color:
-                  adLine?.signal === "bullish_divergence" ? "#4ade80"
-                  : adLine?.signal === "confirming_weakness" ? "#ff6b88" : "#fbbf24" }}>
-                  {adLine?.signal === "bullish_divergence" ? "Diverging ↑"
-                  : adLine?.signal === "confirming_weakness" ? "Confirming ↓" : "Neutral"}
-                </div>
-                <div className="status" style={{ color:
-                  adLine?.signal === "bullish_divergence" ? "#4ade80"
-                  : adLine?.signal === "confirming_weakness" ? "#ff6b88" : "#fbbf24" }}>
-                  {adLine?.signal === "bullish_divergence" ? "Hidden Strength"
-                  : adLine?.signal === "confirming_weakness" ? "Broad Selling" : "Tracking SPX"}
-                </div>
-                <div style={{ marginTop:10, display:"grid", gridTemplateColumns:"1fr 1fr", gap:5 }}>
-                  <div style={{ background:"#141b47", borderRadius:6, padding:"5px 8px" }}>
-                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>A/D Trend</div>
-                    <div style={{ fontSize:11, fontWeight:700, marginTop:2, color:
-                      adLine?.adTrend === "higher_lows" ? "#4ade80"
-                      : adLine?.adTrend === "lower_lows" ? "#ff6b88" : "#fbbf24" }}>
-                      {adLine?.adTrend === "higher_lows" ? "↗ Higher Lows"
-                      : adLine?.adTrend === "lower_lows" ? "↘ Lower Lows" : "→ Flat"}
+                <div className="lbl" style={{ marginBottom:8 }}>Advance / Decline</div>
+
+                {/* ── Divergence Arrow Display ── */}
+                {(() => {
+                  const adDir = adLine?.adTrend === "higher_lows" ? "up"
+                    : adLine?.adTrend === "lower_lows" ? "down" : "flat";
+                  const spxDir = adLine?.adVsSpx === "diverging_up" ? "up"
+                    : adLine?.adVsSpx === "diverging_down" ? "down" : "flat";
+                  const isDiverging = adDir !== spxDir;
+                  const adColor = adDir === "up" ? "#4ade80" : adDir === "down" ? "#ff6b88" : "#fbbf24";
+                  const spxColor = spxDir === "up" ? "#4ade80" : spxDir === "down" ? "#ff6b88" : "#fbbf24";
+                  const adArrow = adDir === "up" ? "↗" : adDir === "down" ? "↘" : "→";
+                  const spxArrow = spxDir === "up" ? "↗" : spxDir === "down" ? "↘" : "→";
+                  return (
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
+                      {/* A/D arrow */}
+                      <div style={{ flex:1, background:"#141b47", borderRadius:8, padding:"7px 8px", textAlign:"center" }}>
+                        <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:3 }}>A/D Line</div>
+                        <div style={{ fontSize:22, fontWeight:800, color:adColor, lineHeight:1 }}>{adArrow}</div>
+                        <div style={{ fontSize:10, fontWeight:600, color:adColor, marginTop:2 }}>
+                          {adDir === "up" ? "Higher Lows" : adDir === "down" ? "Lower Lows" : "Flat"}
+                        </div>
+                      </div>
+                      {/* Divergence indicator */}
+                      <div style={{ display:"flex", flexDirection:"column" as const, alignItems:"center", gap:2 }}>
+                        <div style={{ width:18, height:18, borderRadius:"50%", background: isDiverging ? "rgba(251,191,36,0.2)" : "rgba(148,163,184,0.1)", border:`1px solid ${isDiverging?"#fbbf24":"#334155"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9 }}>
+                          {isDiverging ? "≠" : "="}
+                        </div>
+                        <div style={{ fontSize:8, color: isDiverging ? "#fbbf24" : "#334155", fontWeight:700, textTransform:"uppercase" as const }}>
+                          {isDiverging ? "DIV" : "CON"}
+                        </div>
+                      </div>
+                      {/* SPX arrow */}
+                      <div style={{ flex:1, background:"#141b47", borderRadius:8, padding:"7px 8px", textAlign:"center" }}>
+                        <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:3 }}>SPX</div>
+                        <div style={{ fontSize:22, fontWeight:800, color:spxColor, lineHeight:1 }}>{spxArrow}</div>
+                        <div style={{ fontSize:10, fontWeight:600, color:spxColor, marginTop:2 }}>
+                          {spxDir === "up" ? "Rising" : spxDir === "down" ? "Falling" : "Flat"}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ background:"#141b47", borderRadius:6, padding:"5px 8px" }}>
-                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>vs SPX</div>
-                    <div style={{ fontSize:11, fontWeight:700, marginTop:2, color:
-                      adLine?.adVsSpx === "diverging_up" ? "#4ade80"
-                      : adLine?.adVsSpx === "diverging_down" ? "#ff6b88" : "#94a3b8" }}>
-                      {adLine?.adVsSpx === "diverging_up" ? "↑ Diverging"
-                      : adLine?.adVsSpx === "diverging_down" ? "↓ Confirming" : "Tracking"}
+                  );
+                })()}
+
+                {/* ── Signal Strength Bar ── */}
+                {(() => {
+                  // Map signal to position: bullish_divergence=10, neutral=50, confirming_weakness=90
+                  const barPos = adLine?.signal === "bullish_divergence" ? 10
+                    : adLine?.signal === "confirming_weakness" ? 90 : 50;
+                  const sigColor = adLine?.signal === "bullish_divergence" ? "#4ade80"
+                    : adLine?.signal === "confirming_weakness" ? "#ff6b88" : "#fbbf24";
+                  return (
+                    <div style={{ marginBottom:8 }}>
+                      <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", overflow:"visible" }}>
+                        {/* Green left zone */}
+                        <div style={{ position:"absolute", left:0, top:0, height:6, width:"33%", background:"rgba(74,222,128,0.25)", borderRadius:"9999px 0 0 9999px" }} />
+                        {/* Amber center zone */}
+                        <div style={{ position:"absolute", left:"33%", top:0, height:6, width:"34%", background:"rgba(251,191,36,0.2)" }} />
+                        {/* Red right zone */}
+                        <div style={{ position:"absolute", left:"67%", top:0, height:6, width:"33%", background:"rgba(239,68,68,0.25)", borderRadius:"0 9999px 9999px 0" }} />
+                        {/* Needle */}
+                        <div style={{ position:"absolute", top:-5, left:`calc(${barPos}% - 5px)`, width:10, height:16, borderRadius:3, background:sigColor, zIndex:2, boxShadow:`0 0 6px ${sigColor}` }} />
+                      </div>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155", marginTop:4 }}>
+                        <span style={{ color:"#4ade80" }}>Hidden Strength</span>
+                        <span style={{ color:"#fbbf24" }}>Neutral</span>
+                        <span style={{ color:"#ff6b88" }}>Broad Selling</span>
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <div style={{ fontSize:11, marginTop:8, color:"#64748b", fontWeight:600, lineHeight:1.4 }}>
-                  {adLine?.note ?? "NYSE breadth — manual weekly update"}
-                </div>
-                <div style={{ fontSize:9, color:"#334155", marginTop:4 }}>Updated {adLine?.updatedDate ?? "—"} · Manual</div>
+                  );
+                })()}
+
+                <div style={{ fontSize:9, color:"#334155", marginTop:2 }}>Updated {adLine?.updatedDate ?? "—"} · Manual</div>
               </div>
             </div>
 
-            {/* ── Confluence banner — below tiles, mirrors Market Structure alert strip ── */}
+            {/* ── Confluence banner — action-oriented state machine ── */}
             {(() => {
               const signals = [
                 hySpread < 4,
@@ -854,23 +896,86 @@ RESPONSE RULES:
                 adLine?.signal === "bullish_divergence" || adLine?.signal === "neutral",
               ];
               const greenCount = signals.filter(Boolean).length;
+              const redCount = 5 - greenCount;
               const labels = ["HY","VIX","ERP","DXY","A/D"];
-              const verdict = is200Broken
-                ? (greenCount >= 4
-                  ? { label:"Head-Fake — Credit Not Confirming Break", dot:"#4ade80", titleColor:"#4ade80", borderColor:"rgba(74,222,128,0.35)" }
-                  : greenCount >= 3
-                  ? { label:"Mixed — Monitor Closely", dot:"#fbbf24", titleColor:"#fbbf24", borderColor:"rgba(245,158,11,0.35)" }
-                  : { label:"Confirmed Stress — Defense Mode", dot:"#ff6b88", titleColor:"#ff6b88", borderColor:"rgba(239,68,68,0.5)" })
-                : { label:"200-DMA intact — signals for context only", dot:"#475569", titleColor:"#64748b", borderColor:"rgba(71,85,105,0.3)" };
+
+              // ── State machine: 4 states based on 200-DMA + confirmation count ──
+              type ConfluenceState = "intact" | "headfake" | "mixed" | "confirmed";
+              const state: ConfluenceState =
+                !is200Broken                      ? "intact"
+                : greenCount >= 4                 ? "headfake"
+                : greenCount >= 2                 ? "mixed"
+                :                                   "confirmed";
+
+              // Action sentences — keyed to your specific portfolio and levels
+              const spx200Str  = fmtWhole(spx200);
+              const spxStr     = spxPrice != null ? fmtWhole(spxPrice) : "—";
+              const hyTrigStr  = `HY ${hySpread.toFixed(2)}% (trigger: 4.00%)`;
+              const vixStr     = vixValue != null ? `VIX ${fmt1(vixValue)}` : "VIX —";
+
+              const stateConfig: Record<ConfluenceState, {
+                badge: string; badgeColor: string; borderColor: string;
+                title: string; titleColor: string;
+                action: string; actionColor: string;
+              }> = {
+                intact: {
+                  badge: "HOLD",
+                  badgeColor: "#475569",
+                  borderColor: "rgba(71,85,105,0.3)",
+                  title: `200-DMA intact · ${spxStr} vs ${spx200Str} · No defensive action`,
+                  titleColor: "#64748b",
+                  action: `Signals are for context only. 200-DMA is holding — no rule-based trigger is active. Continue current 40/60 positioning. Next watch: two consecutive Friday closes below ${spx200Str}.`,
+                  actionColor: "#64748b",
+                },
+                headfake: {
+                  badge: "HOLD",
+                  badgeColor: "#4ade80",
+                  borderColor: "rgba(74,222,128,0.35)",
+                  title: `Head-Fake Signal · ${greenCount}/5 healthy · Credit NOT confirming break`,
+                  titleColor: "#4ade80",
+                  action: `${greenCount} of 5 stress signals remain healthy (${hyTrigStr}, ${vixStr} below 30). This pattern — price break without credit confirmation — resolves to upside ~70% historically. Hold VTI, SCHD, VEA. Do NOT trim equity into this flush. Watch for two Friday closes below ${spx200Str} with ${redCount === 2 ? "HY or VIX" : "HY AND VIX"} confirming before acting.`,
+                  actionColor: "#4ade80",
+                },
+                mixed: {
+                  badge: "WATCH",
+                  badgeColor: "#fbbf24",
+                  borderColor: "rgba(245,158,11,0.4)",
+                  title: `Mixed Confirmation · ${greenCount}/5 healthy · Elevated caution`,
+                  titleColor: "#fbbf24",
+                  action: `${redCount} of 5 stress signals are flashing (${signals.map((g,i) => !g ? labels[i] : null).filter(Boolean).join(", ")}). Downside risk is real but not yet rule-based. Raise mental stops on VTI at ${spx200Str} SPX. Ensure SGOV + VTIP are at full allocation. Do not add new equity risk. If one more signal breaks — move to Confirmed state and trim VTI.`,
+                  actionColor: "#fbbf24",
+                },
+                confirmed: {
+                  badge: "ACT",
+                  badgeColor: "#ff6b88",
+                  borderColor: "rgba(239,68,68,0.55)",
+                  title: `Confirmed Stress · ${greenCount}/5 healthy · Defense trigger active`,
+                  titleColor: "#ff6b88",
+                  action: `${redCount} of 5 stress signals confirmed (${signals.map((g,i) => !g ? labels[i] : null).filter(Boolean).join(", ")}). Rule-based defensive action: trim VTI from 10% → 5%, move proceeds to SGOV. Hold SCHD and VEA — quality equity with lower drawdown profiles. Do not touch SGOV, VTIP, VGIT, or GLDM. Reset trigger: two weekly closes back above ${spx200Str} with VIX sustainably below 20.`,
+                  actionColor: "#ff6b88",
+                },
+              };
+
+              const v = stateConfig[state];
+
               return (
-                <div style={{ background:"#0f172a", border:`1px solid ${verdict.borderColor}`, borderRadius:10, padding:"10px 14px", marginTop:0, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" as const }}>
-                  <span style={{ width:8, height:8, borderRadius:"50%", background:verdict.dot, flexShrink:0, display:"inline-block" }} />
-                  <span style={{ fontSize:12, fontWeight:700, color:verdict.titleColor }}>{greenCount}/5 signals healthy · {verdict.label}</span>
-                  <span style={{ fontSize:11, color:"#475569" }}>
-                    {signals.map((g, i) => (
-                      <span key={i} style={{ marginRight:8, color: g ? "#4ade80" : "#ff6b88" }}>{g ? "✓" : "✗"} {labels[i]}</span>
-                    ))}
-                  </span>
+                <div style={{ background:"#0f172a", border:`1px solid ${v.borderColor}`, borderRadius:10, padding:"12px 14px", marginTop:0 }}>
+                  {/* Row 1: badge + title + signal pills */}
+                  <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" as const, marginBottom:8 }}>
+                    <span style={{ fontSize:10, fontWeight:800, letterSpacing:"0.08em", padding:"2px 8px", borderRadius:4, background:`${v.badgeColor}22`, color:v.badgeColor, border:`1px solid ${v.badgeColor}55`, flexShrink:0 }}>{v.badge}</span>
+                    <span style={{ fontSize:12, fontWeight:700, color:v.titleColor }}>{v.title}</span>
+                    <span style={{ marginLeft:"auto", display:"flex", gap:6, flexWrap:"wrap" as const }}>
+                      {signals.map((g, i) => (
+                        <span key={i} style={{ fontSize:10, fontWeight:700, color: g ? "#4ade80" : "#ff6b88", background: g ? "rgba(74,222,128,0.08)" : "rgba(239,68,68,0.08)", padding:"1px 7px", borderRadius:4, border:`1px solid ${g ? "rgba(74,222,128,0.2)" : "rgba(239,68,68,0.2)"}` }}>
+                          {g ? "✓" : "✗"} {labels[i]}
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                  {/* Row 2: action sentence */}
+                  <div style={{ fontSize:12, color:v.actionColor === "#64748b" ? "#475569" : "#94a3b8", lineHeight:1.6, borderTop:"1px solid rgba(255,255,255,0.04)", paddingTop:8 }}>
+                    <span style={{ fontWeight:700, color:v.actionColor, marginRight:6 }}>→</span>{v.action}
+                  </div>
                 </div>
               );
             })()}
@@ -1045,7 +1150,6 @@ RESPONSE RULES:
                 { label:"CPI Inflation",    val:"2.8%",  date:"YoY",     chg:"▼ 0.2% easing",    chgColor:"#4ade80", sub:"3-mo: slowly easing",  pill:"Above Target",  pillC:"pillA", sColor:"#fbbf24", pts:"0,16 25,15 50,14 75,13 100,12", mid:false, isMeter:true, mW:"56%", mC:"#fbbf24", sc:["0%","2%","5%"] },
                 { label:"GDP Growth",       val:"2.3%",  date:"Q4 '24",  chg:"▼ 0.8% from prior", chgColor:"#ff6b88", sub:"3-mo: moderating",      pill:"Positive",      pillC:"pillG", sColor:"#4ade80", pts:"0,14 25,13 50,11 75,10 100,12", mid:false, isMeter:true, mW:"46%", mC:"#4ade80", sc:["-2%","0%","5%"] },
                 { label:"Nonfarm Payrolls", val:"151K",  date:"Feb '25", chg:"▼ 56K from prior",  chgColor:"#ff6b88", sub:"3-mo: decelerating",    pill:"Below Trend",   pillC:"pillA", sColor:"#fbbf24", pts:"0,8 25,9 50,11 75,13 100,15",  mid:false, isMeter:true, mW:"38%", mC:"#fbbf24", sc:["0","200K","400K"] },
-                { label:"Fed Net Liquidity",val:"$6.1T", date:"",        chg:"▼ $180B from prior", chgColor:"#ff6b88", sub:"3-mo: draining",        pill:"Tightening",    pillC:"pillR", sColor:"#ff6b88", pts:"0,6 25,8 50,11 75,15 100,20",  mid:false, isMeter:false },
                 { label:"ISM Mfg PMI",      val:"49.0",  date:"",        chg:"▼ 0.6 from prior",  chgColor:"#ff6b88", sub:"3-mo: contracting",     pill:"Below 50",      pillC:"pillR", sColor:"#ff6b88", pts:"0,8 25,9 50,11 75,12 100,14",  mid:true,  isMeter:false },
               ].map(t => (
                 <div key={t.label} className="tile">
@@ -1065,6 +1169,35 @@ RESPONSE RULES:
                   <span className={t.pillC}>{t.pill}</span>
                 </div>
               ))}
+
+              {/* ── Fed Balance Sheet (WALCL) — LIVE from FRED ── */}
+              {(() => {
+                const trillions = walclBn != null ? walclBn / 1000 : null;
+                const dir = walclDirection || (walclChgBn == null ? "" : walclChgBn > 10 ? "expanding" : walclChgBn < -10 ? "contracting" : "flat");
+                const chgLabel = walclChgBn != null
+                  ? `${walclChgBn > 0 ? "▲" : "▼"} $${Math.abs(walclChgBn)}B WoW`
+                  : "▼ $180B from prior";
+                const chgColor = walclChgBn != null ? (walclChgBn > 0 ? "#4ade80" : "#ff6b88") : "#ff6b88";
+                const pill = dir === "expanding" ? "Expanding" : dir === "flat" ? "Stable" : "Tightening";
+                const pillC = dir === "expanding" ? "pillG" : dir === "flat" ? "pillA" : "pillR";
+                const barColor = dir === "expanding" ? "#4ade80" : dir === "flat" ? "#fbbf24" : "#ff6b88";
+                const barW = trillions != null ? Math.max(5, Math.min((trillions / 10) * 100, 100)) : 61;
+                const subText = dir === "expanding" ? "3-mo: expanding" : dir === "flat" ? "3-mo: stable" : "3-mo: draining";
+                return (
+                  <div className="tile">
+                    <div className="lbl">Fed Balance Sheet</div>
+                    <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>
+                      {trillions != null ? `$${trillions.toFixed(2)}T` : "$—"}
+                      <span style={{ fontSize:10, color:"#475569", marginLeft:5 }}>WALCL</span>
+                    </div>
+                    <div style={{ fontSize:12, fontWeight:600, color:chgColor, marginTop:3 }}>{chgLabel}</div>
+                    <div className="meterTrack"><div className="meterFill" style={{ width:`${barW}%`, background:barColor }} /><div className="meterMarker" style={{ left:`${barW}%` }} /></div>
+                    <div className="meterScale"><span>$5T</span><span>$7.5T</span><span>$10T</span></div>
+                    <div className="sub" style={{ marginTop:4 }}>{subText}</div>
+                    <span className={pillC}>{pill}</span>
+                  </div>
+                );
+              })()}
             </div>
             <div className="grid5">
               {[
