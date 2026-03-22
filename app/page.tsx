@@ -1448,17 +1448,25 @@ RESPONSE RULES:
             <table className="ivyTable">
               <thead>
                 <tr>
-                  <th style={{ width:"10%" }}>Fund</th>
-                  <th style={{ width:"18%" }}>Name</th>
-                  <th style={{ width:"18%", textAlign:"center" }}>
+                  <th style={{ width:"8%" }}>Fund</th>
+                  <th style={{ width:"16%" }}>Name</th>
+                  <th style={{ width:"16%", textAlign:"center" }}>
                     Current Position
                     <div style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0 }}>as of {ivyOfficialDate}</div>
                   </th>
-                  <th style={{ width:"28%", textAlign:"center" }}>
+                  <th style={{ width:"22%", textAlign:"center" }}>
                     {ivyEOMDate} Forecast
                     <div style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0 }}>live price vs 10-mo SMA</div>
                   </th>
-                  <th style={{ width:"26%" }}>Variance vs SMA</th>
+                  <th style={{ width:"14%", textAlign:"right" }}>
+                    Price
+                    <div style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0 }}>live</div>
+                  </th>
+                  <th style={{ width:"14%", textAlign:"right" }}>
+                    10-mo SMA
+                    <div style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0 }}>month-end avg</div>
+                  </th>
+                  <th style={{ width:"10%", textAlign:"right" }}>Variance</th>
                 </tr>
               </thead>
               <tbody>
@@ -1469,11 +1477,8 @@ RESPONSE RULES:
                     <tr key={r.ticker} style={{ background: isAtRisk ? "rgba(239,68,68,0.03)" : isWatch ? "rgba(245,158,11,0.03)" : "transparent" }}>
                       {/* Fund */}
                       <td style={{ fontWeight:700, color:"#cbd5e1" }}>{r.ticker}</td>
-                      {/* Name + SMA */}
-                      <td style={{ color:"#64748b", fontSize:12 }}>
-                        {r.name}
-                        {r.sma != null && <div style={{ fontSize:10, color:"#334155", marginTop:1 }}>SMA: {r.sma.toFixed(2)}</div>}
-                      </td>
+                      {/* Name */}
+                      <td style={{ color:"#64748b", fontSize:12 }}>{r.name}</td>
                       {/* Current Official Position */}
                       <td style={{ textAlign:"center" }}>
                         <span style={{ fontWeight:700, color:"#4ade80", fontSize:13 }}>
@@ -1496,16 +1501,17 @@ RESPONSE RULES:
                           </div>
                         )}
                       </td>
-                      {/* Variance bar */}
-                      <td>
-                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                          <div className="bbar" style={{ width:100, flexShrink:0 }}>
-                            <div className="bbarFill" style={{ width:`${r.pct}%`, background: r.forecastColor }} />
-                          </div>
-                          <span style={{ fontSize:12, fontWeight:600, color: r.forecastColor }}>
-                            {r.variance != null ? `${r.variance >= 0 ? "+" : ""}${r.variance.toFixed(1)}%` : "—"}
-                          </span>
-                        </div>
+                      {/* Price */}
+                      <td style={{ textAlign:"right", fontWeight:600, color:"#e2e8f0", fontSize:13 }}>
+                        {r.price != null ? r.price.toFixed(2) : "—"}
+                      </td>
+                      {/* 10-mo SMA */}
+                      <td style={{ textAlign:"right", fontWeight:600, color:"#94a3b8", fontSize:13 }}>
+                        {r.sma != null ? r.sma.toFixed(2) : "—"}
+                      </td>
+                      {/* Variance % — number only, no bar */}
+                      <td style={{ textAlign:"right", fontWeight:700, fontSize:13, color: r.forecastColor }}>
+                        {r.variance != null ? `${r.variance >= 0 ? "+" : ""}${r.variance.toFixed(1)}%` : "—"}
                       </td>
                     </tr>
                   );
@@ -1732,23 +1738,67 @@ RESPONSE RULES:
             left={<><SH>Current levels</SH>
               <div style={{ display:"flex", alignItems:"baseline", gap:16, marginBottom:6 }}><div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1 }}>{fmtWhole(spx200)}</div><div style={{ fontSize:13, color:"#64748b" }}>200-DMA</div></div>
               <div style={{ fontSize:24, fontWeight:700, color:"#fff", marginBottom:8 }}>{spxPrice!=null?fmtWhole(spxPrice):"—"} <span style={{ fontSize:13, color:"#64748b" }}>SPX today</span></div>
-              <Tag label={`Testing Support · ${spxVs(spx200)!=null?fmtSigned1(spxVs(spx200)!):"?"} above`} color="#fbbf24" bg="rgba(245,158,11,0.15)" />
-              <BC>SPX is {spxPrice!=null?`only ${Math.abs(spxPrice-spx200).toFixed(0)} points above its 200-DMA.`:"near its 200-DMA."} This is the critical long-term support level — a sustained break below triggers your defensive posture.</BC>
-              <div style={{ marginTop:14 }}>
-                <SH>Distance from 200-DMA</SH>
-                <div style={{ position:"relative", height:8, background:"#1e2a5e", borderRadius:9999, margin:"8px 0", overflow:"hidden" }}>
-                  <div style={{ position:"absolute", left:"50%", top:0, height:8, width:`${Math.abs(spxVs(spx200)??1.6)/2}%`, background:"#fbbf24", borderRadius:"0 9999px 9999px 0" }} />
-                  <div style={{ position:"absolute", top:-2, left:"50%", width:2, height:12, background:"rgba(255,255,255,0.5)", borderRadius:1 }} />
-                </div>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>-10% below</span><span>At 200-DMA</span><span>+10% above</span></div>
-              </div>
-              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:14 }}>
-                <SH>Your defensive trigger</SH>
-                <div style={{ fontSize:13, lineHeight:1.6, color:"#fbbf24" }}>Two consecutive Friday closes below {fmtWhole(spx200)} AND VIX &gt;30 or HY &gt;400bps activates defensive posture.</div>
-              </div></>}
+              {(() => {
+                const pct200 = spxVs(spx200);
+                const isBelow = pct200 != null && pct200 < 0;
+                const isTesting = pct200 != null && pct200 >= 0 && pct200 <= 2;
+                const tagLabel = pct200 == null ? "Loading"
+                  : isBelow ? `Broken Below · ${fmtSigned1(pct200)}`
+                  : isTesting ? `Testing Support · ${fmtSigned1(pct200)} above`
+                  : `Holding Above · ${fmtSigned1(pct200)}`;
+                const tagColor = isBelow ? "#ff6b88" : isTesting ? "#fbbf24" : "#4ade80";
+                const tagBg = isBelow ? "rgba(255,79,114,0.15)" : isTesting ? "rgba(245,158,11,0.15)" : "rgba(74,222,128,0.15)";
+                const pts = spxPrice != null ? Math.abs(spxPrice - spx200).toFixed(0) : "—";
+                const direction = isBelow ? "below" : "above";
+                const barPct = Math.min(Math.abs(pct200 ?? 1.6) / 2, 10);
+                return (<>
+                  <Tag label={tagLabel} color={tagColor} bg={tagBg} />
+                  <BC>SPX is {spxPrice != null ? `${pts} points ${direction} its 200-DMA.` : "near its 200-DMA."} {isBelow ? "The 200-DMA has been broken — this is the level that separates corrections from bear markets. Watch for two consecutive Friday closes below to confirm." : "This is the critical long-term support level — a sustained break below triggers your defensive posture."}</BC>
+                  <div style={{ marginTop:14 }}>
+                    <SH>Distance from 200-DMA</SH>
+                    <div style={{ position:"relative", height:8, background:"#1e2a5e", borderRadius:9999, margin:"8px 0", overflow:"hidden" }}>
+                      {isBelow
+                        ? <div style={{ position:"absolute", right:"50%", top:0, height:8, width:`${barPct * 5}%`, background:"#ff6b88", borderRadius:"9999px 0 0 9999px" }} />
+                        : <div style={{ position:"absolute", left:"50%", top:0, height:8, width:`${barPct * 5}%`, background: isTesting ? "#fbbf24" : "#4ade80", borderRadius:"0 9999px 9999px 0" }} />
+                      }
+                      <div style={{ position:"absolute", top:-2, left:"50%", width:2, height:12, background:"rgba(255,255,255,0.5)", borderRadius:1 }} />
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>-10% below</span><span>At 200-DMA</span><span>+10% above</span></div>
+                  </div>
+                  <div style={{ marginTop:16, background:"#141b47", border:`1px solid ${isBelow ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.3)"}`, borderRadius:10, padding:14 }}>
+                    <SH>Your defensive trigger</SH>
+                    <div style={{ fontSize:13, lineHeight:1.6, color: isBelow ? "#ff6b88" : "#fbbf24" }}>Two consecutive Friday closes below {fmtWhole(spx200)} AND VIX &gt;30 or HY &gt;400bps activates defensive posture.</div>
+                  </div>
+                </>);
+              })()}
+            </>}
             right={<><MCard><SH>Why the 200-DMA matters</SH><BC>The 200-day moving average represents roughly one year of trading. It is the single most watched trend line by institutional investors, hedge funds, and systematic strategies. When SPX breaks below it, many models automatically reduce equity exposure — creating self-reinforcing selling pressure.</BC></MCard>
-              <MCard><SH>Historical 200-DMA breaks</SH><div style={{ display:"grid", gap:5, marginTop:8 }}><HistRow val="-34%" event="COVID 2020" note="Broke · recovered in 23 days" /><HistRow val="-20%" event="2022 bear" note="Broke Jan · stayed below 10 months" /><HistRow val="-19%" event="Q4 2018" note="Broke Dec · recovered Feb 2019" /><HistRow val="-57%" event="GFC 2008" note="Broke Oct 2007 · 2 year bear" /><HistRow val={spxVs(spx200)!=null?fmtSigned1(spxVs(spx200)!):"+1.6%"} event="Today" note="Above · testing support zone" active /></div></MCard>
-              <ActionCard>SPX is {spxPrice!=null?`${Math.abs(spxPrice-spx200).toFixed(0)} pts`:"~108 pts"} above its 200-DMA. Watch Friday closes specifically — your rule requires two consecutive Friday closes below {fmtWhole(spx200)} to trigger.</ActionCard></>}
+              <MCard><SH>Historical 200-DMA breaks</SH><div style={{ display:"grid", gap:5, marginTop:8 }}>
+                <HistRow val="-34%" event="COVID 2020" note="Broke · recovered in 23 days" />
+                <HistRow val="-20%" event="2022 bear" note="Broke Jan · stayed below 10 months" />
+                <HistRow val="-19%" event="Q4 2018" note="Broke Dec · recovered Feb 2019" />
+                <HistRow val="-57%" event="GFC 2008" note="Broke Oct 2007 · 2 year bear" />
+                <HistRow
+                  val={spxVs(spx200)!=null?fmtSigned1(spxVs(spx200)!):"—"}
+                  event="Today"
+                  note={spxVs(spx200)==null?"Loading" : spxVs(spx200)! < 0 ? "Broken below · watch for confirmation" : spxVs(spx200)! <= 2 ? "Testing support zone" : "Holding above · trend intact"}
+                  active
+                />
+              </div></MCard>
+              {(() => {
+                const pct200 = spxVs(spx200);
+                const isBelow = pct200 != null && pct200 < 0;
+                const pts = spxPrice != null ? Math.abs(spxPrice - spx200).toFixed(0) : "—";
+                return (
+                  <ActionCard>
+                    {isBelow
+                      ? `SPX is ${pts} pts below its 200-DMA (${fmtWhole(spx200)}). The break is active. Your rule requires two consecutive Friday closes below ${fmtWhole(spx200)} plus VIX >30 or HY >400bps to trigger defensive posture. Do not act on a single close — wait for confirmation.`
+                      : `SPX is ${pts} pts above its 200-DMA. Watch Friday closes specifically — your rule requires two consecutive Friday closes below ${fmtWhole(spx200)} to trigger.`
+                    }
+                  </ActionCard>
+                );
+              })()}
+            </>}
           />
         </ModalWrapper>
       )}
