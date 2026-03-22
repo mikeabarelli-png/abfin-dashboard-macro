@@ -301,6 +301,54 @@ export async function GET() {
   const spx200dma = spxCloses.length >= 200 ? avg(spxCloses.slice(-200)) : null;
   const spxTrend14d = spxCloses.slice(-14);
 
+  // ── DMA Slopes: compare current DMA to same DMA from N days ago ──
+  // 20-DMA slope: compare to 10 trading days ago
+  const spx20dma_prev = spxCloses.length >= 30 ? avg(spxCloses.slice(-30, -10)) : null;
+  const spx20slope = spx20dma != null && spx20dma_prev != null
+    ? ((spx20dma - spx20dma_prev) / spx20dma_prev) * 100 : null;
+
+  // 50-DMA slope: compare to 20 trading days ago
+  const spx50dma_prev = spxCloses.length >= 70 ? avg(spxCloses.slice(-70, -20)) : null;
+  const spx50slope = spx50dma != null && spx50dma_prev != null
+    ? ((spx50dma - spx50dma_prev) / spx50dma_prev) * 100 : null;
+
+  // 200-DMA slope: compare to 20 trading days ago (most important)
+  const spx200dma_prev = spxCloses.length >= 220 ? avg(spxCloses.slice(-220, -20)) : null;
+  const spx200slope = spx200dma != null && spx200dma_prev != null
+    ? ((spx200dma - spx200dma_prev) / spx200dma_prev) * 100 : null;
+
+  // ── Market Regime Classification ──
+  // Uses price vs 200-DMA AND slope of 200-DMA
+  const aboveDma200 = spxPrice != null && spx200dma != null && spxPrice > spx200dma;
+  const dma200Rising = spx200slope != null && spx200slope > 0.02; // >0.02% in 20 days = rising
+  const dma200Falling = spx200slope != null && spx200slope < -0.02;
+
+  type Regime = "bull" | "transition_above" | "transition_below" | "bear";
+  const regime: Regime =
+    aboveDma200 && dma200Rising  ? "bull"
+    : aboveDma200 && !dma200Rising ? "transition_above"
+    : !aboveDma200 && dma200Rising ? "transition_below"
+    : "bear";
+
+  const regimeLabel: Record<Regime, string> = {
+    bull:               "Bull Trend",
+    transition_above:   "Transition — Weakening",
+    transition_below:   "Transition — Pullback",
+    bear:               "Bear Trend",
+  };
+  const regimeDesc: Record<Regime, string> = {
+    bull:             "SPX above rising 200-DMA. Trend intact. Dips are buyable.",
+    transition_above: "SPX above 200-DMA but slope flattening or falling. Bull trend losing momentum — watch closely.",
+    transition_below: "SPX below 200-DMA but DMA still rising. Pullback within a bull structure — not yet a structural break. Classic head-fake zone.",
+    bear:             "SPX below a falling 200-DMA. Structural bear trend confirmed. Rallies are suspect.",
+  };
+  const regimeColor: Record<Regime, string> = {
+    bull: "#4ade80", transition_above: "#fbbf24", transition_below: "#fbbf24", bear: "#ff6b88"
+  };
+  const regimeEmoji: Record<Regime, string> = {
+    bull: "🟢", transition_above: "🟡", transition_below: "🟡", bear: "🔴"
+  };
+
   const vixPrice: number | null = vix.meta.regularMarketPrice ?? vix.closes[vix.closes.length - 1] ?? null;
 
   const real10y: number = fredReal10y.value ?? 1.92;
@@ -388,10 +436,15 @@ export async function GET() {
       spx_trend_14d: spxTrend14d,
       spx_history: spxCloses,
       vix: vixPrice,
-      spx_20dma: { level: spx20dma },
-      spx_50dma: { level: spx50dma },
+      spx_20dma: { level: spx20dma, slope: spx20slope },
+      spx_50dma: { level: spx50dma, slope: spx50slope },
       spx_100dma: { level: spx100dma },
-      spx_200dma: { level: spx200dma },
+      spx_200dma: { level: spx200dma, slope: spx200slope },
+      regime,
+      regime_label: regimeLabel[regime],
+      regime_desc: regimeDesc[regime],
+      regime_color: regimeColor[regime],
+      regime_emoji: regimeEmoji[regime],
       hy_spread: hySpread,
       yield_curve_10y_2y: yieldCurve,
       real_10y: real10y,
