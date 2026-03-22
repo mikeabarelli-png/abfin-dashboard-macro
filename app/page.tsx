@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 
 type AnyObj = Record<string, any>;
-type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | null;
+type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | "dxy" | "ad" | null;
 
 export default function Page() {
   const [modal, setModal] = useState<Modal>(null);
