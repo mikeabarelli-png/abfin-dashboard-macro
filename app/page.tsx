@@ -68,6 +68,18 @@ export default function Page() {
   const spx50 = getNum(metrics?.spx_50dma?.level, marketData?.spx_50dma?.level) ?? 6881.21;
   const spx100 = getNum(metrics?.spx_100dma?.level, marketData?.spx_100dma?.level) ?? 6841.88;
   const spx200 = getNum(metrics?.spx_200dma?.level, marketData?.spx_200dma?.level) ?? 6608.12;
+
+  // DMA slopes (% change over last 20 trading days)
+  const slope20 = getNum(metrics?.spx_20dma?.slope, marketData?.spx_20dma?.slope);
+  const slope50 = getNum(metrics?.spx_50dma?.slope, marketData?.spx_50dma?.slope);
+  const slope200 = getNum(metrics?.spx_200dma?.slope, marketData?.spx_200dma?.slope);
+
+  // Market regime
+  const regime = metrics?.regime ?? marketData?.regime ?? null;
+  const regimeLabel = metrics?.regime_label ?? marketData?.regime_label ?? null;
+  const regimeDesc = metrics?.regime_desc ?? marketData?.regime_desc ?? null;
+  const regimeColor = metrics?.regime_color ?? marketData?.regime_color ?? "#fbbf24";
+  const regimeEmoji = metrics?.regime_emoji ?? marketData?.regime_emoji ?? "🟡";
   const spxDailyPct = getNum(metrics?.spx_change_pct, marketData?.spx_change_pct);
   const spxYtd = getNum(metrics?.spx_ytd_pct, marketData?.spx_ytd_pct) ?? -2.13;
   const spxTrend = getArr(metrics?.spx_trend_14d, marketData?.spx_trend_14d) ?? [6946,6908,6878,6881,6816,6869,6830,6740,6795,6781,6775,6672,6632,6699];
@@ -575,6 +587,35 @@ RESPONSE RULES:
               <div><div className="panelTitle">Market Structure</div><div className="panelSub">Price vs Key Moving Averages</div></div>
               <div className="damage">{damageCount} / 4 short-term trends broken</div>
             </div>
+
+            {/* ── Regime Banner ── */}
+            <div style={{
+              display:"flex", alignItems:"center", gap:12,
+              background: regime==="bull" ? "rgba(74,222,128,0.07)" : regime==="bear" ? "rgba(239,68,68,0.07)" : "rgba(245,158,11,0.07)",
+              border: `1px solid ${regime==="bull" ? "rgba(74,222,128,0.3)" : regime==="bear" ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.3)"}`,
+              borderRadius:10, padding:"10px 14px", marginBottom:10
+            }}>
+              {/* Regime pill */}
+              <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:16 }}>{regimeEmoji ?? "🟡"}</span>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>Market Regime</div>
+                  <div style={{ fontSize:14, fontWeight:700, color: regimeColor }}>{regimeLabel ?? "Calculating…"}</div>
+                </div>
+              </div>
+              <div style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0 }} />
+              {/* Description */}
+              <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{regimeDesc ?? "Computing 200-DMA slope from price history…"}</div>
+              <div style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0, marginLeft:"auto" }} />
+              {/* 200-DMA slope readout */}
+              <div style={{ flexShrink:0, textAlign:"right" }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>200-DMA Slope</div>
+                <div style={{ fontSize:14, fontWeight:700, color: slope200 == null ? "#475569" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                  {slope200 == null ? "—" : `${slope200 > 0 ? "↗" : slope200 < 0 ? "↘" : "→"} ${slope200 > 0 ? "+" : ""}${slope200.toFixed(3)}%`}
+                </div>
+              </div>
+            </div>
+
             <div className="grid5" style={{ marginBottom:8 }}>
               {/* SPX Price tile */}
               <div className="tile">
@@ -584,15 +625,24 @@ RESPONSE RULES:
                 <div className="subSpx">{spxDailyPct != null ? `${spxDailyPct >= 0 ? "▲" : "▼"} ${Math.abs(spxDailyPct).toFixed(1)}% today` : "Waiting for live price"}</div>
               </div>
 
-              {/* 20 / 50 / 100-DMA tiles */}
-              {[{ label:"20-DMA", level:spx20 }, { label:"50-DMA", level:spx50 }, { label:"100-DMA", level:spx100 }].map(d => {
+              {/* 20 / 50 / 100-DMA tiles — with slope arrows */}
+              {[
+                { label:"20-DMA",  level:spx20,  slope:slope20  },
+                { label:"50-DMA",  level:spx50,  slope:slope50  },
+                { label:"100-DMA", level:spx100, slope:null     },
+              ].map(d => {
                 const pct = spxVs(d.level); const tone = dmaTone(pct);
+                const slopeArrow = d.slope == null ? "" : d.slope > 0.02 ? " ↗" : d.slope < -0.02 ? " ↘" : " →";
+                const slopeColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
                 return (
                   <div key={d.label} className="tile">
                     <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:toneColor(tone), color:tone==="warning"?"#000":"#fff" }}>!</span></div>
                     <div className="valMuted">{fmtWhole(d.level)}</div>
                     <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct)}</div>
                     <div className="sub">{pct != null ? `SPX ${fmtSigned1(pct)} ${pct >= 0 ? "above" : "below"}` : "Waiting"}</div>
+                    {d.slope != null && (
+                      <div style={{ fontSize:10, marginTop:4, fontWeight:600, color:slopeColor }}>Slope{slopeArrow} {d.slope > 0 ? "+" : ""}{d.slope.toFixed(3)}%</div>
+                    )}
                   </div>
                 );
               })}
@@ -617,6 +667,11 @@ RESPONSE RULES:
                     : "Waiting"}
                 </div>
                 <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
+                {slope200 != null && (
+                  <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                    Slope {slope200 > 0 ? "↗ +" : slope200 < 0 ? "↘ " : "→ "}{slope200.toFixed(3)}% · {slope200 > 0.02 ? "Rising" : slope200 < -0.02 ? "Falling" : "Flat"}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -731,7 +786,7 @@ RESPONSE RULES:
                 </div>
               </div>
               {/* 4. DXY */}
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("dxy")}>
                 <div className="lbl" style={{ marginBottom:6 }}>US Dollar (DXY)</div>
                 <div className="valHero" style={{ color:"#fff" }}>{dxy!=null?dxy.toFixed(2):"—"}</div>
                 <div className="status" style={{ color:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }}>
@@ -748,7 +803,7 @@ RESPONSE RULES:
                 </div>
               </div>
               {/* 5. Advance/Decline Line */}
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("ad")}>
                 <div className="lbl" style={{ marginBottom:6 }}>Advance / Decline</div>
                 <div className="valHero" style={{ fontSize:22, color:
                   adLine?.signal === "bullish_divergence" ? "#4ade80"
@@ -1700,6 +1755,141 @@ RESPONSE RULES:
                 </div>
               </MCard>
               <ActionCard>CAPE at {capeRatio.toFixed(1)}x is in the top 5% of all historical readings. This is not a timing signal — markets stayed expensive for years in the late 1990s. But it means the margin of safety is thin and the probability of below-average 10-year returns is elevated. Weight new equity purchases accordingly.</ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      {modal==="dxy" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="US Dollar Index (DXY)" sub="Trade-weighted basket of 6 major currencies · Global liquidity barometer">
+          <ModalGrid
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>
+                {dxy!=null?dxy.toFixed(2):"—"}
+              </div>
+              <Tag
+                label={dxy==null?"Loading":dxy>104?"Strong Dollar — Liquidity Drain":dxy>100?"Elevated — Watch":dxy>96?"Neutral":"Weak — Liquidity Positive"}
+                color={dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80"}
+                bg={dxy==null?"rgba(71,85,105,0.15)":dxy>104?"rgba(255,79,114,0.15)":dxy>100?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"}
+              />
+              <BC>{dxy==null?"Loading current data."
+                :dxy>104?"A strong dollar tightens global liquidity. Countries with dollar-denominated debt face higher repayment costs. Commodities priced in dollars fall. Emerging markets under pressure. This often precedes risk-off selling in equities."
+                :dxy>100?"Dollar elevated but not extreme. Worth monitoring — a continued move above 104 would signal tightening liquidity conditions globally."
+                :"Dollar in neutral range. This is generally supportive of global risk assets and emerging markets. Commodities tend to benefit from dollar weakness."}</BC>
+              <BandTrack
+                segs={[{w:"25%",color:"#047857"},{w:"30%",color:"#4ade80"},{w:"20%",color:"#f59e0b"},{w:"25%",color:"#ef4444"}]}
+                needle={Math.max(0,Math.min(((dxy??100)-88)/32*100,99))}
+                scaleNums={["88","96","100","104","120+"]}
+                scaleNames={["Weak","Neutral","Elevated","Strong","Crisis"]}
+              />
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.25)", borderRadius:10, padding:14 }}>
+                <SH>Confluence signal</SH>
+                <div style={{ fontSize:13, lineHeight:1.7, color:"#cbd5e1" }}>
+                  A DXY spike above 104 alongside a 200-DMA break is a warning sign — it suggests the selloff is systemic (global de-risking), not just a US equity correction. When DXY is below 100 during an equity dip, liquidity is flowing normally and the dip is more likely technical.
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>What the DXY measures</SH>
+                <BC>The Dollar Index tracks the USD against a basket of 6 currencies (EUR 57.6%, JPY 13.6%, GBP 11.9%, CAD 9.1%, SEK 4.2%, CHF 3.6%). A rising dollar means US assets attract capital, but it also drains liquidity from the rest of the world — particularly emerging markets and commodity exporters that borrow in dollars.</BC>
+              </MCard>
+              <MCard>
+                <SH>Why it matters for your portfolio</SH>
+                <BC>Your VEA position (developed international) is directly affected — a rising dollar erodes returns for US investors in foreign assets. Your GLDM position typically moves inversely to the dollar. A strong dollar also compresses earnings for US multinationals in the SPX. The dollar is the plumbing of global markets — when it moves sharply, everything else feels it.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical context</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="114" event="Oct 2022 peak" note="20-year high · global EM stress" />
+                  <HistRow val="89" event="Jan 2021 low" note="Weak dollar · bull market fuel" />
+                  <HistRow val="103" event="Pre-COVID 2020" note="Typical strong-ish range" />
+                  <HistRow val={dxy!=null?dxy.toFixed(2):"—"} event="Today" note={dxy!=null&&dxy>104?"Above stress threshold":dxy!=null&&dxy>100?"Elevated but manageable":"Neutral — supportive of risk assets"} active />
+                  <HistRow val="100" event="Neutral zone" note="Below = dollar tailwind for global stocks" />
+                </div>
+              </MCard>
+              <ActionCard>
+                {dxy==null?"DXY data loading."
+                :dxy>104?`DXY at ${dxy.toFixed(2)} — above stress threshold. This is tightening global liquidity. Your VEA international position faces currency headwind. Watch for continued dollar strength alongside equity weakness — that combination signals systemic risk, not a technical dip.`
+                :dxy>100?`DXY at ${dxy.toFixed(2)} — elevated but below the critical 104 level. Dollar strength is a mild headwind for your VEA and GLDM positions. Not a standalone concern — monitor in context of other stress signals.`
+                :`DXY at ${dxy.toFixed(2)} — neutral and supportive. Dollar weakness is generally positive for global risk assets and your international holdings. No dollar-driven liquidity concern at this level.`}
+              </ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      {modal==="ad" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="NYSE Advance / Decline Line" sub="Cumulative breadth of the NYSE · Hidden strength or broad-based weakness">
+          <ModalGrid
+            left={<>
+              <SH>Current signal</SH>
+              <div style={{ fontSize:32, fontWeight:700, lineHeight:1.1, marginBottom:8, color:
+                adLine?.signal==="bullish_divergence"?"#4ade80":adLine?.signal==="confirming_weakness"?"#ff6b88":"#fbbf24" }}>
+                {adLine?.signal==="bullish_divergence"?"Bullish Divergence ↑":adLine?.signal==="confirming_weakness"?"Confirming Weakness ↓":"Neutral — Tracking"}
+              </div>
+              <Tag
+                label={adLine?.signal==="bullish_divergence"?"Hidden Strength — Buy the Dip Setup":adLine?.signal==="confirming_weakness"?"Broad Selling — Defense Mode":"Neutral — Moving With SPX"}
+                color={adLine?.signal==="bullish_divergence"?"#4ade80":adLine?.signal==="confirming_weakness"?"#ff6b88":"#fbbf24"}
+                bg={adLine?.signal==="bullish_divergence"?"rgba(74,222,128,0.15)":adLine?.signal==="confirming_weakness"?"rgba(255,79,114,0.15)":"rgba(245,158,11,0.15)"}
+              />
+              <BC>{adLine?.note ?? "NYSE Advance/Decline line shows whether breadth is confirming or diverging from price."}</BC>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:14 }}>
+                <div style={{ background:"#141b47", borderRadius:10, padding:14 }}>
+                  <SH>A/D Trend (4 weeks)</SH>
+                  <div style={{ fontSize:20, fontWeight:700, marginTop:6, color:
+                    adLine?.adTrend==="higher_lows"?"#4ade80":adLine?.adTrend==="lower_lows"?"#ff6b88":"#fbbf24" }}>
+                    {adLine?.adTrend==="higher_lows"?"↗ Higher Lows":adLine?.adTrend==="lower_lows"?"↘ Lower Lows":"→ Flat"}
+                  </div>
+                  <div style={{ fontSize:11, color:"#64748b", marginTop:4, lineHeight:1.5 }}>
+                    {adLine?.adTrend==="higher_lows"?"Breadth improving — broad participation":"Breadth deteriorating — narrow market"}
+                  </div>
+                </div>
+                <div style={{ background:"#141b47", borderRadius:10, padding:14 }}>
+                  <SH>vs SPX</SH>
+                  <div style={{ fontSize:20, fontWeight:700, marginTop:6, color:
+                    adLine?.adVsSpx==="diverging_up"?"#4ade80":adLine?.adVsSpx==="diverging_down"?"#ff6b88":"#94a3b8" }}>
+                    {adLine?.adVsSpx==="diverging_up"?"↑ Diverging Up":adLine?.adVsSpx==="diverging_down"?"↓ Confirming Down":"→ Tracking"}
+                  </div>
+                  <div style={{ fontSize:11, color:"#64748b", marginTop:4, lineHeight:1.5 }}>
+                    {adLine?.adVsSpx==="diverging_up"?"A/D strong while SPX weak — dip opportunity":adLine?.adVsSpx==="diverging_down"?"Broad selling confirms move — not a dip":"Breadth and price aligned"}
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop:12, background:"#141b47", border:"1px solid rgba(148,163,184,0.2)", borderRadius:10, padding:12 }}>
+                <div style={{ fontSize:10, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>Data source</div>
+                <div style={{ fontSize:12, color:"#94a3b8", marginTop:4, lineHeight:1.6 }}>
+                  Manual weekly update · NYSE $NYAD via StockCharts · Updated {adLine?.updatedDate ?? "—"}
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>What the A/D line measures</SH>
+                <BC>Every day, the NYSE counts how many stocks advanced (closed higher) vs. declined (closed lower). The Advance/Decline line is a running cumulative total of that difference. It tells you whether the market move is broad-based — driven by most stocks — or narrow, driven by just a handful of large-cap names.</BC>
+              </MCard>
+              <MCard>
+                <SH>Why it matters for the 200-DMA confirmation</SH>
+                <BC>The S&P 500 is cap-weighted — a few mega-cap tech stocks can move the index while hundreds of smaller companies are already declining. When SPX breaks its 200-DMA but the A/D line is making higher lows, it means the broad market is holding up. The large-caps dragging SPX down are masking underlying strength. That&apos;s a classic buy-the-dip setup. When the A/D line confirms the break — declining alongside SPX — the selling is truly broad-based and more dangerous.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical examples</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="2023" event="Bull market breakout" note="A/D made new highs — confirmed broad rally" />
+                  <HistRow val="2021" event="Late bull warning" note="A/D diverged lower while SPX at highs — signal" />
+                  <HistRow val="2022" event="Bear market" note="A/D confirmed — broad selling top to bottom" />
+                  <HistRow val="2020" event="COVID recovery" note="A/D diverged up quickly — predicted recovery" />
+                  <HistRow val="Today" event={`Mar ${adLine?.updatedDate ?? "21"} 2026`} note={adLine?.note ?? "Manual reading"} active />
+                </div>
+              </MCard>
+              <ActionCard>
+                {adLine?.signal==="bullish_divergence"
+                  ?"A/D line diverging bullishly — the broad market is holding up even as SPX tests the 200-DMA. This is a classic head-fake signal. The large-cap weakness may not reflect what most stocks are doing. Treat as a potential dip opportunity, not a defensive trigger."
+                  :adLine?.signal==="confirming_weakness"
+                  ?"A/D line confirming the selloff — broad-based selling across the NYSE. This is not a head-fake. The weakness extends beyond large-caps into the broad market. This supports a defensive posture alongside the other stress signals."
+                  :"A/D line neutral and tracking SPX. No divergence signal currently. Monitor weekly for any change in direction relative to price."}
+              </ActionCard>
             </>}
           />
         </ModalWrapper>
