@@ -304,34 +304,7 @@ export async function GET() {
   const djtVs200: number | null = djtPrice != null && djt200dma != null
     ? ((djtPrice - djt200dma) / djt200dma) * 100 : null;
   const djtAbove200 = djtVs200 != null && djtVs200 >= 0;
-
-  // ── Schannep 2-of-3 Signal ───────────────────────────────────────────────────
-  // Requires 2 of 3 indices confirming the same direction: SPX, DJIA (proxy: SPX), DJT
-  // Since we don't fetch DJIA separately, we use SPX as the primary large-cap index.
-  // Signal: "bull" if SPX and DJT both above their 200-DMA (2/2 confirming)
-  //         "bear" if both below their 200-DMA
-  //         "diverging" if they disagree — classic non-confirmation warning
-  const spxAbove200 = spxPrice != null && spx200dma != null && spxPrice > spx200dma;
-  type SchanenpSignal = "bull" | "bear" | "non_confirmation_bull" | "non_confirmation_bear";
-  const schannepSignal: SchanenpSignal =
-    spxAbove200  && djtAbove200  ? "bull" :
-    !spxAbove200 && !djtAbove200 ? "bear" :
-    spxAbove200  && !djtAbove200 ? "non_confirmation_bear" :  // SPX up, DJT down = warning
-                                   "non_confirmation_bull";   // DJT up, SPX down = potential recovery
-
-  const schannepLabel: Record<SchanenpSignal, string> = {
-    bull:                   "Confirmed Bull",
-    bear:                   "Confirmed Bear",
-    non_confirmation_bear:  "Non-Confirmation ⚠",
-    non_confirmation_bull:  "Recovery Signal",
-  };
-  const schannepColor: Record<SchanenpSignal, string> = {
-    bull:                  "#4ade80",
-    bear:                  "#ff6b88",
-    non_confirmation_bear: "#fbbf24",
-    non_confirmation_bull: "#4ade80",
-  };
-  console.log(`DJT: ${djtPrice} vs 200-DMA ${djt200dma?.toFixed(2)} (${djtVs200?.toFixed(2)}%) | Schannep: ${schannepSignal}`);
+  console.log(`DJT: ${djtPrice} vs 200-DMA ${djt200dma?.toFixed(2)} (${djtVs200?.toFixed(2)}%)`);
 
   // Fed Balance Sheet (WALCL) — in millions USD from FRED
   // Convert to billions for display; compute WoW change
@@ -365,6 +338,28 @@ export async function GET() {
   const spx100dma = spxCloses.length >= 100 ? avg(spxCloses.slice(-100)) : null;
   const spx200dma = spxCloses.length >= 200 ? avg(spxCloses.slice(-200)) : null;
   const spxTrend14d = spxCloses.slice(-14);
+
+  // ── Schannep 2-of-3 Signal — placed here so spxPrice + spx200dma are in scope ──
+  const spxAbove200 = spxPrice != null && spx200dma != null && spxPrice > spx200dma;
+  type SchanenpSignal = "bull" | "bear" | "non_confirmation_bull" | "non_confirmation_bear";
+  const schannepSignal: SchanenpSignal =
+    spxAbove200  && djtAbove200  ? "bull" :
+    !spxAbove200 && !djtAbove200 ? "bear" :
+    spxAbove200  && !djtAbove200 ? "non_confirmation_bear" :
+                                   "non_confirmation_bull";
+  const schannepLabel: Record<SchanenpSignal, string> = {
+    bull:                  "Confirmed Bull",
+    bear:                  "Confirmed Bear",
+    non_confirmation_bear: "Non-Confirmation ⚠",
+    non_confirmation_bull: "Recovery Signal",
+  };
+  const schannepColor: Record<SchanenpSignal, string> = {
+    bull:                  "#4ade80",
+    bear:                  "#ff6b88",
+    non_confirmation_bear: "#fbbf24",
+    non_confirmation_bull: "#4ade80",
+  };
+  console.log(`Schannep: ${schannepSignal} (SPX ${spxAbove200 ? "above" : "below"} 200-DMA, DJT ${djtAbove200 ? "above" : "below"} 200-DMA)`);
 
   // ── DMA Slopes: compare current DMA to same DMA from N days ago ──
   // 20-DMA slope: compare to 10 trading days ago
