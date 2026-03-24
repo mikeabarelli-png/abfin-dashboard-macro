@@ -242,7 +242,7 @@ export async function GET() {
   const diagnostics: Record<string, string> = {};
 
   // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
-  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL] = await Promise.all([
+  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
     fetchChart("DX-Y.NYB", 5),
@@ -262,6 +262,7 @@ export async function GET() {
     fetchIvyPosition("VNQ"),
     fetchIvyPosition("DBC"),
     fetchFred("WALCL", 2),  // Fed balance sheet: millions USD, weekly; limit=2 for direction
+    fetchChart("^DJT", 420), // Dow Jones Transports — Dow Theory confirmation + Iran war economic proxy
   ]);
 
   if (spx.error) diagnostics["spx"] = spx.error;
@@ -283,6 +284,54 @@ export async function GET() {
   if (ivyVNQ.error) diagnostics["ivy_vnq"] = ivyVNQ.error;
   if (ivyDBC.error) diagnostics["ivy_dbc"] = ivyDBC.error;
   if (fredWALCL.error) diagnostics["walcl"] = fredWALCL.error;
+  if (djt.error) diagnostics["djt"] = djt.error;
+
+  // ── Dow Jones Transports (DJT) — Dow Theory confirmation signal ──────────────
+  const djtCloses = djt.closes;
+  const djtPrice: number | null = djt.meta.regularMarketPrice ?? djtCloses[djtCloses.length - 1] ?? null;
+  const djtPrev: number | null = djtCloses.length >= 2 ? djtCloses[djtCloses.length - 2] : null;
+  const djtChangePct: number | null = djtPrice != null && djtPrev != null
+    ? ((djtPrice - djtPrev) / djtPrev) * 100 : null;
+
+  // DJT 200-DMA and slope (same method as SPX)
+  const djt200dma: number | null = djtCloses.length >= 200
+    ? avg(djtCloses.slice(-200)) : null;
+  const djt200dma_prev: number | null = djtCloses.length >= 220
+    ? avg(djtCloses.slice(-220, -20)) : null;
+  const djt200slope: number | null = djt200dma != null && djt200dma_prev != null
+    ? ((djt200dma - djt200dma_prev) / djt200dma_prev) * 100 : null;
+
+  const djtVs200: number | null = djtPrice != null && djt200dma != null
+    ? ((djtPrice - djt200dma) / djt200dma) * 100 : null;
+  const djtAbove200 = djtVs200 != null && djtVs200 >= 0;
+
+  // ── Schannep 2-of-3 Signal ───────────────────────────────────────────────────
+  // Requires 2 of 3 indices confirming the same direction: SPX, DJIA (proxy: SPX), DJT
+  // Since we don't fetch DJIA separately, we use SPX as the primary large-cap index.
+  // Signal: "bull" if SPX and DJT both above their 200-DMA (2/2 confirming)
+  //         "bear" if both below their 200-DMA
+  //         "diverging" if they disagree — classic non-confirmation warning
+  const spxAbove200 = spxPrice != null && spx200dma != null && spxPrice > spx200dma;
+  type SchanenpSignal = "bull" | "bear" | "non_confirmation_bull" | "non_confirmation_bear";
+  const schannepSignal: SchanenpSignal =
+    spxAbove200  && djtAbove200  ? "bull" :
+    !spxAbove200 && !djtAbove200 ? "bear" :
+    spxAbove200  && !djtAbove200 ? "non_confirmation_bear" :  // SPX up, DJT down = warning
+                                   "non_confirmation_bull";   // DJT up, SPX down = potential recovery
+
+  const schannepLabel: Record<SchanenpSignal, string> = {
+    bull:                   "Confirmed Bull",
+    bear:                   "Confirmed Bear",
+    non_confirmation_bear:  "Non-Confirmation ⚠",
+    non_confirmation_bull:  "Recovery Signal",
+  };
+  const schannepColor: Record<SchanenpSignal, string> = {
+    bull:                  "#4ade80",
+    bear:                  "#ff6b88",
+    non_confirmation_bear: "#fbbf24",
+    non_confirmation_bull: "#4ade80",
+  };
+  console.log(`DJT: ${djtPrice} vs 200-DMA ${djt200dma?.toFixed(2)} (${djtVs200?.toFixed(2)}%) | Schannep: ${schannepSignal}`);
 
   // Fed Balance Sheet (WALCL) — in millions USD from FRED
   // Convert to billions for display; compute WoW change
@@ -480,6 +529,15 @@ export async function GET() {
       walcl_prev_bn: walclPrevBn,
       walcl_chg_bn: walclChgBn,
       walcl_direction: walclDirection,
+      djt_price: djtPrice,
+      djt_change_pct: djtChangePct,
+      djt_200dma: djt200dma,
+      djt_200slope: djt200slope,
+      djt_vs_200_pct: djtVs200,
+      djt_above_200: djtAbove200,
+      schannep_signal: schannepSignal,
+      schannep_label: schannepLabel[schannepSignal],
+      schannep_color: schannepColor[schannepSignal],
       ivy: {
         vti: { price: ivyVTI.price, sma: ivyVTI.sma, variance: ivyVTI.variancePct, signal: ivyVTI.signal },
         veu: { price: ivyVEU.price, sma: ivyVEU.sma, variance: ivyVEU.variancePct, signal: ivyVEU.signal },
