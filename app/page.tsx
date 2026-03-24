@@ -112,6 +112,7 @@ export default function Page() {
   const djt200slope   = getNum(metrics?.djt_200slope,   marketData?.djt_200slope);
   const djtVs200      = getNum(metrics?.djt_vs_200_pct, marketData?.djt_vs_200_pct);
   const djtAbove200: boolean = metrics?.djt_above_200 ?? marketData?.djt_above_200 ?? true;
+  const djtTrend14d   = getArr(metrics?.djt_trend_14d,  marketData?.djt_trend_14d) ?? [];
   const schannepSignal: string = metrics?.schannep_signal ?? marketData?.schannep_signal ?? "";
   const schannepLabel: string  = metrics?.schannep_label  ?? marketData?.schannep_label  ?? "Loading";
   const schannepColor: string  = metrics?.schannep_color  ?? marketData?.schannep_color  ?? "#94a3b8";
@@ -637,7 +638,7 @@ RESPONSE RULES:
             </div>
 
             <div className="grid5" style={{ marginBottom:8 }}>
-              {/* SPX Price tile */}
+              {/* Tile 1: SPX Price — no change */}
               <div className="tile">
                 <div className="tileTop"><span className="lbl">S&P 500</span><span className="ytd">{spxYtd > 0 ? "+" : ""}{spxYtd.toFixed(2)}% YTD</span></div>
                 <div className="valHero">{spxPrice != null ? fmtWhole(spxPrice) : "—"}</div>
@@ -645,29 +646,7 @@ RESPONSE RULES:
                 <div className="subSpx">{spxDailyPct != null ? `${spxDailyPct >= 0 ? "▲" : "▼"} ${Math.abs(spxDailyPct).toFixed(1)}% today` : "Waiting for live price"}</div>
               </div>
 
-              {/* 20 / 50 / 100-DMA tiles — with slope arrows */}
-              {[
-                { label:"20-DMA",  level:spx20,  slope:slope20  },
-                { label:"50-DMA",  level:spx50,  slope:slope50  },
-                { label:"100-DMA", level:spx100, slope:null     },
-              ].map(d => {
-                const pct = spxVs(d.level); const tone = dmaTone(pct);
-                const slopeArrow = d.slope == null ? "" : d.slope > 0.02 ? " ↗" : d.slope < -0.02 ? " ↘" : " →";
-                const slopeColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
-                return (
-                  <div key={d.label} className="tile">
-                    <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:toneColor(tone), color:tone==="warning"?"#000":"#fff" }}>!</span></div>
-                    <div className="valMuted">{fmtWhole(d.level)}</div>
-                    <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct)}</div>
-                    <div className="sub">{pct != null ? `SPX ${fmtSigned1(pct)} ${pct >= 0 ? "above" : "below"}` : "Waiting"}</div>
-                    {d.slope != null && (
-                      <div style={{ fontSize:10, marginTop:4, fontWeight:600, color:slopeColor }}>Slope{slopeArrow} {d.slope > 0 ? "+" : ""}{d.slope.toFixed(3)}%</div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* ── 200-DMA tile — red when broken, amber when testing/above ── */}
+              {/* Tile 2: 200-DMA — most important, aligns with DJT 200-DMA below */}
               <div
                 className={is200Broken ? "tile tile200Red" : "tile tile200"}
                 style={{ cursor:"pointer" }}
@@ -693,30 +672,65 @@ RESPONSE RULES:
                   </div>
                 )}
               </div>
+
+              {/* Tiles 3-5: 100 / 50 / 20-DMA — descending importance */}
+              {[
+                { label:"100-DMA", level:spx100, slope:null     },
+                { label:"50-DMA",  level:spx50,  slope:slope50  },
+                { label:"20-DMA",  level:spx20,  slope:slope20  },
+              ].map(d => {
+                const pct = spxVs(d.level); const tone = dmaTone(pct);
+                const slopeArrow = d.slope == null ? "" : d.slope > 0.02 ? " ↗" : d.slope < -0.02 ? " ↘" : " →";
+                const slopeColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
+                return (
+                  <div key={d.label} className="tile">
+                    <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:toneColor(tone), color:tone==="warning"?"#000":"#fff" }}>!</span></div>
+                    <div className="valMuted">{fmtWhole(d.level)}</div>
+                    <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct)}</div>
+                    <div className="sub">{pct != null ? `SPX ${fmtSigned1(pct)} ${pct >= 0 ? "above" : "below"}` : "Waiting"}</div>
+                    {d.slope != null && (
+                      <div style={{ fontSize:10, marginTop:4, fontWeight:600, color:slopeColor }}>Slope{slopeArrow} {d.slope > 0 ? "+" : ""}{d.slope.toFixed(3)}%</div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
-            {/* ── Row 2: Dow Theory Confirmation ── */}
+            {/* ── Row 2: Dow Theory Confirmation — mirrors SPX row above ── */}
             <div className="grid5" style={{ marginBottom:8 }}>
-              {/* DJT Transports tile */}
-              <div className="tile" style={{ gridColumn:"span 2" }}>
+
+              {/* Tile 6: DJT Price — mirrors SPX price tile */}
+              <div className="tile">
                 <div className="tileTop">
-                  <span className="lbl">Dow Transports (DJT)</span>
-                  <span style={{ fontSize:10, fontWeight:700, color:"#475569" }}>Dow Theory</span>
+                  <span className="lbl">Transports</span>
+                  <span className="ytd">DJT</span>
                 </div>
-                <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
-                  <div className="valHero">{djtPrice != null ? fmtWhole(djtPrice) : "—"}</div>
-                  {djtChangePct != null && (
-                    <div style={{ fontSize:13, fontWeight:600, color: djtChangePct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                      {djtChangePct >= 0 ? "▲" : "▼"} {Math.abs(djtChangePct).toFixed(1)}%
-                    </div>
-                  )}
+                <div className="valHero">{djtPrice != null ? fmtWhole(djtPrice) : "—"}</div>
+                {djtTrend14d.length > 0 && (
+                  <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(djtTrend14d, djtChangePct != null && djtChangePct >= 0 ? "#4ade80" : "#ff6b88") }} />
+                )}
+                <div className="subSpx">
+                  {djtChangePct != null
+                    ? `${djtChangePct >= 0 ? "▲" : "▼"} ${Math.abs(djtChangePct).toFixed(1)}% today`
+                    : "Dow Jones Transports"}
                 </div>
-                <div className="status" style={{ color: djtVs200 == null ? "#94a3b8" : djtVs200 < 0 ? "#ff6b88" : djtVs200 < 2 ? "#fbbf24" : "#4ade80" }}>
-                  {djtVs200 == null ? "Loading" : djtVs200 < 0 ? "Below 200-DMA" : djtVs200 < 2 ? "Testing 200-DMA" : "Above 200-DMA"}
+              </div>
+
+              {/* Tile 7: DJT 200-DMA — mirrors SPX 200-DMA tile */}
+              <div
+                className={!djtAbove200 ? "tile tile200Red" : "tile tile200"}
+                style={{ cursor:"default" }}
+              >
+                <div className="tileTop">
+                  <span className="lbl" style={{ color: !djtAbove200 ? "#ff6b88" : "#f59e0b" }}>DJT 200-DMA</span>
+                  <span className="badge" style={{ background: !djtAbove200 ? "#ef4444" : "#f59e0b", color: !djtAbove200 ? "#fff" : "#000" }}>!</span>
                 </div>
-                <div className="sub">
-                  200-DMA: {djt200dma != null ? fmtWhole(djt200dma) : "—"}
-                  {djtVs200 != null ? ` · ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : ""}
+                <div className="valHero">{djt200dma != null ? fmtWhole(djt200dma) : "—"}</div>
+                <div className="status" style={{ color: djtVs200 == null ? "#94a3b8" : !djtAbove200 ? "#ff6b88" : djtVs200 <= 2 ? "#fbbf24" : "#4ade80" }}>
+                  {djtVs200 == null ? "Loading" : !djtAbove200 ? "Broken Below" : djtVs200 <= 2 ? "Testing Support" : "Holding Above"}
+                </div>
+                <div className="sub" style={{ color: !djtAbove200 ? "#ff6b88" : "#f59e0b" }}>
+                  {djtVs200 != null ? `DJT ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}% ${djtVs200 >= 0 ? "above" : "below"}` : "Waiting"}
                 </div>
                 {djt200slope != null && (
                   <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: djt200slope > 0.02 ? "#4ade80" : djt200slope < -0.02 ? "#ff6b88" : "#fbbf24" }}>
@@ -725,7 +739,7 @@ RESPONSE RULES:
                 )}
               </div>
 
-              {/* Schannep 2-of-3 Signal tile */}
+              {/* Tile 8: Schannep 2-of-3 Signal — spans 3 */}
               <div className="tile" style={{ gridColumn:"span 3" }}>
                 <div className="tileTop">
                   <span className="lbl">Schannep 2-of-3 Signal</span>
@@ -734,7 +748,6 @@ RESPONSE RULES:
                 <div style={{ fontSize:22, fontWeight:700, color: schannepColor, marginBottom:4 }}>
                   {schannepLabel}
                 </div>
-                {/* SPX vs DJT divergence visual */}
                 <div style={{ display:"flex", gap:8, marginTop:4 }}>
                   <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
                     <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>SPX vs 200-DMA</div>
