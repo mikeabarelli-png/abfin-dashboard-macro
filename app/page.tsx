@@ -1039,45 +1039,112 @@ RESPONSE RULES:
               </div>
 
               {/* Market Confirmation (Dow Theory) — spans 3 */}
-              <div className="tile" style={{ gridColumn:"span 3" }}>
-                <div className="tileTop">
-                  <span className="lbl">Market Confirmation</span>
-                  <span style={{ fontSize:10, fontWeight:700, color:"#475569" }}>Dow Theory · SPX + DJT</span>
-                </div>
-                <div style={{ fontSize:22, fontWeight:700, color: schannepColor, marginBottom:4 }}>
-                  {schannepSignal === "bull" ? "✅ Confirmed Uptrend"
-                    : schannepSignal === "bear" ? "🔴 Confirmed Downtrend"
-                    : "⚠️ Non-Confirmation — Transition"}
-                </div>
-                <div style={{ display:"flex", gap:8, marginTop:4 }}>
-                  <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
-                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>SPX vs 200-DMA</div>
-                    <div style={{ fontSize:13, fontWeight:700, color: is200Broken ? "#ff6b88" : "#4ade80", marginTop:2 }}>
-                      {is200Broken ? "↘ Below" : "↗ Above"}
-                      {spx200Pct != null ? ` ${fmtSigned1(spx200Pct)}` : ""}
+              {(() => {
+                // ── Slope-aware state machine ─────────────────────────────────
+                // Uses both position (above/below 200-DMA) AND slope direction
+                // to avoid false positives where price is barely above but trend rolling over
+                const spxRising = slope200 != null && slope200 > 0.02;
+                const spxFalling = slope200 != null && slope200 < -0.02;
+                const djtRising = djt200slope != null && djt200slope > 0.02;
+                const djtFalling = djt200slope != null && djt200slope < -0.02;
+
+                // 5-state machine: confirmed up/down + 3 shades of non-confirmation
+                type ConfState = "confirmed_bull" | "confirmed_bear" | "non_conf_transition" | "non_conf_bear_warn" | "non_conf_bull_recovery";
+                const confState: ConfState =
+                  // Both above AND both rising = clean bull
+                  (!is200Broken && djtAbove200 && spxRising && djtRising)   ? "confirmed_bull" :
+                  // Both below AND both falling = confirmed bear
+                  (is200Broken && !djtAbove200 && spxFalling && djtFalling)  ? "confirmed_bear" :
+                  // SPX below, DJT above = classic non-confirmation (most common transition state)
+                  (is200Broken && djtAbove200)                               ? "non_conf_bull_recovery" :
+                  // SPX above, DJT below = leading warning (economy rolling before equities)
+                  (!is200Broken && !djtAbove200)                             ? "non_conf_bear_warn" :
+                  // Everything else = transition (above/below but slopes not aligned)
+                                                                               "non_conf_transition";
+
+                const stateLabel: Record<ConfState, string> = {
+                  confirmed_bull:        "✅ Confirmed Uptrend",
+                  confirmed_bear:        "🔴 Confirmed Downtrend",
+                  non_conf_transition:   "⚠️ Non-Confirmation — Transition",
+                  non_conf_bear_warn:    "⚠️ Early Warning — Transports Leading Down",
+                  non_conf_bull_recovery:"⚠️ Non-Confirmation — Potential Recovery",
+                };
+                const stateColor: Record<ConfState, string> = {
+                  confirmed_bull:        "#4ade80",
+                  confirmed_bear:        "#ff6b88",
+                  non_conf_transition:   "#fbbf24",
+                  non_conf_bear_warn:    "#ff6b88",
+                  non_conf_bull_recovery:"#fbbf24",
+                };
+                const stateInterpretation: Record<ConfState, string> = {
+                  confirmed_bull:        "Structural agreement: both equity and economic trend rising above long-term averages. High-probability bull environment. Pullbacks are buyable.",
+                  confirmed_bear:        "Structural confirmation: equity weakness and economic deterioration aligned. Both indices below falling 200-DMAs. Rallies are suspect — this is the highest-conviction bear signal in this framework.",
+                  non_conf_transition:   "Mixed signals: one or both indices above/below 200-DMA but slopes not aligned. Early-stage regime shift. Monitor weekly — slope convergence will resolve direction.",
+                  non_conf_bear_warn:    "Early warning: Transports breaking down while equities still elevated — historically a leading indicator of economic weakness before it shows in large-caps. Watch for SPX confirmation.",
+                  non_conf_bull_recovery:"Structural disagreement: equity trend weakening while economic activity remains firm. Historically resolves with either SPX reclaim OR DJT breakdown.",
+                };
+                const stateResolution: Record<ConfState, string> = {
+                  confirmed_bull:        `Watch: SPX 200-DMA slope turning flat or negative is the first warning of regime change.`,
+                  confirmed_bear:        `Watch: SPX reclaim of ${fmtWhole(spx200)} with rising slope → regime upgrade. DJT reclaim of its 200-DMA → secondary confirmation.`,
+                  non_conf_transition:   `Resolution: slope alignment in same direction over 2–3 weeks will confirm the next regime.`,
+                  non_conf_bear_warn:    `Resolution trigger: SPX breaks below ${fmtWhole(spx200)} → bear confirmed. DJT reclaims 200-DMA → false alarm.`,
+                  non_conf_bull_recovery:`Resolution trigger: SPX reclaims ${fmtWhole(spx200)} → bull confirmed. DJT breaks below its 200-DMA (${djt200dma != null ? fmtWhole(djt200dma) : "—"}) → bear confirmed.`,
+                };
+
+                const sc = stateColor[confState];
+
+                return (
+                  <div className="tile" style={{ gridColumn:"span 3" }}>
+                    <div className="tileTop">
+                      <span className="lbl">Market Confirmation</span>
+                      <span style={{ fontSize:10, fontWeight:700, color:"#475569" }}>Dow Theory · SPX + DJT</span>
+                    </div>
+                    <div style={{ fontSize:20, fontWeight:700, color: sc, marginBottom:6 }}>
+                      {stateLabel[confState]}
+                    </div>
+
+                    {/* SPX vs DJT position + slope boxes */}
+                    <div style={{ display:"flex", gap:8, marginTop:4 }}>
+                      <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
+                        <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>SPX vs 200-DMA</div>
+                        <div style={{ fontSize:13, fontWeight:700, color: is200Broken ? "#ff6b88" : "#4ade80", marginTop:2 }}>
+                          {is200Broken ? "↘ Below" : "↗ Above"}{spx200Pct != null ? ` ${fmtSigned1(spx200Pct)}` : ""}
+                        </div>
+                        {slope200 != null && (
+                          <div style={{ fontSize:10, color: spxRising ? "#4ade80" : spxFalling ? "#ff6b88" : "#fbbf24", marginTop:2 }}>
+                            Slope {spxRising ? "↗" : spxFalling ? "↘" : "→"} {slope200 > 0 ? "+" : ""}{slope200.toFixed(3)}%
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", fontSize:18, fontWeight:700, color: confState === "confirmed_bull" || confState === "confirmed_bear" ? "#334155" : "#fbbf24" }}>
+                        {confState === "confirmed_bull" || confState === "confirmed_bear" ? "=" : "≠"}
+                      </div>
+                      <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
+                        <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>DJT vs 200-DMA</div>
+                        <div style={{ fontSize:13, fontWeight:700, color: djtAbove200 ? "#4ade80" : "#ff6b88", marginTop:2 }}>
+                          {djtAbove200 ? "↗ Above" : "↘ Below"}{djtVs200 != null ? ` ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : ""}
+                        </div>
+                        {djt200slope != null && (
+                          <div style={{ fontSize:10, color: djtRising ? "#4ade80" : djtFalling ? "#ff6b88" : "#fbbf24", marginTop:2 }}>
+                            Slope {djtRising ? "↗" : djtFalling ? "↘" : "→"} {djt200slope > 0 ? "+" : ""}{djt200slope.toFixed(3)}%
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Interpretation */}
+                    <div style={{ fontSize:11, color:"#94a3b8", marginTop:8, lineHeight:1.55 }}>
+                      {stateInterpretation[confState]}
+                    </div>
+
+                    {/* Resolution trigger */}
+                    <div style={{ fontSize:11, color:"#475569", marginTop:5, lineHeight:1.5, borderTop:"1px solid rgba(255,255,255,0.04)", paddingTop:5 }}>
+                      <span style={{ fontWeight:700, color:"#334155" }}>Resolution → </span>
+                      {stateResolution[confState]}
                     </div>
                   </div>
-                  <div style={{ display:"flex", alignItems:"center", fontSize:18, fontWeight:700, color: schannepSignal === "non_confirmation_bear" || schannepSignal === "non_confirmation_bull" ? "#fbbf24" : "#334155" }}>
-                    {schannepSignal === "bull" || schannepSignal === "bear" ? "=" : "≠"}
-                  </div>
-                  <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
-                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>DJT vs 200-DMA</div>
-                    <div style={{ fontSize:13, fontWeight:700, color: djtAbove200 ? "#4ade80" : "#ff6b88", marginTop:2 }}>
-                      {djtAbove200 ? "↗ Above" : "↘ Below"}
-                      {djtVs200 != null ? ` ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : ""}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ fontSize:11, color:"#64748b", marginTop:6, lineHeight:1.5 }}>
-                  {schannepSignal === "non_confirmation_bear"
-                    ? "SPX below 200-DMA but Transports not confirming — economy not yet signaling deterioration. Classic head-fake zone. Not a primary trigger."
-                    : schannepSignal === "bear"
-                    ? "Both SPX and DJT below 200-DMA — economic and equity weakness aligned. Strongest bear confirmation in this framework."
-                    : schannepSignal === "non_confirmation_bull"
-                    ? "DJT holding above 200-DMA while SPX is below — economic strength is not confirming the equity selloff. Potential recovery setup."
-                    : "Both SPX and DJT above 200-DMA — primary bull trend confirmed across equity and economic indicators."}
-                </div>
-              </div>
+                );
+              })()}
             </div>
 
           </section>
