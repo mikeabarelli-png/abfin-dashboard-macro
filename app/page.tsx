@@ -101,9 +101,20 @@ export default function Page() {
   const fearGreedRating: string = metrics?.fear_greed_rating ?? marketData?.fear_greed_rating ?? "Extreme Fear";
 
   // Fed Balance Sheet (WALCL)
-  const walclBn    = getNum(metrics?.walcl_bn,    marketData?.walcl_bn);     // billions
-  const walclChgBn = getNum(metrics?.walcl_chg_bn, marketData?.walcl_chg_bn); // WoW change, billions
+  const walclBn    = getNum(metrics?.walcl_bn,    marketData?.walcl_bn);
+  const walclChgBn = getNum(metrics?.walcl_chg_bn, marketData?.walcl_chg_bn);
   const walclDirection: string = metrics?.walcl_direction ?? marketData?.walcl_direction ?? "";
+
+  // Dow Theory — Transports + Schannep 2-of-3
+  const djtPrice      = getNum(metrics?.djt_price,      marketData?.djt_price);
+  const djtChangePct  = getNum(metrics?.djt_change_pct, marketData?.djt_change_pct);
+  const djt200dma     = getNum(metrics?.djt_200dma,     marketData?.djt_200dma);
+  const djt200slope   = getNum(metrics?.djt_200slope,   marketData?.djt_200slope);
+  const djtVs200      = getNum(metrics?.djt_vs_200_pct, marketData?.djt_vs_200_pct);
+  const djtAbove200: boolean = metrics?.djt_above_200 ?? marketData?.djt_above_200 ?? true;
+  const schannepSignal: string = metrics?.schannep_signal ?? marketData?.schannep_signal ?? "";
+  const schannepLabel: string  = metrics?.schannep_label  ?? marketData?.schannep_label  ?? "Loading";
+  const schannepColor: string  = metrics?.schannep_color  ?? marketData?.schannep_color  ?? "#94a3b8";
 
   // Live Ivy Portfolio data from route.ts
   const ivyData = metrics?.ivy ?? marketData?.ivy ?? null;
@@ -280,6 +291,8 @@ CURRENT DASHBOARD DATA (live):
 - Fear & Greed: ${Math.round(fearGreedScore)} — ${fearGreedRating} ${fearGreedScore <= 20 ? "⚠ EXTREME FEAR (contrarian rally setup — Zeberg)" : fearGreedScore >= 80 ? "⚠ EXTREME GREED (Grantham bubble warning)" : ""}
 - DXY: ${dxy != null ? dxy.toFixed(2) : "loading"}
 - Fed Balance Sheet (WALCL): ${walclBn != null ? `$${(walclBn/1000).toFixed(2)}T` : "loading"}${walclChgBn != null ? ` · ${walclChgBn > 0 ? "▲" : "▼"} $${Math.abs(walclChgBn)}B WoW · ${walclDirection}` : ""}
+- Dow Transports (DJT): ${djtPrice != null ? fmtWhole(djtPrice) : "loading"} vs 200-DMA ${djt200dma != null ? fmtWhole(djt200dma) : "—"} (${djtVs200 != null ? `${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : "?"}) · Slope: ${djt200slope != null ? `${djt200slope > 0 ? "↗" : "↘"} ${djt200slope.toFixed(3)}%` : "—"}
+- Schannep 2-of-3 Signal: ${schannepLabel} — ${schannepSignal === "non_confirmation_bear" ? "SPX broken but DJT not confirming — watch closely" : schannepSignal === "bear" ? "Both indices below 200-DMA — strongest bear signal" : schannepSignal === "non_confirmation_bull" ? "DJT holding, potential recovery setup" : "Both confirming bull"}
 - Ivy Portfolio: ${ivyInvestedCount}/5 assets Invested · ${ivyPositions.filter(p => p.variance != null && Math.abs(p.variance) < 2).map(p => p.ticker + " NEAR SIGNAL").join(", ") || "All clear of signal lines"}
 - Valuation models: 4/5 overvalued
 
@@ -682,7 +695,76 @@ RESPONSE RULES:
               </div>
             </div>
 
-            {/* ── Alert strip — critical red when broken, amber watch when above ── */}
+            {/* ── Row 2: Dow Theory Confirmation ── */}
+            <div className="grid5" style={{ marginBottom:8 }}>
+              {/* DJT Transports tile */}
+              <div className="tile" style={{ gridColumn:"span 2" }}>
+                <div className="tileTop">
+                  <span className="lbl">Dow Transports (DJT)</span>
+                  <span style={{ fontSize:10, fontWeight:700, color:"#475569" }}>Dow Theory</span>
+                </div>
+                <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
+                  <div className="valHero">{djtPrice != null ? fmtWhole(djtPrice) : "—"}</div>
+                  {djtChangePct != null && (
+                    <div style={{ fontSize:13, fontWeight:600, color: djtChangePct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                      {djtChangePct >= 0 ? "▲" : "▼"} {Math.abs(djtChangePct).toFixed(1)}%
+                    </div>
+                  )}
+                </div>
+                <div className="status" style={{ color: djtVs200 == null ? "#94a3b8" : djtVs200 < 0 ? "#ff6b88" : djtVs200 < 2 ? "#fbbf24" : "#4ade80" }}>
+                  {djtVs200 == null ? "Loading" : djtVs200 < 0 ? "Below 200-DMA" : djtVs200 < 2 ? "Testing 200-DMA" : "Above 200-DMA"}
+                </div>
+                <div className="sub">
+                  200-DMA: {djt200dma != null ? fmtWhole(djt200dma) : "—"}
+                  {djtVs200 != null ? ` · ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : ""}
+                </div>
+                {djt200slope != null && (
+                  <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: djt200slope > 0.02 ? "#4ade80" : djt200slope < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                    Slope {djt200slope > 0 ? "↗ +" : djt200slope < 0 ? "↘ " : "→ "}{djt200slope.toFixed(3)}% · {djt200slope > 0.02 ? "Rising" : djt200slope < -0.02 ? "Falling" : "Flat"}
+                  </div>
+                )}
+              </div>
+
+              {/* Schannep 2-of-3 Signal tile */}
+              <div className="tile" style={{ gridColumn:"span 3" }}>
+                <div className="tileTop">
+                  <span className="lbl">Schannep 2-of-3 Signal</span>
+                  <span style={{ fontSize:10, fontWeight:700, color:"#475569" }}>SPX + DJT confirmation</span>
+                </div>
+                <div style={{ fontSize:22, fontWeight:700, color: schannepColor, marginBottom:4 }}>
+                  {schannepLabel}
+                </div>
+                {/* SPX vs DJT divergence visual */}
+                <div style={{ display:"flex", gap:8, marginTop:4 }}>
+                  <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
+                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>SPX vs 200-DMA</div>
+                    <div style={{ fontSize:13, fontWeight:700, color: is200Broken ? "#ff6b88" : "#4ade80", marginTop:2 }}>
+                      {is200Broken ? "↘ Below" : "↗ Above"}
+                      {spx200Pct != null ? ` ${fmtSigned1(spx200Pct)}` : ""}
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", fontSize:16, color: schannepSignal === "non_confirmation_bear" || schannepSignal === "non_confirmation_bull" ? "#fbbf24" : "#334155" }}>
+                    {schannepSignal === "bull" || schannepSignal === "bear" ? "=" : "≠"}
+                  </div>
+                  <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
+                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>DJT vs 200-DMA</div>
+                    <div style={{ fontSize:13, fontWeight:700, color: djtAbove200 ? "#4ade80" : "#ff6b88", marginTop:2 }}>
+                      {djtAbove200 ? "↗ Above" : "↘ Below"}
+                      {djtVs200 != null ? ` ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : ""}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize:11, color:"#64748b", marginTop:6, lineHeight:1.5 }}>
+                  {schannepSignal === "non_confirmation_bear"
+                    ? "⚠ SPX below 200-DMA but DJT not confirming — classic Dow Theory non-confirmation. Transports are the economy's truth serum."
+                    : schannepSignal === "bear"
+                    ? "Both SPX and DJT below 200-DMA — Schannep bear confirmed. Strongest sell signal in the framework."
+                    : schannepSignal === "non_confirmation_bull"
+                    ? "DJT holding above 200-DMA while SPX is below — potential recovery signal. Watch for SPX to reclaim."
+                    : "Both SPX and DJT above 200-DMA — primary bull trend confirmed."}
+                </div>
+              </div>
+            </div>
             {is200Broken ? (
               <div className="alertStripCritical">
                 <span className="alertDotRed" />
@@ -895,17 +977,18 @@ RESPONSE RULES:
                 erpBps != null && erpBps >= 300,
                 dxy != null && dxy < 104,
                 adLine?.signal === "bullish_divergence" || adLine?.signal === "neutral",
+                schannepSignal === "bull" || schannepSignal === "non_confirmation_bull",
               ];
               const greenCount = signals.filter(Boolean).length;
-              const redCount = 5 - greenCount;
-              const labels = ["HY","VIX","ERP","DXY","A/D"];
+              const redCount = 6 - greenCount;
+              const labels = ["HY","VIX","ERP","DXY","A/D","DowTh"];
 
               // ── State machine: 4 states based on 200-DMA + confirmation count ──
               type ConfluenceState = "intact" | "headfake" | "mixed" | "confirmed";
               const state: ConfluenceState =
                 !is200Broken                      ? "intact"
-                : greenCount >= 4                 ? "headfake"
-                : greenCount >= 2                 ? "mixed"
+                : greenCount >= 5                 ? "headfake"
+                : greenCount >= 3                 ? "mixed"
                 :                                   "confirmed";
 
               // Action sentences — keyed to your specific portfolio and levels
@@ -932,27 +1015,27 @@ RESPONSE RULES:
                   badge: "HOLD",
                   badgeColor: "#4ade80",
                   borderColor: "rgba(74,222,128,0.35)",
-                  title: `Head-Fake Signal · ${greenCount}/5 healthy · Credit NOT confirming break`,
+                  title: `Head-Fake Signal · ${greenCount}/6 healthy · Credit & Transports NOT confirming break`,
                   titleColor: "#4ade80",
-                  action: `${greenCount} of 5 stress signals remain healthy (${hyTrigStr}, ${vixStr} below 30). Roberts' scorecard: 200-DMA slope still rising, RSI oversold, AAII bears elevated — this pattern matches 2015 and Q4 2018 brief breaks, not 2008. Brief breaks produced +19.8% avg 12-month returns when credit didn't confirm. Hold VTI, SCHD, VEA. Do NOT trim equity into this flush. A reflexive rally is likely before any further leg down. Watch the 200-DMA slope weekly — if it begins declining, the thesis shifts. Two Friday closes below ${spx200Str} with credit confirmation remains the only rule-based trigger.`,
+                  action: `${greenCount} of 6 signals remain healthy (${hyTrigStr}, ${vixStr} below 30). Roberts' scorecard: 200-DMA slope still rising, RSI oversold, AAII bears elevated — matches 2015/Q4 2018 brief breaks, not 2008. Schannep signal: ${schannepLabel} — Dow Theory not confirming a bear. Brief breaks without credit+transport confirmation produced +19.8% avg 12-month returns. Hold VTI, SCHD, VEA. Do NOT trim equity into this flush. Watch the 200-DMA slope weekly — if it begins declining, the thesis shifts. Two Friday closes below ${spx200Str} with credit confirmation remains the only rule-based trigger.`,
                   actionColor: "#4ade80",
                 },
                 mixed: {
                   badge: "WATCH",
                   badgeColor: "#fbbf24",
                   borderColor: "rgba(245,158,11,0.4)",
-                  title: `Mixed Confirmation · ${greenCount}/5 healthy · Elevated caution`,
+                  title: `Mixed Confirmation · ${greenCount}/6 healthy · Elevated caution`,
                   titleColor: "#fbbf24",
-                  action: `${redCount} of 5 stress signals are flashing (${signals.map((g,i) => !g ? labels[i] : null).filter(Boolean).join(", ")}). Downside risk is real but not yet rule-based. Raise mental stops on VTI at ${spx200Str} SPX. Ensure SGOV + VTIP are at full allocation. Do not add new equity risk. If one more signal breaks — move to Confirmed state and trim VTI.`,
+                  action: `${redCount} of 6 signals are flashing (${signals.map((g,i) => !g ? labels[i] : null).filter(Boolean).join(", ")}). Downside risk is real but not yet rule-based. Raise mental stops on VTI at ${spx200Str} SPX. Ensure SGOV + VTIP are at full allocation. Do not add new equity risk. If one more signal breaks — move to Confirmed state and trim VTI.`,
                   actionColor: "#fbbf24",
                 },
                 confirmed: {
                   badge: "ACT",
                   badgeColor: "#ff6b88",
                   borderColor: "rgba(239,68,68,0.55)",
-                  title: `Confirmed Stress · ${greenCount}/5 healthy · Defense trigger active`,
+                  title: `Confirmed Stress · ${greenCount}/6 healthy · Defense trigger active`,
                   titleColor: "#ff6b88",
-                  action: `${redCount} of 5 stress signals confirmed (${signals.map((g,i) => !g ? labels[i] : null).filter(Boolean).join(", ")}). Rule-based defensive action: trim VTI from 10% → 5%, move proceeds to SGOV. Hold SCHD and VEA — quality equity with lower drawdown profiles. Do not touch SGOV, VTIP, VGIT, or GLDM. Reset trigger: two weekly closes back above ${spx200Str} with VIX sustainably below 20.`,
+                  action: `${redCount} of 6 signals confirmed (${signals.map((g,i) => !g ? labels[i] : null).filter(Boolean).join(", ")}). Rule-based defensive action: trim VTI from 10% → 5%, move proceeds to SGOV. Hold SCHD and VEA — quality equity with lower drawdown profiles. Do not touch SGOV, VTIP, VGIT, or GLDM. Reset trigger: two weekly closes back above ${spx200Str} with VIX sustainably below 20.`,
                   actionColor: "#ff6b88",
                 },
               };
