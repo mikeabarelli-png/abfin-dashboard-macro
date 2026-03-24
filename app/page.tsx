@@ -696,88 +696,6 @@ RESPONSE RULES:
               })}
             </div>
 
-            {/* ── Row 2: Dow Theory Confirmation — mirrors SPX row above ── */}
-            <div className="grid5" style={{ marginBottom:8 }}>
-
-              {/* Tile 6: DJT Price — mirrors SPX price tile */}
-              <div className="tile">
-                <div className="tileTop">
-                  <span className="lbl">Transports</span>
-                  <span className="ytd">DJT</span>
-                </div>
-                <div className="valHero">{djtPrice != null ? fmtWhole(djtPrice) : "—"}</div>
-                {djtTrend14d.length > 0 && (
-                  <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(djtTrend14d, djtChangePct != null && djtChangePct >= 0 ? "#4ade80" : "#ff6b88") }} />
-                )}
-                <div className="subSpx">
-                  {djtChangePct != null
-                    ? `${djtChangePct >= 0 ? "▲" : "▼"} ${Math.abs(djtChangePct).toFixed(1)}% today`
-                    : "Dow Jones Transports"}
-                </div>
-              </div>
-
-              {/* Tile 7: DJT 200-DMA — mirrors SPX 200-DMA tile */}
-              <div
-                className={!djtAbove200 ? "tile tile200Red" : "tile tile200"}
-                style={{ cursor:"default" }}
-              >
-                <div className="tileTop">
-                  <span className="lbl" style={{ color: !djtAbove200 ? "#ff6b88" : "#f59e0b" }}>DJT 200-DMA</span>
-                  <span className="badge" style={{ background: !djtAbove200 ? "#ef4444" : "#f59e0b", color: !djtAbove200 ? "#fff" : "#000" }}>!</span>
-                </div>
-                <div className="valHero">{djt200dma != null ? fmtWhole(djt200dma) : "—"}</div>
-                <div className="status" style={{ color: djtVs200 == null ? "#94a3b8" : !djtAbove200 ? "#ff6b88" : djtVs200 <= 2 ? "#fbbf24" : "#4ade80" }}>
-                  {djtVs200 == null ? "Loading" : !djtAbove200 ? "Broken Below" : djtVs200 <= 2 ? "Testing Support" : "Holding Above"}
-                </div>
-                <div className="sub" style={{ color: !djtAbove200 ? "#ff6b88" : "#f59e0b" }}>
-                  {djtVs200 != null ? `DJT ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}% ${djtVs200 >= 0 ? "above" : "below"}` : "Waiting"}
-                </div>
-                {djt200slope != null && (
-                  <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: djt200slope > 0.02 ? "#4ade80" : djt200slope < -0.02 ? "#ff6b88" : "#fbbf24" }}>
-                    Slope {djt200slope > 0 ? "↗ +" : djt200slope < 0 ? "↘ " : "→ "}{djt200slope.toFixed(3)}% · {djt200slope > 0.02 ? "Rising" : djt200slope < -0.02 ? "Falling" : "Flat"}
-                  </div>
-                )}
-              </div>
-
-              {/* Tile 8: Schannep 2-of-3 Signal — spans 3 */}
-              <div className="tile" style={{ gridColumn:"span 3" }}>
-                <div className="tileTop">
-                  <span className="lbl">Schannep 2-of-3 Signal</span>
-                  <span style={{ fontSize:10, fontWeight:700, color:"#475569" }}>SPX + DJT confirmation</span>
-                </div>
-                <div style={{ fontSize:22, fontWeight:700, color: schannepColor, marginBottom:4 }}>
-                  {schannepLabel}
-                </div>
-                <div style={{ display:"flex", gap:8, marginTop:4 }}>
-                  <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
-                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>SPX vs 200-DMA</div>
-                    <div style={{ fontSize:13, fontWeight:700, color: is200Broken ? "#ff6b88" : "#4ade80", marginTop:2 }}>
-                      {is200Broken ? "↘ Below" : "↗ Above"}
-                      {spx200Pct != null ? ` ${fmtSigned1(spx200Pct)}` : ""}
-                    </div>
-                  </div>
-                  <div style={{ display:"flex", alignItems:"center", fontSize:16, color: schannepSignal === "non_confirmation_bear" || schannepSignal === "non_confirmation_bull" ? "#fbbf24" : "#334155" }}>
-                    {schannepSignal === "bull" || schannepSignal === "bear" ? "=" : "≠"}
-                  </div>
-                  <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
-                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>DJT vs 200-DMA</div>
-                    <div style={{ fontSize:13, fontWeight:700, color: djtAbove200 ? "#4ade80" : "#ff6b88", marginTop:2 }}>
-                      {djtAbove200 ? "↗ Above" : "↘ Below"}
-                      {djtVs200 != null ? ` ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : ""}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ fontSize:11, color:"#64748b", marginTop:6, lineHeight:1.5 }}>
-                  {schannepSignal === "non_confirmation_bear"
-                    ? "⚠ SPX below 200-DMA but DJT not confirming — classic Dow Theory non-confirmation. Transports are the economy's truth serum."
-                    : schannepSignal === "bear"
-                    ? "Both SPX and DJT below 200-DMA — Schannep bear confirmed. Strongest sell signal in the framework."
-                    : schannepSignal === "non_confirmation_bull"
-                    ? "DJT holding above 200-DMA while SPX is below — potential recovery signal. Watch for SPX to reclaim."
-                    : "Both SPX and DJT above 200-DMA — primary bull trend confirmed."}
-                </div>
-              </div>
-            </div>
             {is200Broken ? (
               <div className="alertStripCritical">
                 <span className="alertDotRed" />
@@ -804,7 +722,7 @@ RESPONSE RULES:
           {/* ② STRESS CONFIRMATION */}
           <section className="panel">
             <div className="panelHeader">
-              <div><div className="panelTitle">Stress Confirmation</div><div className="panelSub">5 signals — is the 200-DMA break real or a head-fake?</div></div>
+              <div><div className="panelTitle">Stress Confirmation</div><div className="panelSub">Layer 2: Stress signals — is the 200-DMA break real or a head-fake? · Layer 3: Dow Theory — economic confirmation</div></div>
             </div>
 
             <div className="grid5" style={{ marginBottom:8 }}>
@@ -1076,6 +994,91 @@ RESPONSE RULES:
                 </div>
               );
             })()}
+
+            {/* ── Layer 3: Dow Theory Confirmation ── */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", margin:"10px 0 6px" }}>
+              Dow Theory — Market Confirmation
+            </div>
+            <div className="grid5">
+
+              {/* DJT Price tile */}
+              <div className="tile">
+                <div className="tileTop">
+                  <span className="lbl">Transports</span>
+                  <span className="ytd">DJT</span>
+                </div>
+                <div className="valHero">{djtPrice != null ? fmtWhole(djtPrice) : "—"}</div>
+                {djtTrend14d.length > 0 && (
+                  <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(djtTrend14d, djtChangePct != null && djtChangePct >= 0 ? "#4ade80" : "#ff6b88") }} />
+                )}
+                <div className="subSpx">
+                  {djtChangePct != null
+                    ? `${djtChangePct >= 0 ? "▲" : "▼"} ${Math.abs(djtChangePct).toFixed(1)}% today`
+                    : "Dow Jones Transports"}
+                </div>
+              </div>
+
+              {/* DJT 200-DMA tile */}
+              <div className={!djtAbove200 ? "tile tile200Red" : "tile tile200"}>
+                <div className="tileTop">
+                  <span className="lbl" style={{ color: !djtAbove200 ? "#ff6b88" : "#f59e0b" }}>DJT 200-DMA</span>
+                  <span className="badge" style={{ background: !djtAbove200 ? "#ef4444" : "#f59e0b", color: !djtAbove200 ? "#fff" : "#000" }}>!</span>
+                </div>
+                <div className="valHero">{djt200dma != null ? fmtWhole(djt200dma) : "—"}</div>
+                <div className="status" style={{ color: djtVs200 == null ? "#94a3b8" : !djtAbove200 ? "#ff6b88" : djtVs200 <= 2 ? "#fbbf24" : "#4ade80" }}>
+                  {djtVs200 == null ? "Loading" : !djtAbove200 ? "Broken Below" : djtVs200 <= 2 ? "Testing Support" : "Holding Above"}
+                </div>
+                <div className="sub" style={{ color: !djtAbove200 ? "#ff6b88" : "#f59e0b" }}>
+                  {djtVs200 != null ? `DJT ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}% ${djtVs200 >= 0 ? "above" : "below"}` : "Waiting"}
+                </div>
+                {djt200slope != null && (
+                  <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: djt200slope > 0.02 ? "#4ade80" : djt200slope < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                    Slope {djt200slope > 0 ? "↗ +" : djt200slope < 0 ? "↘ " : "→ "}{djt200slope.toFixed(3)}% · {djt200slope > 0.02 ? "Rising" : djt200slope < -0.02 ? "Falling" : "Flat"}
+                  </div>
+                )}
+              </div>
+
+              {/* Market Confirmation (Dow Theory) — spans 3 */}
+              <div className="tile" style={{ gridColumn:"span 3" }}>
+                <div className="tileTop">
+                  <span className="lbl">Market Confirmation</span>
+                  <span style={{ fontSize:10, fontWeight:700, color:"#475569" }}>Dow Theory · SPX + DJT</span>
+                </div>
+                <div style={{ fontSize:22, fontWeight:700, color: schannepColor, marginBottom:4 }}>
+                  {schannepSignal === "bull" ? "✅ Confirmed Uptrend"
+                    : schannepSignal === "bear" ? "🔴 Confirmed Downtrend"
+                    : "⚠️ Non-Confirmation — Transition"}
+                </div>
+                <div style={{ display:"flex", gap:8, marginTop:4 }}>
+                  <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
+                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>SPX vs 200-DMA</div>
+                    <div style={{ fontSize:13, fontWeight:700, color: is200Broken ? "#ff6b88" : "#4ade80", marginTop:2 }}>
+                      {is200Broken ? "↘ Below" : "↗ Above"}
+                      {spx200Pct != null ? ` ${fmtSigned1(spx200Pct)}` : ""}
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", fontSize:18, fontWeight:700, color: schannepSignal === "non_confirmation_bear" || schannepSignal === "non_confirmation_bull" ? "#fbbf24" : "#334155" }}>
+                    {schannepSignal === "bull" || schannepSignal === "bear" ? "=" : "≠"}
+                  </div>
+                  <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
+                    <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>DJT vs 200-DMA</div>
+                    <div style={{ fontSize:13, fontWeight:700, color: djtAbove200 ? "#4ade80" : "#ff6b88", marginTop:2 }}>
+                      {djtAbove200 ? "↗ Above" : "↘ Below"}
+                      {djtVs200 != null ? ` ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : ""}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize:11, color:"#64748b", marginTop:6, lineHeight:1.5 }}>
+                  {schannepSignal === "non_confirmation_bear"
+                    ? "SPX below 200-DMA but Transports not confirming — economy not yet signaling deterioration. Classic head-fake zone. Not a primary trigger."
+                    : schannepSignal === "bear"
+                    ? "Both SPX and DJT below 200-DMA — economic and equity weakness aligned. Strongest bear confirmation in this framework."
+                    : schannepSignal === "non_confirmation_bull"
+                    ? "DJT holding above 200-DMA while SPX is below — economic strength is not confirming the equity selloff. Potential recovery setup."
+                    : "Both SPX and DJT above 200-DMA — primary bull trend confirmed across equity and economic indicators."}
+                </div>
+              </div>
+            </div>
 
           </section>
 
