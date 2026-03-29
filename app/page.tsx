@@ -1486,12 +1486,12 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.02", color:"#ff6b88" },
-                  { name:"Price/Earnings (CAPE)",  rating:"Overvalued",          score:"1.88", color:"#fbbf24" },
-                  { name:"Price/Sales",            rating:"Strongly Overvalued", score:"2.00", color:"#ff6b88" },
-                  { name:"Interest Rate Model",    rating:"Overvalued",          score:"1.41", color:"#fbbf24" },
-                  { name:"S&P 500 Mean Reversion", rating:"Overvalued",          score:"1.94", color:"#fbbf24" },
-                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.27", color:"#94a3b8", muted:true },
+                  { name:"Buffett Indicator",      rating:"Overvalued",          score:"1.92", color:"#fbbf24" },
+                  { name:"Price/Earnings (CAPE)",  rating:"Overvalued",          score:"1.78", color:"#fbbf24" },
+                  { name:"Price/Sales",            rating:"Overvalued",          score:"1.90", color:"#fbbf24" },
+                  { name:"Interest Rate Model",    rating:"Overvalued",          score:"1.37", color:"#fbbf24" },
+                  { name:"S&P 500 Mean Reversion", rating:"Overvalued",          score:"1.84", color:"#fbbf24" },
+                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.31", color:"#94a3b8", muted:true },
                 ].map(r => (
                   <tr key={r.name} style={{ opacity:(r as any).muted?0.4:1 }}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:(r as any).muted?"italic":"normal" }}>{r.name}</td>
@@ -1503,9 +1503,9 @@ RESPONSE RULES:
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Valuation Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>5 of 5 models overvalued</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>5 of 5 models overvalued · Mar 27</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Elevated valuations reduce margin of safety but don&apos;t predict timing. Earnings Yield Gap fairly valued due to thin ERP.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Scores eased slightly from prior week — still deeply elevated. Earnings Yield Gap fairly valued due to thin ERP.</span>
             </div>
 
             {/* Recession Models */}
@@ -1514,7 +1514,7 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Yield Curve",       rating:"Very High Risk",  score:"2.56", color:"#ff6b88",  updated:"Mar 20" },
+                  { name:"Yield Curve",       rating:"Very High Risk",  score:"2.56", color:"#ff6b88",  updated:"Mar 27" },
                   { name:"Sahm Rule",         rating:"Normal",          score:"N/A",  color:"#4ade80",  updated:"Feb 28" },
                   { name:"State Coincidence", rating:"Normal",          score:"0.66", color:"#4ade80",  updated:"Dec 31" },
                 ].map(r => (
@@ -1575,11 +1575,11 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Economic Uncertainty Index", rating:"Very Pessimistic", score:"12.64", color:"#4ade80",  updated:"Mar 13", note:"contrarian bullish" },
-                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.30", color:"#4ade80",  updated:"Mar 13", note:"contrarian bullish" },
-                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.12",  color:"#fbbf24",  updated:"Feb 28", note:"still elevated" },
-                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.78",  color:"#94a3b8",  updated:"Mar 20", note:"CDX warning active" },
-                  { name:"VIX Index",                  rating:"Neutral",          score:"0.60",  color:"#94a3b8",  updated:"Mar 20", note:"below 30 trigger" },
+                  { name:"Economic Uncertainty Index", rating:"Pessimistic",      score:"1.94",  color:"#fbbf24", updated:"Mar 27", note:"elevated uncertainty" },
+                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.50", color:"#4ade80", updated:"Mar 27", note:"contrarian bullish" },
+                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.12",  color:"#fbbf24", updated:"Feb 28", note:"still elevated" },
+                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.80",  color:"#94a3b8", updated:"Mar 27", note:"CDX warning active" },
+                  { name:"VIX Index",                  rating:"Pessimistic",      score:"1.04",  color:"#fbbf24", updated:"Mar 27", note:"approaching trigger" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -1597,9 +1597,9 @@ RESPONSE RULES:
             </table>
             <div className="sumBar">
               <span className="sumBarLabel">Sentiment Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism — Contrarian Bullish Short-Term</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Deteriorating — Pessimism Broadening · Mar 27</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Economic Uncertainty 12.64σ and Consumer Confidence -2.30σ are historically extreme fear readings — Zeberg&apos;s &quot;most hated rally&quot; setup. Margin debt still elevated tempers the contrarian signal.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Consumer Confidence -2.50σ remains contrarian bullish. VIX and Economic Uncertainty upgraded to Pessimistic. Margin debt still elevated tempers the contrarian signal.</span>
             </div>
           </section>
 
