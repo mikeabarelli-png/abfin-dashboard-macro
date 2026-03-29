@@ -413,7 +413,15 @@ export async function GET() {
 
   const real10y: number = fredReal10y.value ?? 1.92;
   const nom10y: number = fredNom10y.value ?? 4.30;
-  const hySpread: number = fredHY.value ?? 3.28;
+
+  // HY Spread — FRED BAMLH0A0HYM2 lags by ~1 business day (cash bond market)
+  // CDX HY (derivatives) trades wider and updates intraday — may diverge on stress days
+  // Update MANUAL_HY_FALLBACK each Saturday if FRED hasn't captured Friday's move yet
+  // Source: FRED https://fred.stlouisfed.org/series/BAMLH0A0HYM2
+  // Note: value is already in percentage points — do NOT divide by 100
+  const MANUAL_HY_FALLBACK = 3.21; // Last manually verified: Mar 28 2026
+  const hySpread: number = fredHY.value ?? MANUAL_HY_FALLBACK;
+
   const yieldCurve: number = fredYC.value ?? 0.55;
   const fedFunds: number = fredFedFunds.value ?? 4.33;
   const breakeven5y: number = fredBreakeven.value ?? 2.45;
@@ -526,6 +534,7 @@ export async function GET() {
       walcl_direction: walclDirection,
       djt_price: djtPrice,
       djt_change_pct: djtChangePct,
+      djt_trend_14d: djtCloses.slice(-14),
       djt_200dma: djt200dma,
       djt_200slope: djt200slope,
       djt_vs_200_pct: djtVs200,
