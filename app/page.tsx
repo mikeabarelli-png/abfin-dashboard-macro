@@ -1787,16 +1787,16 @@ RESPONSE RULES:
           <ModalGrid
             left={<>
               <SH>Current reading</SH>
-              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{fmt2(hySpread)}<span style={{ fontSize:22 }}>%</span></div>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{Math.round(hySpread*100)}<span style={{ fontSize:22 }}>bps</span></div>
               <Tag
                 label={hySpread>=5?"Stress — Above Industry Red Line":hySpread>=4?"⚠ Above Your Trigger":hySpread>=3.5?"Caution — Widening":"Firm — Historically Tight"}
                 color={hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80"}
                 bg={hySpread>=4?"rgba(255,79,114,0.15)":hySpread>=3.5?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"}
               />
               <BC>{hySpread>=5?"Credit stress confirmed above industry red line. Serious default risk being priced. Both your trigger and the industry 500bps threshold are breached."
-                :hySpread>=4?"Above your 400bps trigger. Credit markets signaling stress. Combined with VIX &gt;30 this activates your defensive posture."
+                :hySpread>=4?"Above your 400bps trigger. Credit markets signaling stress. Combined with VIX >30 this activates your defensive posture."
                 :hySpread>=3.5?"Spreads widening toward caution zone. Direction of travel matters more than absolute level. Watch for continued widening toward 400bps."
-                :`At ${fmt2(hySpread)}%, spreads are historically tight — market priced for perfection. Any move toward 400bps would be a ~${Math.round((4-hySpread)/hySpread*100)}% widening from here.`}
+                :`At ${Math.round(hySpread*100)}bps, spreads are historically tight — market priced for perfection. Any move toward 400bps would be a ~${Math.round((4-hySpread)/hySpread*100)}% widening from here.`}
               </BC>
               <BandTrack
                 segs={[{w:"30%",color:"#047857"},{w:"20%",color:"#4ade80"},{w:"10%",color:"#f59e0b"},{w:"25%",color:"#ef4444"},{w:"15%",color:"#7f1d1d"}]}
@@ -1850,20 +1850,20 @@ RESPONSE RULES:
               <MCard>
                 <SH>Historical CDX warning instances</SH>
                 <div style={{ display:"grid", gap:5, marginTop:8 }}>
-                  <HistRow val="20%+" event="GFC 2008-09" note="Credit markets frozen · 1000bps+" />
-                  <HistRow val="10.9%" event="COVID Mar 2020" note="Sharp spike · rapid recovery" />
-                  <HistRow val="8.4%" event="Energy crisis 2016" note="Oil-driven stress · 700bps" />
-                  <HistRow val="5.8%" event="2022 rate shock" note="Fed hiking cycle · 580bps peak" />
-                  <HistRow val={`${fmt2(hySpread)}%`} event="Today" note={hySpread>=4?"Above your trigger · stress building":"Historically tight · priced for perfection"} active />
-                  <HistRow val="5.4%" event="Long-run average" note="~540bps historical mean" />
+                  <HistRow val="1000bps+" event="GFC 2008-09" note="Credit markets frozen" />
+                  <HistRow val="800bps" event="COVID Mar 2020" note="Sharp spike · rapid recovery" />
+                  <HistRow val="700bps" event="Energy crisis 2016" note="Oil-driven stress" />
+                  <HistRow val="580bps" event="2022 rate shock" note="Fed hiking cycle · peak" />
+                  <HistRow val={`${Math.round(hySpread*100)}bps`} event="Today" note={hySpread>=4?"Above your trigger · stress building":hySpread>=3.5?"Caution zone · watch direction":"Historically tight · priced for perfection"} active />
+                  <HistRow val="540bps" event="Long-run average" note="Historical mean" />
                 </div>
               </MCard>
               <ActionCard>
                 {hySpread>=5
-                  ? `HY at ${fmt2(hySpread)}% — above both your trigger AND the 500bps industry red line. Full defensive posture warranted if VIX >30 confirms.`
+                  ? `HY at ${Math.round(hySpread*100)}bps — above both your trigger AND the 500bps industry red line. Full defensive posture warranted if VIX >30 confirms.`
                   : hySpread>=4
-                  ? `HY at ${fmt2(hySpread)}% — your trigger is active. ${Math.round((5-hySpread)*100)}bps from the industry red line. Combined with VIX >30 this fires your defensive posture.`
-                  : `HY at ${fmt2(hySpread)}% — ${Math.round((4-hySpread)*100)}bps below your 400bps trigger, ${Math.round((5-hySpread)*100)}bps below the 500bps industry red line. CDX warning signal is active — direction of travel matters. Monitor weekly. Both VIX >30 AND HY >400bps must confirm to activate defensive posture.`}
+                  ? `HY at ${Math.round(hySpread*100)}bps — your trigger is active. ${Math.round((5-hySpread)*100)}bps from the industry red line. Combined with VIX >30 this fires your defensive posture.`
+                  : `HY at ${Math.round(hySpread*100)}bps — ${Math.round((4-hySpread)*100)}bps below your 400bps trigger, ${Math.round((5-hySpread)*100)}bps below the 500bps industry red line. CDX warning signal is active — direction of travel matters. Monitor weekly. Both VIX >30 AND HY >400bps must confirm to activate defensive posture.`}
               </ActionCard>
             </>}
           />
