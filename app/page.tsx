@@ -121,12 +121,13 @@ export default function Page() {
   const ivyData = metrics?.ivy ?? marketData?.ivy ?? null;
 
   // Official last month-end signals — update each month when Advisor Perspectives publishes
-  // Source: advisorperspectives.com/dshort · Last updated: Feb 28, 2026
+  // Source: advisorperspectives.com/dshort · Last updated: Mar 31, 2026
+  // VTI: Cash (-1.2%) · VEU: Invested (+4.7%) · IEF: Invested (+0.7%) · VNQ: Cash (-0.1%) · DBC: Invested (+25.5%)
   const ivyOfficialSignals: Record<string, "Invest" | "Cash"> = {
-    vti: "Invest", veu: "Invest", ief: "Invest", vnq: "Invest", dbc: "Invest"
+    vti: "Cash", veu: "Invest", ief: "Invest", vnq: "Cash", dbc: "Invest"
   };
-  const ivyOfficialDate = "Feb 28";
-  const ivyEOMDate = "Mar 31";
+  const ivyOfficialDate = "Mar 31";
+  const ivyEOMDate = "Apr 30";
 
   const ivyPositions = [
     { ticker:"VTI", name:"US Stocks",     key:"vti" },
@@ -294,7 +295,7 @@ CURRENT DASHBOARD DATA (live):
 - Fed Balance Sheet (WALCL): ${walclBn != null ? `$${(walclBn/1000).toFixed(2)}T` : "loading"}${walclChgBn != null ? ` · ${walclChgBn > 0 ? "▲" : "▼"} $${Math.abs(walclChgBn)}B WoW · ${walclDirection}` : ""}
 - Dow Transports (DJT): ${djtPrice != null ? fmtWhole(djtPrice) : "loading"} vs 200-DMA ${djt200dma != null ? fmtWhole(djt200dma) : "—"} (${djtVs200 != null ? `${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : "?"}) · Slope: ${djt200slope != null ? `${djt200slope > 0 ? "↗" : "↘"} ${djt200slope.toFixed(3)}%` : "—"}
 - Schannep 2-of-3 Signal: ${schannepLabel} — ${schannepSignal === "non_confirmation_bear" ? "SPX broken but DJT not confirming — watch closely" : schannepSignal === "bear" ? "Both indices below 200-DMA — strongest bear signal" : schannepSignal === "non_confirmation_bull" ? "DJT holding, potential recovery setup" : "Both confirming bull"}
-- Ivy Portfolio: ${ivyInvestedCount}/5 assets Invested · ${ivyPositions.filter(p => p.variance != null && Math.abs(p.variance) < 2).map(p => p.ticker + " NEAR SIGNAL").join(", ") || "All clear of signal lines"}
+- Ivy Portfolio: ${ivyInvestedCount}/5 assets Invested · VTI and VNQ flipped to Cash at Mar 31 close · ${ivyPositions.filter(p => p.variance != null && Math.abs(p.variance) < 2).map(p => p.ticker + " NEAR SIGNAL").join(", ") || "No positions near signal line"}
 - Valuation models: 4/5 overvalued
 
 RESPONSE RULES:
@@ -1686,33 +1687,54 @@ RESPONSE RULES:
               </tbody>
             </table>
 
-            {/* EOM Risk Summary */}
-            {ivyLive && ivyAtRiskCount > 0 && (
-              <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.35)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
-                <span style={{ fontSize:15, flexShrink:0 }}>🔴</span>
-                <div>
-                  <div style={{ fontSize:12, fontWeight:700, color:"#ff6b88", marginBottom:3 }}>
-                    {ivyAtRiskCount} position{ivyAtRiskCount > 1 ? "s" : ""} below SMA — {ivyEOMDate} flip risk
+            {/* EOM Risk Summary — shows confirmed flips vs pending risks */}
+            {(() => {
+              // Positions that officially flipped to Cash this month-end
+              const confirmedCash = Object.entries(ivyOfficialSignals)
+                .filter(([,v]) => v === "Cash")
+                .map(([k]) => k.toUpperCase());
+              // Positions that are live-below-SMA but still officially Invested (next month risk)
+              const pendingRisk = ivyPositions.filter(p =>
+                p.variance != null && p.variance <= 0 && ivyOfficialSignals[p.key] === "Invest"
+              );
+              return (<>
+                {confirmedCash.length > 0 && (
+                  <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.35)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
+                    <span style={{ fontSize:15, flexShrink:0 }}>🔴</span>
+                    <div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#ff6b88", marginBottom:3 }}>
+                        {confirmedCash.length} position{confirmedCash.length > 1 ? "s" : ""} flipped to Cash — Mar 31 official signal
+                      </div>
+                      <div style={{ fontSize:12, color:"#fca5a5", lineHeight:1.6 }}>
+                        <strong>{confirmedCash.join(", ")}</strong> closed below their 10-month SMA at Mar 31 month-end. Ivy rule now signals <strong>Cash</strong> for these positions. Signal valid until Apr 30 close. Next action: monitor {ivyEOMDate} for potential re-entry if price reclaims SMA.
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ fontSize:12, color:"#fca5a5", lineHeight:1.6 }}>
-                    <strong>{ivyPositions.filter(p => p.variance != null && p.variance <= 0).map(p => p.ticker).join(", ")}</strong> are currently trading below their 10-month SMA. If they close below on {ivyEOMDate}, the Ivy rule signals Cash. Official position remains <strong>Invested</strong> until month-end close confirms.
+                )}
+                {pendingRisk.length > 0 && (
+                  <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
+                    <span style={{ fontSize:15, flexShrink:0 }}>⚠️</span>
+                    <div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:3 }}>Apr 30 flip risk</div>
+                      <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>
+                        <strong>{pendingRisk.map(p => p.ticker).join(", ")}</strong> currently trading below SMA but officially still Invested. If below at Apr 30 close, signal flips to Cash.
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Watch warning */}
-            {ivyLive && ivyAtRiskCount === 0 && ivyPositions.some(p => p.variance != null && p.variance > 0 && p.variance <= 2) && (
-              <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
-                <span style={{ fontSize:15, flexShrink:0 }}>⚠️</span>
-                <div>
-                  <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:3 }}>Near-Signal Watch</div>
-                  <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>
-                    {ivyPositions.filter(p => p.variance != null && p.variance > 0 && p.variance <= 2).map(p => `${p.ticker} (+${p.variance?.toFixed(1)}%)`).join(", ")} within 2% of signal line. Monitor into {ivyEOMDate} close.
+                )}
+                {ivyLive && confirmedCash.length === 0 && pendingRisk.length === 0 && ivyPositions.some(p => p.variance != null && p.variance > 0 && p.variance <= 2) && (
+                  <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
+                    <span style={{ fontSize:15, flexShrink:0 }}>⚠️</span>
+                    <div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:3 }}>Near-Signal Watch</div>
+                      <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>
+                        {ivyPositions.filter(p => p.variance != null && p.variance > 0 && p.variance <= 2).map(p => `${p.ticker} (+${p.variance?.toFixed(1)}%)`).join(", ")} within 2% of signal line. Monitor into {ivyEOMDate} close.
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                )}
+              </>);
+            })()}
 
             <div className="sumBar" style={{ marginTop:8 }}>
               <span className="sumBarLabel">Ivy Signal</span>
