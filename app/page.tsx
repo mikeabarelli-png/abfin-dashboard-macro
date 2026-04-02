@@ -169,7 +169,7 @@ export default function Page() {
   const spxVs = (level: number) => spxPrice == null ? null : ((spxPrice - level) / level) * 100;
   const dmaState = (pct: number | null, isLong = false) => {
     if (pct == null) return "Loading";
-    if (pct < 0) return "Broken Below";
+    if (pct < 0) return "Bearish";
     if (isLong && pct <= 2) return "Testing Support";
     return "Holding Above";
   };
@@ -293,7 +293,7 @@ CURRENT DASHBOARD DATA (live):
 - Fear & Greed: ${Math.round(fearGreedScore)} — ${fearGreedRating} ${fearGreedScore <= 20 ? "⚠ EXTREME FEAR (contrarian rally setup — Zeberg)" : fearGreedScore >= 80 ? "⚠ EXTREME GREED (Grantham bubble warning)" : ""}
 - DXY: ${dxy != null ? dxy.toFixed(2) : "loading"}
 - Fed Balance Sheet (WALCL): ${walclBn != null ? `$${(walclBn/1000).toFixed(2)}T` : "loading"}${walclChgBn != null ? ` · ${walclChgBn > 0 ? "▲" : "▼"} $${Math.abs(walclChgBn)}B WoW · ${walclDirection}` : ""}
-- Dow Transports (DJT): ${djtPrice != null ? fmtWhole(djtPrice) : "loading"} vs 200-DMA ${djt200dma != null ? fmtWhole(djt200dma) : "—"} (${djtVs200 != null ? `${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : "?"}) · Slope: ${djt200slope != null ? `${djt200slope > 0 ? "↗" : "↘"} ${djt200slope.toFixed(3)}%` : "—"}
+- Dow Transports (DJT): ${djtPrice != null ? fmtWhole(djtPrice) : "loading"} vs 200-DMA ${djt200dma != null ? fmtWhole(djt200dma) : "—"} (${djtVs200 != null ? `${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : "?"}) · Slope: ${djt200slope != null ? `${djt200slope > 0 ? "↗" : "↘"} ${djt200slope.toFixed(1)}%` : "—"}
 - Schannep 2-of-3 Signal: ${schannepLabel} — ${schannepSignal === "non_confirmation_bear" ? "SPX broken but DJT not confirming — watch closely" : schannepSignal === "bear" ? "Both indices below 200-DMA — strongest bear signal" : schannepSignal === "non_confirmation_bull" ? "DJT holding, potential recovery setup" : "Both confirming bull"}
 - Ivy Portfolio: ${ivyInvestedCount}/5 assets Invested · VTI and VNQ flipped to Cash at Mar 31 close · ${ivyPositions.filter(p => p.variance != null && Math.abs(p.variance) < 2).map(p => p.ticker + " NEAR SIGNAL").join(", ") || "No positions near signal line"}
 - Valuation models: 4/5 overvalued
@@ -633,7 +633,7 @@ RESPONSE RULES:
               <div style={{ flexShrink:0, textAlign:"right" }}>
                 <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>200-DMA Slope</div>
                 <div style={{ fontSize:14, fontWeight:700, color: slope200 == null ? "#475569" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
-                  {slope200 == null ? "—" : `${slope200 > 0 ? "↗" : slope200 < 0 ? "↘" : "→"} ${slope200 > 0 ? "+" : ""}${slope200.toFixed(3)}%`}
+                  {slope200 == null ? "—" : `${slope200 > 0 ? "↗" : slope200 < 0 ? "↘" : "→"} ${slope200 > 0 ? "+" : ""}${slope200.toFixed(1)}%`}
                 </div>
               </div>
             </div>
@@ -669,7 +669,7 @@ RESPONSE RULES:
                 <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
                 {slope200 != null && (
                   <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
-                    Slope {slope200 > 0 ? "↗ +" : slope200 < 0 ? "↘ " : "→ "}{slope200.toFixed(3)}% · {slope200 > 0.02 ? "Rising" : slope200 < -0.02 ? "Falling" : "Flat"}
+                    Slope {slope200 > 0 ? "↗ +" : slope200 < 0 ? "↘ " : "→ "}{slope200.toFixed(1)}% · {slope200 > 0.02 ? "Bullish" : slope200 < -0.02 ? "Bearish" : "Neutral"}
                   </div>
                 )}
               </div>
@@ -690,7 +690,7 @@ RESPONSE RULES:
                     <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct)}</div>
                     <div className="sub">{pct != null ? `SPX ${fmtSigned1(pct)} ${pct >= 0 ? "above" : "below"}` : "Waiting"}</div>
                     {d.slope != null && (
-                      <div style={{ fontSize:10, marginTop:4, fontWeight:600, color:slopeColor }}>Slope{slopeArrow} {d.slope > 0 ? "+" : ""}{d.slope.toFixed(3)}%</div>
+                      <div style={{ fontSize:10, marginTop:4, fontWeight:600, color:slopeColor }}>Slope{slopeArrow} {d.slope > 0 ? "+" : ""}{d.slope.toFixed(1)}%</div>
                     )}
                   </div>
                 );
@@ -748,13 +748,15 @@ RESPONSE RULES:
                       <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos,p400)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
                       {hySpread>4 && <div style={{ position:"absolute", left:`${p400}%`, top:0, height:6, width:`${Math.min(pos,p500)-p400}%`, background:"#fbbf24" }} />}
                       {hySpread>5 && <div style={{ position:"absolute", left:`${p500}%`, top:0, height:6, width:`${pos-p500}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                      {/* 400bps tick — your trigger (thin) */}
+                      <div style={{ position:"absolute", top:-4, left:`${p400}%`, width:2, height:14, background:"rgba(255,255,255,0.6)", borderRadius:2, zIndex:2 }} />
+                      {/* 500bps tick — industry red line (heavy) */}
+                      <div style={{ position:"absolute", top:-6, left:`${p500}%`, width:3, height:18, background:"rgba(255,255,255,0.9)", borderRadius:2, zIndex:2 }} />
                     </>;
                   })()}
-                  <div style={{ position:"absolute", top:-6, left:"40%", width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
-                  <div style={{ position:"absolute", top:-4, left:"60%", width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
                 </div>
                 <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}>
-                  <span>200</span><span>400↑</span><span>500</span><span>700</span><span>1000+</span>
+                  <span>200</span><span>400</span><span>500</span><span>700</span><span>1000+</span>
                 </div>
                 <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
                   {hySpread>=4 ? `▲ Trigger active · ${Math.round((5-hySpread)*100)}bps to red line`
@@ -1027,14 +1029,14 @@ RESPONSE RULES:
                 </div>
                 <div className="valHero">{djt200dma != null ? fmtWhole(djt200dma) : "—"}</div>
                 <div className="status" style={{ color: djtVs200 == null ? "#94a3b8" : !djtAbove200 ? "#ff6b88" : djtVs200 <= 2 ? "#fbbf24" : "#4ade80" }}>
-                  {djtVs200 == null ? "Loading" : !djtAbove200 ? "Broken Below" : djtVs200 <= 2 ? "Testing Support" : "Holding Above"}
+                  {djtVs200 == null ? "Loading" : !djtAbove200 ? "Bearish" : djtVs200 <= 2 ? "Testing Support" : "Holding Above"}
                 </div>
                 <div className="sub" style={{ color: !djtAbove200 ? "#ff6b88" : "#f59e0b" }}>
                   {djtVs200 != null ? `DJT ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}% ${djtVs200 >= 0 ? "above" : "below"}` : "Waiting"}
                 </div>
                 {djt200slope != null && (
                   <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: djt200slope > 0.02 ? "#4ade80" : djt200slope < -0.02 ? "#ff6b88" : "#fbbf24" }}>
-                    Slope {djt200slope > 0 ? "↗ +" : djt200slope < 0 ? "↘ " : "→ "}{djt200slope.toFixed(3)}% · {djt200slope > 0.02 ? "Rising" : djt200slope < -0.02 ? "Falling" : "Flat"}
+                    Slope {djt200slope > 0 ? "↗ +" : djt200slope < 0 ? "↘ " : "→ "}{djt200slope.toFixed(1)}% · {djt200slope > 0.02 ? "Bullish" : djt200slope < -0.02 ? "Bearish" : "Neutral"}
                   </div>
                 )}
               </div>
@@ -1113,7 +1115,7 @@ RESPONSE RULES:
                         </div>
                         {slope200 != null && (
                           <div style={{ fontSize:10, color: spxRising ? "#4ade80" : spxFalling ? "#ff6b88" : "#fbbf24", marginTop:2 }}>
-                            Slope {spxRising ? "↗" : spxFalling ? "↘" : "→"} {slope200 > 0 ? "+" : ""}{slope200.toFixed(3)}%
+                            Slope {spxRising ? "↗" : spxFalling ? "↘" : "→"} {slope200 > 0 ? "+" : ""}{slope200.toFixed(1)}%
                           </div>
                         )}
                       </div>
@@ -1127,7 +1129,7 @@ RESPONSE RULES:
                         </div>
                         {djt200slope != null && (
                           <div style={{ fontSize:10, color: djtRising ? "#4ade80" : djtFalling ? "#ff6b88" : "#fbbf24", marginTop:2 }}>
-                            Slope {djtRising ? "↗" : djtFalling ? "↘" : "→"} {djt200slope > 0 ? "+" : ""}{djt200slope.toFixed(3)}%
+                            Slope {djtRising ? "↗" : djtFalling ? "↘" : "→"} {djt200slope > 0 ? "+" : ""}{djt200slope.toFixed(1)}%
                           </div>
                         )}
                       </div>
@@ -1461,7 +1463,7 @@ RESPONSE RULES:
                 <div key={d.label} className="tile">
                   <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:"#ff4f72", color:"#fff" }}>!</span></div>
                   <div className="valMuted">{d.val}</div>
-                  <div className="status" style={{ color:"#ff6b88" }}>Broken Below</div>
+                  <div className="status" style={{ color:"#ff6b88" }}>Bearish</div>
                   <div className="sub">{d.sub}</div>
                 </div>
               ))}
@@ -1932,7 +1934,7 @@ RESPONSE RULES:
                 const isBelow = pct200 != null && pct200 < 0;
                 const isTesting = pct200 != null && pct200 >= 0 && pct200 <= 2;
                 const tagLabel = pct200 == null ? "Loading"
-                  : isBelow ? `Broken Below · ${fmtSigned1(pct200)}`
+                  : isBelow ? `Bearish · ${fmtSigned1(pct200)}`
                   : isTesting ? `Testing Support · ${fmtSigned1(pct200)} above`
                   : `Holding Above · ${fmtSigned1(pct200)}`;
                 const tagColor = isBelow ? "#ff6b88" : isTesting ? "#fbbf24" : "#4ade80";
@@ -1970,7 +1972,7 @@ RESPONSE RULES:
                 <HistRow
                   val={spxVs(spx200)!=null?fmtSigned1(spxVs(spx200)!):"—"}
                   event="Today"
-                  note={spxVs(spx200)==null?"Loading" : spxVs(spx200)! < 0 ? "Broken below · watch for confirmation" : spxVs(spx200)! <= 2 ? "Testing support zone" : "Holding above · trend intact"}
+                  note={spxVs(spx200)==null?"Loading" : spxVs(spx200)! < 0 ? "Bearish · watch for confirmation" : spxVs(spx200)! <= 2 ? "Testing support zone" : "Holding above · trend intact"}
                   active
                 />
               </div></MCard>
