@@ -1651,8 +1651,8 @@ RESPONSE RULES:
                       <td style={{ color:"#64748b", fontSize:12 }}>{r.name}</td>
                       {/* Current Official Position */}
                       <td style={{ textAlign:"center" }}>
-                        <span style={{ fontWeight:700, color:"#4ade80", fontSize:13 }}>
-                          ✓ {r.officialSignal}
+                        <span style={{ fontWeight:700, color: r.officialSignal === "Cash" ? "#ff6b88" : "#4ade80", fontSize:13 }}>
+                          {r.officialSignal === "Cash" ? "✕" : "✓"} {r.officialSignal}
                         </span>
                       </td>
                       {/* EOM Forecast */}
