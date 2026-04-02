@@ -445,7 +445,7 @@ export async function GET() {
 
   // CAPE (Shiller P/E) — Nasdaq Data Link, updated monthly
   // Falls back to manual constant if API key missing or fetch fails
-  const MANUAL_CAPE_FALLBACK = 40.2; // Last manually verified: Mar 19 2026
+  const MANUAL_CAPE_FALLBACK = 37.91; // Last manually verified: Apr 1 2026 — source: multpl.com/shiller-pe
   const capeRatio: number = capeData.value ?? MANUAL_CAPE_FALLBACK;
 
   // NYSE Advance/Decline Line — manually updated weekly (Saturday)
