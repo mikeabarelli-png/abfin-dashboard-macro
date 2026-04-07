@@ -755,9 +755,29 @@ RESPONSE RULES:
                     </>;
                   })()}
                 </div>
-                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}>
-                  <span>200</span><span>400</span><span>500</span><span>700</span><span>1000+</span>
-                </div>
+                {/* Scale labels — positioned using same toPos function so they align with ticks */}
+                {(() => {
+                  const toPos = (v: number) =>
+                    v <= 3.5 ? Math.max(0,(v-2)/1.5*30)
+                    : v <= 4.5 ? 30+(v-3.5)*20
+                    : v <= 5   ? 50+(v-4.5)*20
+                    : v <= 7   ? 60+(v-5)/2*25
+                    : Math.min(100, 85+(v-7)/3*15);
+                  const labels: [number, string][] = [[2,"200"],[4,"400"],[5,"500"],[7,"700"],[10,"1000+"]];
+                  return (
+                    <div style={{ position:"relative", height:14, marginTop:4 }}>
+                      {labels.map(([v, lbl]) => (
+                        <span key={lbl} style={{
+                          position:"absolute",
+                          left:`${toPos(v)}%`,
+                          transform:"translateX(-50%)",
+                          fontSize:10, color: v===4?"#fbbf24": v===5?"#ff6b88":"#475569",
+                          fontWeight: v===4||v===5 ? 700 : 400,
+                        }}>{lbl}</span>
+                      ))}
+                    </div>
+                  );
+                })()}
                 <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
                   {hySpread>=4 ? `▲ Trigger active · ${Math.round((5-hySpread)*100)}bps to red line`
                   : `▲ ${Math.round((4-hySpread)*100)}bps to trigger · ${Math.round((5-hySpread)*100)}bps to red line`}
@@ -2120,10 +2140,10 @@ RESPONSE RULES:
               <MCard>
                 <SH>Historical context</SH>
                 <div style={{ display:"grid", gap:5, marginTop:8 }}>
-                  <HistRow val="44x" event="Dot-com peak 2000" note="S&P fell ~50% over 2 years" />
-                  <HistRow val="38x" event="Late 2021 peak" note="2022 bear market followed · -25%" />
-                  <HistRow val="32x" event="Pre-GFC 2007" note="Financial crisis · -57% followed" />
                   <HistRow val="27x" event="Black Tuesday 1929" note="Great Depression followed" />
+                  <HistRow val="44x" event="Dot-com peak 2000" note="S&P fell ~50% over 2 years" />
+                  <HistRow val="32x" event="Pre-GFC 2007" note="Financial crisis · -57% followed" />
+                  <HistRow val="38x" event="Late 2021 peak" note="2022 bear market followed · -25%" />
                   <HistRow val={capeRatio.toFixed(1)+"x"} event="Today" note={capeRatio>35?"Extreme — near dot-com territory":"Overvalued — elevated risk"} active />
                   <HistRow val="16x" event="Historical average" note="Long-run mean since 1871" />
                 </div>
