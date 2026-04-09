@@ -167,17 +167,27 @@ export default function Page() {
   const fmt2 = (n: number) => n.toFixed(2);
   const fmtSigned1 = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
   const spxVs = (level: number) => spxPrice == null ? null : ((spxPrice - level) / level) * 100;
-  const dmaState = (pct: number | null, isLong = false) => {
+
+  // 5-state DMA label engine — factors in both position AND direction of travel
+  // slope: positive = DMA rising (bullish context), negative = falling
+  // spxDailyPct: positive = SPX moving up today (recovering), negative = moving down
+  const dmaState = (pct: number | null, slope?: number | null, isLong = false) => {
     if (pct == null) return "Loading";
-    if (pct < 0) return "Bearish";
+    if (pct < 0) {
+      // Below DMA — is SPX recovering toward it or moving away?
+      return (spxDailyPct != null && spxDailyPct > 0) ? "Recovering" : "Bearish";
+    }
     if (isLong && pct <= 2) return "Testing Support";
+    // Above DMA — is slope rising (bullish) or flattening/falling?
+    if (slope != null && slope > 0.02) return "Bullish";
     return "Holding Above";
   };
-  const dmaTone = (pct: number | null, isLong = false) => {
+  const dmaTone = (pct: number | null, slope?: number | null, isLong = false) => {
     if (pct == null) return "neutral";
-    if (pct < 0) return "danger";
+    if (pct < 0) return (spxDailyPct != null && spxDailyPct > 0) ? "warning" : "danger";
     if (isLong && pct <= 2) return "warning";
-    return "healthy";
+    if (slope != null && slope > 0.02) return "healthy";
+    return "healthy"; // above DMA is always at minimum healthy
   };
   const toneColor = (tone: string) => ({ danger: "#ff6b88", warning: "#fbbf24", healthy: "#4ade80", neutral: "#94a3b8" }[tone] ?? "#94a3b8");
 
@@ -661,7 +671,7 @@ RESPONSE RULES:
                 </div>
                 <div className="valHero">{fmtWhole(spx200)}</div>
                 <div className="status" style={{ color: is200Broken ? "#ff6b88" : "#fbbf24" }}>
-                  {dmaState(spx200Pct, true)}
+                  {dmaState(spx200Pct, slope200, true)}
                 </div>
                 <div className="sub" style={{ color: is200Broken ? "#ff6b88" : "#f59e0b" }}>
                   {spx200Pct != null
@@ -682,14 +692,14 @@ RESPONSE RULES:
                 { label:"50-DMA",  level:spx50,  slope:slope50  },
                 { label:"20-DMA",  level:spx20,  slope:slope20  },
               ].map(d => {
-                const pct = spxVs(d.level); const tone = dmaTone(pct);
+                const pct = spxVs(d.level); const tone = dmaTone(pct, d.slope);
                 const slopeArrow = d.slope == null ? "" : d.slope > 0.02 ? " ↗" : d.slope < -0.02 ? " ↘" : " →";
                 const slopeColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
                 return (
                   <div key={d.label} className="tile">
                     <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:toneColor(tone), color:tone==="warning"?"#000":"#fff" }}>!</span></div>
                     <div className="valMuted">{fmtWhole(d.level)}</div>
-                    <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct)}</div>
+                    <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct, d.slope)}</div>
                     <div className="sub">{pct != null ? `SPX ${fmtSigned1(pct)} ${pct >= 0 ? "above" : "below"}` : "Waiting"}</div>
                     {d.slope != null && (
                       <div style={{ fontSize:10, marginTop:4, fontWeight:600, color:slopeColor }}>Slope{slopeArrow} {d.slope > 0 ? "+" : ""}{d.slope.toFixed(1)}%</div>
