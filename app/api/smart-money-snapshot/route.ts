@@ -242,7 +242,7 @@ export async function GET() {
   const diagnostics: Record<string, string> = {};
 
   // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
-  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt] = await Promise.all([
+  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
     fetchChart("DX-Y.NYB", 5),
@@ -261,8 +261,9 @@ export async function GET() {
     fetchIvyPosition("IEF"),
     fetchIvyPosition("VNQ"),
     fetchIvyPosition("DBC"),
-    fetchFred("WALCL", 2),  // Fed balance sheet: millions USD, weekly; limit=2 for direction
-    fetchChart("^DJT", 420), // Dow Jones Transports — Dow Theory confirmation + Iran war economic proxy
+    fetchFred("WALCL", 2),   // Fed balance sheet: millions USD, weekly; limit=2 for direction
+    fetchChart("^DJT", 420), // Dow Jones Transports — Dow Theory confirmation
+    fetchChart("BZ=F", 5),   // Brent crude — Roberts' "master switch" for Fed policy room
   ]);
 
   if (spx.error) diagnostics["spx"] = spx.error;
@@ -285,6 +286,20 @@ export async function GET() {
   if (ivyDBC.error) diagnostics["ivy_dbc"] = ivyDBC.error;
   if (fredWALCL.error) diagnostics["walcl"] = fredWALCL.error;
   if (djt.error) diagnostics["djt"] = djt.error;
+  if (brent.error) diagnostics["brent"] = brent.error;
+
+  // Brent Crude — Roberts' "master switch"
+  // Below $80 = Fed has room to cut; $80-95 = neutral; $95-110 = watch; above $110 = Fed frozen
+  const brentPrice: number | null = brent.meta.regularMarketPrice ?? brent.closes[brent.closes.length - 1] ?? null;
+  const brentPrev: number | null = brent.closes.length >= 2 ? brent.closes[brent.closes.length - 2] : null;
+  const brentChangePct: number | null = brentPrice != null && brentPrev != null
+    ? ((brentPrice - brentPrev) / brentPrev) * 100 : null;
+  const brentRegime: "room" | "neutral" | "watch" | "frozen" | null =
+    brentPrice == null ? null :
+    brentPrice < 80  ? "room" :
+    brentPrice < 95  ? "neutral" :
+    brentPrice < 110 ? "watch" : "frozen";
+  console.log(`Brent: $${brentPrice} (${brentChangePct?.toFixed(2)}%) → ${brentRegime}`);
 
   // ── Dow Jones Transports (DJT) — Dow Theory confirmation signal ──────────────
   const djtCloses = djt.closes;
@@ -532,6 +547,9 @@ export async function GET() {
       walcl_prev_bn: walclPrevBn,
       walcl_chg_bn: walclChgBn,
       walcl_direction: walclDirection,
+      brent_price: brentPrice,
+      brent_change_pct: brentChangePct,
+      brent_regime: brentRegime,
       djt_price: djtPrice,
       djt_change_pct: djtChangePct,
       djt_trend_14d: djtCloses.slice(-14),
