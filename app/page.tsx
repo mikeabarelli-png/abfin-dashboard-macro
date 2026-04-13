@@ -105,7 +105,10 @@ export default function Page() {
   const walclChgBn = getNum(metrics?.walcl_chg_bn, marketData?.walcl_chg_bn);
   const walclDirection: string = metrics?.walcl_direction ?? marketData?.walcl_direction ?? "";
 
-  // Dow Theory — Transports + Schannep 2-of-3
+  // Brent Crude Oil — Roberts' "master switch"
+  const brentPrice    = getNum(metrics?.brent_price,      marketData?.brent_price);
+  const brentChangePct = getNum(metrics?.brent_change_pct, marketData?.brent_change_pct);
+  const brentRegime: string = metrics?.brent_regime ?? marketData?.brent_regime ?? "";
   const djtPrice      = getNum(metrics?.djt_price,      marketData?.djt_price);
   const djtChangePct  = getNum(metrics?.djt_change_pct, marketData?.djt_change_pct);
   const djt200dma     = getNum(metrics?.djt_200dma,     marketData?.djt_200dma);
@@ -304,6 +307,7 @@ CURRENT DASHBOARD DATA (live):
 - CAPE: ${capeRatio.toFixed(1)}x
 - Fear & Greed: ${Math.round(fearGreedScore)} — ${fearGreedRating} ${fearGreedScore <= 20 ? "⚠ EXTREME FEAR (contrarian rally setup — Zeberg)" : fearGreedScore >= 80 ? "⚠ EXTREME GREED (Grantham bubble warning)" : ""}
 - DXY: ${dxy != null ? dxy.toFixed(2) : "loading"}
+- Brent Crude: ${brentPrice != null ? `$${brentPrice.toFixed(2)}` : "loading"}${brentChangePct != null ? ` (${brentChangePct >= 0 ? "+" : ""}${brentChangePct.toFixed(1)}% today)` : ""} · ${brentRegime === "frozen" ? "⚠ Above $110 — Fed frozen, deepens landing risk" : brentRegime === "watch" ? "Watch zone $95-110 — Fed limited" : brentRegime === "neutral" ? "Neutral $80-95" : brentRegime === "room" ? "Below $80 — Fed has room to cut" : "loading"}
 - Fed Balance Sheet (WALCL): ${walclBn != null ? `$${(walclBn/1000).toFixed(2)}T` : "loading"}${walclChgBn != null ? ` · ${walclChgBn > 0 ? "▲" : "▼"} $${Math.abs(walclChgBn)}B WoW · ${walclDirection}` : ""}
 - Dow Transports (DJT): ${djtPrice != null ? fmtWhole(djtPrice) : "loading"} vs 200-DMA ${djt200dma != null ? fmtWhole(djt200dma) : "—"} (${djtVs200 != null ? `${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : "?"}) · Slope: ${djt200slope != null ? `${djt200slope > 0 ? "↗" : "↘"} ${djt200slope.toFixed(1)}%` : "—"}
 - Schannep 2-of-3 Signal: ${schannepLabel} — ${schannepSignal === "non_confirmation_bear" ? "SPX broken but DJT not confirming — watch closely" : schannepSignal === "bear" ? "Both indices below 200-DMA — strongest bear signal" : schannepSignal === "non_confirmation_bull" ? "DJT holding, potential recovery setup" : "Both confirming bull"}
@@ -1418,6 +1422,60 @@ RESPONSE RULES:
                   <span className={t.pillC}>{t.pill}</span>
                 </div>
               ))}
+
+              {/* ── Brent Crude Oil — LIVE · Roberts' "master switch" for Fed policy ── */}
+              {(() => {
+                const price = brentPrice;
+                const chgPct = brentChangePct;
+                const regime = brentRegime;
+                const statusLabel = regime === "frozen" ? "Fed Frozen" : regime === "watch" ? "Watch Zone" : regime === "neutral" ? "Neutral" : regime === "room" ? "Fed Has Room" : "Loading";
+                const statusColor = regime === "frozen" ? "#ff6b88" : regime === "watch" ? "#fbbf24" : regime === "neutral" ? "#94a3b8" : "#4ade80";
+                const pillC = regime === "frozen" ? "pillR" : regime === "watch" ? "pillA" : regime === "neutral" ? "" : "pillG";
+                // Bar: $60=0%, $80=25%, $95=50%, $110=75%, $130=100%
+                const barW = price != null ? Math.max(2, Math.min(((price - 60) / 70) * 100, 100)) : 50;
+                const p80 = ((80-60)/70)*100;
+                const p95 = ((95-60)/70)*100;
+                const p110 = ((110-60)/70)*100;
+                return (
+                  <div className="tile" style={{ gridColumn:"span 3" }}>
+                    <div className="tileTop">
+                      <span className="lbl">Brent Crude</span>
+                      <span style={{ fontSize:10, fontWeight:700, color:"#475569" }}>LIVE · BZ=F</span>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
+                      <div style={{ fontSize:32, fontWeight:700, color:"#fff" }}>
+                        {price != null ? `$${price.toFixed(2)}` : "—"}
+                      </div>
+                      {chgPct != null && (
+                        <div style={{ fontSize:13, fontWeight:600, color: chgPct >= 0 ? "#ff6b88" : "#4ade80" }}>
+                          {chgPct >= 0 ? "▲" : "▼"} {Math.abs(chgPct).toFixed(1)}%
+                        </div>
+                      )}
+                    </div>
+                    <div className="status" style={{ color: statusColor }}>{statusLabel}</div>
+                    {/* Threshold bar */}
+                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:10, overflow:"visible" }}>
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(barW, p80)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {price != null && price > 80 && <div style={{ position:"absolute", left:`${p80}%`, top:0, height:6, width:`${Math.min(barW,p95)-p80}%`, background:"#94a3b8" }} />}
+                      {price != null && price > 95 && <div style={{ position:"absolute", left:`${p95}%`, top:0, height:6, width:`${Math.min(barW,p110)-p95}%`, background:"#fbbf24" }} />}
+                      {price != null && price > 110 && <div style={{ position:"absolute", left:`${p110}%`, top:0, height:6, width:`${barW-p110}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                      {/* Threshold ticks */}
+                      <div style={{ position:"absolute", top:-4, left:`${p80}%`, width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
+                      <div style={{ position:"absolute", top:-4, left:`${p95}%`, width:2, height:14, background:"rgba(255,255,255,0.6)", borderRadius:2, zIndex:2 }} />
+                      <div style={{ position:"absolute", top:-6, left:`${p110}%`, width:3, height:18, background:"rgba(255,255,255,0.9)", borderRadius:2, zIndex:2 }} />
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginTop:4 }}>
+                      <span>$60</span><span>$80</span><span>$95</span><span style={{ color:"#ff6b88", fontWeight:700 }}>$110↑</span><span>$130</span>
+                    </div>
+                    <div style={{ fontSize:11, marginTop:5, color:"#64748b", lineHeight:1.5 }}>
+                      {regime === "frozen" ? `▲ Above $110 — Fed frozen. Oil keeping inflation elevated, cuts off the table. Deepens economic landing risk.`
+                      : regime === "watch" ? `⚠ $95–110 watch zone — Fed limited. Every dollar above $95 tightens financial conditions without a rate hike.`
+                      : regime === "neutral" ? `→ $80–95 neutral range — manageable for Fed. Cuts remain possible if other conditions allow.`
+                      : `▼ Below $80 — Fed has room. Oil not a constraint on rate policy.`}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </section>
 
