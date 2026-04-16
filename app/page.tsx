@@ -663,32 +663,36 @@ RESPONSE RULES:
                 <div className="subSpx">{spxDailyPct != null ? `${spxDailyPct >= 0 ? "▲" : "▼"} ${Math.abs(spxDailyPct).toFixed(1)}% today` : "Waiting for live price"}</div>
               </div>
 
-              {/* Tile 2: 200-DMA — most important, aligns with DJT 200-DMA below */}
-              <div
-                className={is200Broken ? "tile tile200Red" : "tile tile200"}
-                style={{ cursor:"pointer" }}
-                onClick={() => setModal("dma200")}
-              >
-                <div className="tileTop">
-                  <span className="lbl" style={{ color: is200Broken ? "#ff6b88" : "#f59e0b" }}>200-DMA</span>
-                  <span className="badge" style={{ background: is200Broken ? "#ef4444" : "#f59e0b", color: is200Broken ? "#fff" : "#000" }}>!</span>
-                </div>
-                <div className="valHero">{fmtWhole(spx200)}</div>
-                <div className="status" style={{ color: is200Broken ? "#ff6b88" : "#fbbf24" }}>
-                  {dmaState(spx200Pct, slope200, true)}
-                </div>
-                <div className="sub" style={{ color: is200Broken ? "#ff6b88" : "#f59e0b" }}>
-                  {spx200Pct != null
-                    ? `SPX ${fmtSigned1(spx200Pct)} ${spx200Pct >= 0 ? "above" : "below"}`
-                    : "Waiting"}
-                </div>
-                <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
-                {slope200 != null && (
-                  <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
-                    Slope {slope200 > 0 ? "↗ +" : slope200 < 0 ? "↘ " : "→ "}{slope200.toFixed(1)}% · {slope200 > 0.02 ? "Bullish" : slope200 < -0.02 ? "Bearish" : "Neutral"}
+              {/* Tile 2: 200-DMA — color reflects actual position: green=bullish, amber=near/testing, red=broken */}
+              {(() => {
+                const isNear = spx200Pct != null && spx200Pct >= 0 && spx200Pct <= 3;
+                const tileClass = is200Broken ? "tile tile200Red" : isNear ? "tile tile200" : "tile";
+                const lblColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
+                const badgeBg = is200Broken ? "#ef4444" : "#f59e0b";
+                const statusColor = is200Broken ? "#ff6b88" : isNear ? "#fbbf24" : "#4ade80";
+                const subColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
+                return (
+                  <div className={tileClass} style={{ cursor:"pointer" }} onClick={() => setModal("dma200")}>
+                    <div className="tileTop">
+                      <span className="lbl" style={{ color: lblColor }}>200-DMA</span>
+                      {(is200Broken || isNear) && <span className="badge" style={{ background: badgeBg, color:"#000" }}>!</span>}
+                    </div>
+                    <div className="valHero">{fmtWhole(spx200)}</div>
+                    <div className="status" style={{ color: statusColor }}>
+                      {dmaState(spx200Pct, slope200, true)}
+                    </div>
+                    <div className="sub" style={{ color: subColor }}>
+                      {spx200Pct != null ? `SPX ${fmtSigned1(spx200Pct)} ${spx200Pct >= 0 ? "above" : "below"}` : "Waiting"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
+                    {slope200 != null && (
+                      <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                        Slope {slope200 > 0 ? "↗ +" : slope200 < 0 ? "↘ " : "→ "}{slope200.toFixed(1)}% · {slope200 > 0.02 ? "Bullish" : slope200 < -0.02 ? "Bearish" : "Neutral"}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* Tiles 3-5: 100 / 50 / 20-DMA — descending importance */}
               {[
@@ -723,17 +727,17 @@ RESPONSE RULES:
                     : "Waiting..."}
                 </span>
               </div>
-            ) : (
+            ) : spx200Pct != null && spx200Pct <= 3 ? (
               <div className="alertStrip">
                 <span className="alertDot" />
                 <span className="alertTitle">200-DMA Proximity — Immediate Watch</span>
                 <span className="alertBody">
                   {spxPrice != null
-                    ? `Only ${Math.abs(((spxPrice-spx200)/spx200)*100).toFixed(1)}% above (${fmtWhole(spx200)}) · ${Math.abs(spxPrice-spx200).toFixed(0)} pts gap · Trigger: 2 Friday closes below + VIX >30 or HY >400bps`
+                    ? `Only ${spx200Pct.toFixed(1)}% above (${fmtWhole(spx200)}) · ${Math.abs(spxPrice-spx200).toFixed(0)} pts gap · Trigger: 2 Friday closes below + VIX >30 or HY >400bps`
                     : "Waiting..."}
                 </span>
               </div>
-            )}
+            ) : null}
           </section>
 
           {/* ② STRESS CONFIRMATION */}
@@ -747,8 +751,8 @@ RESPONSE RULES:
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("hy")}>
                 <div className="lbl" style={{ marginBottom:6 }}>HY Spread</div>
                 <div className="valHero" style={{ color:"#fff" }}>{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
-                <div className="status" style={{ color:hySpread>=5?"#ff6b88":hySpread>=4?"#fbbf24":hySpread>=3.5?"#fbbf24":"#94a3b8" }}>
-                  {hySpread>=5?"Stress":hySpread>=4?"⚠ Trigger":hySpread>=3.5?"Caution":"Firm"}
+                <div className="status" style={{ color:hySpread>=5?"#ff6b88":hySpread>=4?"#fbbf24":hySpread>=3.5?"#fbbf24":hySpread>=3?"#94a3b8":"#4ade80" }}>
+                  {hySpread>=5?"Stress":hySpread>=4?"⚠ Trigger":hySpread>=3.5?"Caution":hySpread>=3?"Firm":"Tight"}
                 </div>
                 <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
                   {(() => {
@@ -1903,14 +1907,15 @@ RESPONSE RULES:
               <SH>Current reading</SH>
               <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{Math.round(hySpread*100)}<span style={{ fontSize:22 }}>bps</span></div>
               <Tag
-                label={hySpread>=5?"Stress — Above Industry Red Line":hySpread>=4?"⚠ Above Your Trigger":hySpread>=3.5?"Caution — Widening":"Firm — Historically Tight"}
-                color={hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80"}
-                bg={hySpread>=4?"rgba(255,79,114,0.15)":hySpread>=3.5?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"}
+                label={hySpread>=5?"Stress — Above Industry Red Line":hySpread>=4?"⚠ Above Your Trigger":hySpread>=3.5?"Caution — Widening":hySpread>=3?"Firm — Watch Direction":"Tight — Historically Risk-On"}
+                color={hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":hySpread>=3?"#94a3b8":"#4ade80"}
+                bg={hySpread>=4?"rgba(255,79,114,0.15)":hySpread>=3.5?"rgba(245,158,11,0.15)":hySpread>=3?"rgba(148,163,184,0.15)":"rgba(74,222,128,0.15)"}
               />
               <BC>{hySpread>=5?"Credit stress confirmed above industry red line. Serious default risk being priced. Both your trigger and the industry 500bps threshold are breached."
                 :hySpread>=4?"Above your 400bps trigger. Credit markets signaling stress. Combined with VIX >30 this activates your defensive posture."
                 :hySpread>=3.5?"Spreads widening toward caution zone. Direction of travel matters more than absolute level. Watch for continued widening toward 400bps."
-                :`At ${Math.round(hySpread*100)}bps, spreads are historically tight — market priced for perfection. Any move toward 400bps would be a ~${Math.round((4-hySpread)/hySpread*100)}% widening from here.`}
+                :hySpread>=3?`At ${Math.round(hySpread*100)}bps, spreads are firm but not yet in caution territory. Still ${Math.round((4-hySpread)*100)}bps from your trigger. Watch direction of travel weekly.`
+                :`At ${Math.round(hySpread*100)}bps, spreads are historically tight — credit markets are in risk-on mode, priced for perfection. A move toward 400bps would be a ~${Math.round((4-hySpread)/hySpread*100)}% widening from here.`}
               </BC>
               <BandTrack
                 segs={[{w:"30%",color:"#047857"},{w:"20%",color:"#4ade80"},{w:"10%",color:"#f59e0b"},{w:"25%",color:"#ef4444"},{w:"15%",color:"#7f1d1d"}]}
@@ -1968,7 +1973,7 @@ RESPONSE RULES:
                   <HistRow val="800bps" event="COVID Mar 2020" note="Sharp spike · rapid recovery" />
                   <HistRow val="700bps" event="Energy crisis 2016" note="Oil-driven stress" />
                   <HistRow val="580bps" event="2022 rate shock" note="Fed hiking cycle · peak" />
-                  <HistRow val={`${Math.round(hySpread*100)}bps`} event="Today" note={hySpread>=4?"Above your trigger · stress building":hySpread>=3.5?"Caution zone · watch direction":"Historically tight · priced for perfection"} active />
+                  <HistRow val={`${Math.round(hySpread*100)}bps`} event="Today" note={hySpread>=4?"Above your trigger · stress building":hySpread>=3.5?"Caution zone · watch direction":hySpread>=3?"Firm · below caution threshold":"Tight · historically risk-on"} active />
                   <HistRow val="540bps" event="Long-run average" note="Historical mean" />
                 </div>
               </MCard>
