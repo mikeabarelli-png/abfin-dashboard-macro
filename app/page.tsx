@@ -118,7 +118,7 @@ export default function Page() {
   const compositeAllocation: string = metrics?.composite_allocation ?? marketData?.composite_allocation ?? "42–45%";
   const compositeSignal: string = metrics?.composite_signal ?? marketData?.composite_signal ?? "SLIGHT TILT";
   const compositeColor: string = metrics?.composite_color ?? marketData?.composite_color ?? "#fbbf24";
-  const valuationFloor: boolean = metrics?.valuation_floor_active ?? marketData?.valuation_floor_active ?? (capeRatio > 35 || buffettSigma > 2.0);
+  const valuationFloor: boolean = metrics?.valuation_floor_active ?? marketData?.valuation_floor_active ?? false;
   const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.49;
   const fedStance: string = metrics?.fed_stance ?? marketData?.fed_stance ?? "holding";
   const djtPrice      = getNum(metrics?.djt_price,      marketData?.djt_price);
