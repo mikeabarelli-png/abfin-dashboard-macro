@@ -908,55 +908,7 @@ RESPONSE RULES:
               );
             })()}
           </section>
-                {
-                  key:"cape", label:"CAPE Ratio", val:`${capeRatio.toFixed(1)}x`, score:compositeScores.cape,
-                  status:capeRatio>30?"Extreme":capeRatio>20?"Elevated":"Fair",
-                  statusColor:capeRatio>30?"#ff6b88":capeRatio>20?"#fbbf24":"#4ade80",
-                  sub:`Hist avg ~16x · ${capeRatio>30?"Top 5% of all readings":capeRatio>20?"Elevated risk zone":"Fair value territory"}`,
-                  rule:">30 = 2pts · 20–30 = 1pt · <20 = 0pts",
-                },
-                {
-                  key:"buffett", label:"Buffett Indicator", val:`${buffettSigma.toFixed(2)}σ`, score:compositeScores.buffett,
-                  status:buffettSigma>1.5?"Strongly OV":buffettSigma>0.5?"Overvalued":"Fair",
-                  statusColor:buffettSigma>1.5?"#ff6b88":buffettSigma>0.5?"#fbbf24":"#4ade80",
-                  sub:`vs. long-run trend · ${buffettSigma>1.5?"Extreme deviation":buffettSigma>0.5?"Above trend":"Near trend"}`,
-                  rule:">1.5σ = 2pts · 0.5–1.5σ = 1pt · <0.5σ = 0pts",
-                },
-                {
-                  key:"vix", label:"VIX", val:vixValue!=null?vixValue.toFixed(1):"—", score:compositeScores.vix,
-                  status:vixValue!=null?(vixValue<20?"Calm":vixValue<28?"Elevated":"Stress"):"Loading",
-                  statusColor:vixValue!=null?(vixValue<20?"#ff6b88":vixValue<28?"#fbbf24":"#4ade80"):"#475569",
-                  sub:vixValue!=null?(vixValue<20?"Low fear — complacency risk":vixValue<28?"Moderate concern":"Elevated fear — contrarian signal"):"Live fetch",
-                  rule:"<20 = 2pts · 20–28 = 1pt · >28 = 0pts",
-                },
-                {
-                  key:"hy", label:"HY Spread", val:`${Math.round(hySpread*100)}bps`, score:compositeScores.hy,
-                  status:hySpread<3.5?"Tight":hySpread<5.5?"Caution":"Stress",
-                  statusColor:hySpread<3.5?"#ff6b88":hySpread<5.5?"#fbbf24":"#4ade80",
-                  sub:`${Math.round((4-hySpread)*100)}bps to trigger · ${hySpread<3.5?"Risk-on, priced for perfection":hySpread<5.5?"Widening trend":"Credit stress"}`,
-                  rule:"<350bps = 2pts · 350–550 = 1pt · >550 = 0pts",
-                },
-                {
-                  key:"yc", label:"Yield Curve", val:`${yieldCurve>=0?"+":""}${yieldCurve.toFixed(2)}%`, score:compositeScores.yc,
-                  status:yieldCurve<-0.5?"Inverted":yieldCurve<0.5?"Flat":"Normal",
-                  statusColor:yieldCurve<-0.5?"#ff6b88":yieldCurve<0.5?"#fbbf24":"#4ade80",
-                  sub:`10Y–2Y spread · ${yieldCurve<-0.5?"Recession historically follows":yieldCurve<0.5?"Flat — uncertain":"Healthy term premium"}`,
-                  rule:"<–50bps = 2pts · –50 to +50 = 1pt · >+50 = 0pts",
-                },
-                {
-                  key:"erp", label:"Equity Risk Prem", val:erpBps!=null?`${(erpBps/100).toFixed(2)}%`:"—", score:compositeScores.erp ?? 1,
-                  status:erpBps!=null?(erpBps<100?"Thin":erpBps<300?"Moderate":"Healthy"):"Loading",
-                  statusColor:erpBps!=null?(erpBps<100?"#ff6b88":erpBps<300?"#fbbf24":"#4ade80"):"#475569",
-                  sub:erpBps!=null?`Earnings yield vs real 10Y · ${erpBps<100?"Stocks barely beat T-bills":erpBps<300?"Modest compensation":"Well compensated for equity risk"}`:"Live calc",
-                  rule:"<1% = 2pts · 1–3% = 1pt · >3% = 0pts",
-                },
-                {
-                  key:"breadth", label:"Breadth", val:breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", score:compositeScores.breadth,
-                  status:breadthPct!=null?(breadthPct<50?"Weak":breadthPct<70?"Mixed":"Strong"):"Loading",
-                  statusColor:breadthPct!=null?(breadthPct<50?"#ff6b88":breadthPct<70?"#fbbf24":"#4ade80"):"#475569",
-                  sub:breadthPct!=null?`% SPX above 200-DMA · ${breadthPct<50?"Broad selling":breadthPct<70?"Mixed internals":"Broad participation"}`:"Live $SPXA200R",
-                  rule:"<50% = 2pts · 50–70% = 1pt · >70% = 0pts",
-                },
+
           {/* ① MARKET STRUCTURE */}
           <section className="panel">
             <div className="panelHeader">
