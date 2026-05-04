@@ -242,7 +242,7 @@ export async function GET() {
   const diagnostics: Record<string, string> = {};
 
   // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
-  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent] = await Promise.all([
+  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthChart] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
     fetchChart("DX-Y.NYB", 5),
@@ -264,6 +264,7 @@ export async function GET() {
     fetchFred("WALCL", 2),   // Fed balance sheet: millions USD, weekly; limit=2 for direction
     fetchChart("^DJT", 420), // Dow Jones Transports — Dow Theory confirmation
     fetchChart("BZ=F", 5),   // Brent crude — Roberts' "master switch" for Fed policy room
+    fetchChart("^SPXA200R", 5), // % of S&P 500 stocks above 200-DMA — composite signal input
   ]);
 
   if (spx.error) diagnostics["spx"] = spx.error;
@@ -287,6 +288,14 @@ export async function GET() {
   if (fredWALCL.error) diagnostics["walcl"] = fredWALCL.error;
   if (djt.error) diagnostics["djt"] = djt.error;
   if (brent.error) diagnostics["brent"] = brent.error;
+  if (breadthChart.error) diagnostics["breadth"] = breadthChart.error;
+
+  // Market Breadth — % of S&P 500 stocks above their 200-DMA
+  // Source: Yahoo Finance ^SPXA200R · Updates daily after market close
+  const breadthPct: number | null = breadthChart.closes.length > 0
+    ? breadthChart.closes[breadthChart.closes.length - 1]
+    : breadthChart.meta.regularMarketPrice ?? null;
+  console.log(`Breadth (% above 200-DMA): ${breadthPct}%`);
 
   // Brent Crude — Roberts' "master switch"
   // Below $80 = Fed has room to cut; $80-95 = neutral; $95-110 = watch; above $110 = Fed frozen
@@ -476,6 +485,50 @@ export async function GET() {
     updatedDate: "Mar 21",
   };
 
+  // Buffett Indicator sigma — from RIA Advisors model table
+  // Update each Saturday from RIA model page screenshot
+  // Current value: 2.08 = Strongly Overvalued (>1.5σ above trend)
+  const MANUAL_BUFFETT_SIGMA = 2.08; // Last updated: Apr 3 2026
+
+  // Fed Policy stance — derived from Fed Funds rate trend and Fed communications
+  // Manual: "easing" | "holding" | "tightening"
+  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "holding"; // Apr 2026 — discussing hikes
+
+  // ── Composite Signal Score (0–16) ──
+  // 8 variables × 0–2pts each → drives glide path equity allocation
+  const scoreCAFE    = capeRatio > 30 ? 2 : capeRatio > 20 ? 1 : 0;
+  const scoreBuffett = MANUAL_BUFFETT_SIGMA > 1.5 ? 2 : MANUAL_BUFFETT_SIGMA > 0.5 ? 1 : 0;
+  const scoreVIX     = vixPrice != null ? (vixPrice < 20 ? 2 : vixPrice < 28 ? 1 : 0) : 1;
+  const scoreHY      = hySpread < 3.5 ? 2 : hySpread < 5.5 ? 1 : 0;
+  const scoreYC      = yieldCurve < -0.5 ? 2 : yieldCurve < 0.5 ? 1 : 0;
+  const scoreBreadth = breadthPct != null ? (breadthPct < 50 ? 2 : breadthPct < 70 ? 1 : 0) : 1;
+  // ERP: <1% = 2pts defensive (equity barely beats risk-free), 1-3% = 1pt, >3% = 0pts deploy
+  const scoreERP     = erp != null ? (erp < 100 ? 2 : erp < 300 ? 1 : 0) : 1;
+  // Ivy: 0-2/5 invested=2pts, 3-4/5=1pt, 5/5=0pts
+  const ivyInvestedCount = [ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC].filter(p => p.signal === "Invest").length;
+  const scoreIvy     = ivyInvestedCount <= 2 ? 2 : ivyInvestedCount <= 4 ? 1 : 0;
+
+  const compositeScore = scoreCAFE + scoreBuffett + scoreVIX + scoreHY + scoreYC + scoreBreadth + scoreERP + scoreIvy;
+
+  // Allocation recommendation — scaled for 0–16 max
+  const compositeAllocation =
+    compositeScore >= 13 ? "40%" :
+    compositeScore >= 10 ? "42–45%" :
+    compositeScore >= 7  ? "47–53%" :
+    compositeScore >= 4  ? "55–58%" : "60%+";
+
+  const compositeSignal =
+    compositeScore >= 13 ? "HOLD" :
+    compositeScore >= 10 ? "SLIGHT TILT" :
+    compositeScore >= 7  ? "DEPLOY" :
+    compositeScore >= 4  ? "LEAN IN" : "FULL POSTURE";
+
+  const compositeColor =
+    compositeScore >= 13 ? "#ff6b88" :
+    compositeScore >= 10 ? "#fbbf24" :
+    compositeScore >= 7  ? "#94a3b8" :
+    compositeScore >= 4  ? "#4ade80" : "#22d3ee";
+
   // CNN Fear & Greed Index — live fetch with manual fallback
   // Update MANUAL_FEAR_GREED_FALLBACK each Saturday if live fetch fails
   const MANUAL_FEAR_GREED_FALLBACK = 15; // Last manually verified: Mar 20 2026 — Extreme Fear
@@ -550,6 +603,14 @@ export async function GET() {
       brent_price: brentPrice,
       brent_change_pct: brentChangePct,
       brent_regime: brentRegime,
+      breadth_pct: breadthPct,
+      composite_score: compositeScore,
+      composite_scores: { cape: scoreCAFE, buffett: scoreBuffett, vix: scoreVIX, hy: scoreHY, yc: scoreYC, breadth: scoreBreadth, erp: scoreERP, ivy: scoreIvy },
+      composite_allocation: compositeAllocation,
+      composite_signal: compositeSignal,
+      composite_color: compositeColor,
+      buffett_sigma: MANUAL_BUFFETT_SIGMA,
+      fed_stance: MANUAL_FED_STANCE,
       djt_price: djtPrice,
       djt_change_pct: djtChangePct,
       djt_trend_14d: djtCloses.slice(-14),
