@@ -292,9 +292,12 @@ export async function GET() {
 
   // Market Breadth — % of S&P 500 stocks above their 200-DMA
   // Source: Yahoo Finance ^SPXA200R · Updates daily after market close
+  // Falls back to MANUAL_BREADTH_FALLBACK if Yahoo returns nothing (unreliable ticker)
+  // Manual source: macromicro.me/series/22718 — update each Saturday
+  const MANUAL_BREADTH_FALLBACK = 57; // Last manually verified: May 1 2026
   const breadthPct: number | null = breadthChart.closes.length > 0
     ? breadthChart.closes[breadthChart.closes.length - 1]
-    : breadthChart.meta.regularMarketPrice ?? null;
+    : breadthChart.meta.regularMarketPrice ?? MANUAL_BREADTH_FALLBACK;
   console.log(`Breadth (% above 200-DMA): ${breadthPct}%`);
 
   // Brent Crude — Roberts' "master switch"
