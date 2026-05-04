@@ -113,12 +113,13 @@ export default function Page() {
   // Composite Signal Score
   const breadthPct    = getNum(metrics?.breadth_pct,      marketData?.breadth_pct);
   const compositeScore: number = metrics?.composite_score ?? marketData?.composite_score ?? 10;
-  const compositeScore10 = Math.round((compositeScore / 16) * 10);
+  const compositeScore10 = Math.round((compositeScore / 15) * 10);
   const compositeScores = metrics?.composite_scores ?? marketData?.composite_scores ?? { cape:2, buffett:2, vix:1, hy:2, yc:1, breadth:1, erp:1, ivy:1 };
   const compositeAllocation: string = metrics?.composite_allocation ?? marketData?.composite_allocation ?? "42–45%";
   const compositeSignal: string = metrics?.composite_signal ?? marketData?.composite_signal ?? "SLIGHT TILT";
   const compositeColor: string = metrics?.composite_color ?? marketData?.composite_color ?? "#fbbf24";
-  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.08;
+  const valuationFloor: boolean = metrics?.valuation_floor_active ?? marketData?.valuation_floor_active ?? (capeRatio > 35 || buffettSigma > 2.0);
+  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.49;
   const fedStance: string = metrics?.fed_stance ?? marketData?.fed_stance ?? "holding";
   const djtPrice      = getNum(metrics?.djt_price,      marketData?.djt_price);
   const djtChangePct  = getNum(metrics?.djt_change_pct, marketData?.djt_change_pct);
@@ -135,13 +136,13 @@ export default function Page() {
   const ivyData = metrics?.ivy ?? marketData?.ivy ?? null;
 
   // Official last month-end signals — update each month when Advisor Perspectives publishes
-  // Source: advisorperspectives.com/dshort · Last updated: Mar 31, 2026
-  // VTI: Cash (-1.2%) · VEU: Invested (+4.7%) · IEF: Invested (+0.7%) · VNQ: Cash (-0.1%) · DBC: Invested (+25.5%)
+  // Source: advisorperspectives.com/dshort · Last updated: Apr 30, 2026
+  // VTI: Invest · VEU: Invest · IEF: Invest · VNQ: Invest · DBC: Invest (all 5 flipped from Mar)
   const ivyOfficialSignals: Record<string, "Invest" | "Cash"> = {
-    vti: "Cash", veu: "Invest", ief: "Invest", vnq: "Cash", dbc: "Invest"
+    vti: "Invest", veu: "Invest", ief: "Invest", vnq: "Invest", dbc: "Invest"
   };
-  const ivyOfficialDate = "Mar 31";
-  const ivyEOMDate = "Apr 30";
+  const ivyOfficialDate = "Apr 30";
+  const ivyEOMDate = "May 31";
 
   const ivyPositions = [
     { ticker:"VTI", name:"US Stocks",     key:"vti" },
@@ -633,7 +634,7 @@ RESPONSE RULES:
           {/* ⓪-A COMPOSITE SCORE HERO — slim strategic banner */}
           {(() => {
             // Gradient color at exact score position (0=green → 14=red)
-            const pct = compositeScore / 16;
+            const pct = compositeScore / 15;
             const gradColor = pct <= 0.21 ? "#4ade80" : pct <= 0.43 ? "#86efac" : pct <= 0.57 ? "#94a3b8" : pct <= 0.79 ? "#fbbf24" : "#ff6b88";
             return (
               <section className="panel" style={{ background:"linear-gradient(135deg,rgba(15,23,42,0.97) 0%,rgba(20,27,71,0.97) 100%)", border:`1px solid ${gradColor}35`, marginBottom:8, padding:"16px 20px" }}>
@@ -650,7 +651,7 @@ RESPONSE RULES:
                   <div style={{ flex:"1 1 200px", minWidth:160 }}>
                     <div style={{ position:"relative", height:10, borderRadius:9999, background:"linear-gradient(to right,#4ade80,#86efac,#fbbf24,#f97316,#ff6b88)", overflow:"visible" }}>
                       {/* Position marker */}
-                      <div style={{ position:"absolute", top:-5, left:`calc(${(compositeScore/16)*100}% - 2px)`, width:4, height:20, background:"#fff", borderRadius:2, boxShadow:"0 0 6px rgba(255,255,255,0.6)", zIndex:2 }} />
+                      <div style={{ position:"absolute", top:-5, left:`calc(${(compositeScore/15)*100}% - 2px)`, width:4, height:20, background:"#fff", borderRadius:2, boxShadow:"0 0 6px rgba(255,255,255,0.6)", zIndex:2 }} />
                     </div>
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155", marginTop:5 }}>
                       <span style={{ color:"#4ade80" }}>DEPLOY (0)</span>
@@ -663,17 +664,21 @@ RESPONSE RULES:
                     </div>
                   </div>
 
-                  {/* Allocation target */}
                   <div style={{ flex:"0 0 auto", borderLeft:"1px solid rgba(255,255,255,0.07)", paddingLeft:24, minWidth:140 }}>
                     <div style={{ fontSize:9, fontWeight:700, letterSpacing:"0.12em", color:"#475569", textTransform:"uppercase", marginBottom:4 }}>Equity Target</div>
                     <div style={{ fontSize:40, fontWeight:900, color:"#fff", letterSpacing:"-0.03em", lineHeight:1 }}>{compositeAllocation}</div>
                     <div style={{ fontSize:11, color:"#64748b", marginTop:6, lineHeight:1.5, maxWidth:220 }}>
-                      {compositeScore >= 13 ? "Extreme valuations + tight credit. Stay defensive. No deployment." :
-                       compositeScore >= 10  ? "Elevated valuations, mixed signals. Hold near defensive posture." :
-                       compositeScore >= 7  ? "Conditions moderating. Gradual deployment as signals confirm." :
-                       compositeScore >= 4  ? "Stress reversing. Lean into equity as fundamentals improve." :
+                      {compositeScore >= 12 ? "Extreme valuations + tight credit. Stay defensive. No deployment." :
+                       compositeScore >= 9  ? "Elevated valuations, mixed signals. Hold near defensive posture." :
+                       compositeScore >= 6  ? "Conditions moderating. Gradual deployment as signals confirm." :
+                       compositeScore >= 3  ? "Stress reversing. Lean into equity as fundamentals improve." :
                        "Maximum deployment signal. Deep value, oversold breadth, peak distress."}
                     </div>
+                    {valuationFloor && (
+                      <div style={{ marginTop:6, display:"inline-flex", padding:"2px 8px", borderRadius:9999, background:"rgba(251,191,36,0.1)", border:"1px solid rgba(251,191,36,0.35)" }}>
+                        <span style={{ fontSize:9, fontWeight:700, color:"#fbbf24", letterSpacing:"0.04em" }}>⚑ Valuation floor active — CAPE or Buffett extreme</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Fed stance */}
@@ -699,17 +704,18 @@ RESPONSE RULES:
             <div className="panelHeader">
               <div>
                 <div className="panelTitle">Signal Inputs</div>
-                <div className="panelSub">8 scored variables · 0–2 pts each · max 16 · drives composite score above</div>
+                <div className="panelSub">8 scored variables · weighted · max 15pts raw · drives composite score above</div>
               </div>
-              <div style={{ fontSize:11, color:"#475569" }}>2 pts = defensive · 1 pt = neutral · 0 pts = deploy</div>
+              <div style={{ fontSize:11, color:"#475569" }}>pts vary by variable · 0 = deploy · see each tile</div>
             </div>
             {(() => {
               // Score badge helper — overlaid top-right on each tile
-              const Badge = ({ score }: { score: number }) => {
-                const c = score === 2 ? "#ff6b88" : score === 1 ? "#fbbf24" : "#4ade80";
+              const Badge = ({ score, max = 2 }: { score: number; max?: number }) => {
+                const c = score === 0 ? "#4ade80" : score >= max ? "#ff6b88" : "#fbbf24";
+                const display = score % 1 === 0 ? String(score) : score.toFixed(1);
                 return (
                   <div style={{ position:"absolute", top:8, right:8, width:22, height:22, borderRadius:"50%", background:`${c}20`, border:`1.5px solid ${c}`, display:"flex", alignItems:"center", justifyContent:"center", zIndex:3 }}>
-                    <span style={{ fontSize:11, fontWeight:900, color:c }}>{score}</span>
+                    <span style={{ fontSize:display.length > 2 ? 9 : 11, fontWeight:900, color:c }}>{display}</span>
                   </div>
                 );
               };
@@ -720,7 +726,7 @@ RESPONSE RULES:
 
                   {/* 1. CAPE — existing rich tile from Market Stress */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("cape")}>
-                    <Badge score={compositeScores.cape} />
+                    <Badge score={compositeScores.cape} max={3} />
                     <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>CAPE Ratio (Shiller P/E)</div>
                     <div className="valHero" style={{ color:"#fff" }}>{capeRatio.toFixed(1)}<span style={{ fontSize:20, fontWeight:600 }}>x</span></div>
                     <div className="status" style={{ color:capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80" }}>
@@ -743,12 +749,12 @@ RESPONSE RULES:
                     <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
                       {capeRatio>35?`▲ ${(capeRatio-16).toFixed(1)}x above hist. avg (16x)`:"Hist. avg ~16x · Dot-com peak 44x"}
                     </div>
-                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{">"} 30 = 2pts · 20–30 = 1pt · {"<"} 20 = 0pts</div>
+                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{">"} 30 = 3pts · 20–30 = 1.5pts · {"<"} 20 = 0pts · max 3</div>
                   </div>
 
                   {/* 2. HY Spread — existing rich tile from Stress Confirmation */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("hy")}>
-                    <Badge score={compositeScores.hy} />
+                    <Badge score={compositeScores.hy} max={2} />
                     <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>HY Spread</div>
                     <div className="valHero" style={{ color:"#fff" }}>{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
                     <div className="status" style={{ color:hySpread>=5?"#ff6b88":hySpread>=4?"#fbbf24":hySpread>=3.5?"#fbbf24":hySpread>=3?"#94a3b8":"#4ade80" }}>
@@ -771,12 +777,12 @@ RESPONSE RULES:
                     <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
                       {hySpread>=4?`▲ Trigger active · ${Math.round((5-hySpread)*100)}bps to red line`:`▲ ${Math.round((4-hySpread)*100)}bps to trigger · ${Math.round((5-hySpread)*100)}bps to red line`}
                     </div>
-                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 350bps = 2pts · 350–550 = 1pt · {">"} 550 = 0pts</div>
+                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 350bps = 2pts · 350–550 = 1pt · {">"} 550 = 0pts · max 2</div>
                   </div>
 
                   {/* 3. VIX — existing rich tile from Stress Confirmation */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("vix")}>
-                    <Badge score={compositeScores.vix} />
+                    <Badge score={compositeScores.vix} max={1} />
                     <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>VIX</div>
                     <div className="valHero">{vixValue!=null?fmt1(vixValue):"—"}</div>
                     <div className="status" style={{ color:vixStatus.color }}>{vixValue==null?"Loading":vixValue>=30?"Stress":vixValue>=20?"Watch":"Normal"}</div>
@@ -796,12 +802,12 @@ RESPONSE RULES:
                     <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
                       {vixValue!=null&&vixValue>=30?"▲ Stress — pause buying":vixValue!=null?`▲ ${(30-vixValue).toFixed(1)} pts from Stress`:""}
                     </div>
-                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 20 = 2pts · 20–28 = 1pt · {">"} 28 = 0pts</div>
+                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 20 = 1pt · 20–28 = 0.5pts · {">"} 28 = 0pts · max 1</div>
                   </div>
 
                   {/* 4. ERP — existing rich tile from Stress Confirmation */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("erp")}>
-                    <Badge score={compositeScores.erp??1} />
+                    <Badge score={compositeScores.erp??1} max={2} />
                     <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Equity Risk Premium</div>
                     <div className="valHero" style={{ color:"#fff" }}>
                       {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
@@ -818,7 +824,7 @@ RESPONSE RULES:
                     <div style={{ fontSize:11, marginTop:8, fontWeight:600, color:erpBps!=null&&erpBps<100?"#ff6b88":erpBps!=null&&erpBps<230?"#fbbf24":"#64748b" }}>
                       {erpBps!=null&&erpBps<100?"▼ Stocks barely beating T-bills":erpBps!=null&&erpBps<300?`▼ ${((erpBps)/100).toFixed(2)}% — moderate compensation`:"Above healthy threshold"}
                     </div>
-                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 1% = 2pts · 1–3% = 1pt · {">"} 3% = 0pts</div>
+                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 1% = 2pts · 1–3% = 1pt · {">"} 3% = 0pts · max 2</div>
                   </div>
 
                   {/* 5. Buffett Indicator — simple tile */}
@@ -827,12 +833,12 @@ RESPONSE RULES:
                     const status = buffettSigma>1.5?"Strongly OV":buffettSigma>0.5?"Overvalued":"Fair Value";
                     return (
                       <div className="tile" style={{ position:"relative" }}>
-                        <Badge score={compositeScores.buffett} />
+                        <Badge score={compositeScores.buffett} max={3} />
                         <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Buffett Indicator</div>
                         <div className="valHero" style={{ color:"#fff" }}>{buffettSigma.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>σ</span></div>
                         <div className="status" style={{ color:c }}>{status}</div>
                         <div className="sub" style={{ marginTop:4 }}>vs. long-run trend · {buffettSigma>1.5?"Extreme deviation":buffettSigma>0.5?"Above trend":"Near trend"}</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{">"} 1.5σ = 2pts · 0.5–1.5σ = 1pt · {"<"} 0.5σ = 0pts</div>
+                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{">"} 1.5σ = 3pts · 0.5–1.5σ = 1.5pts · {"<"} 0.5σ = 0pts · max 3</div>
                         <div style={{ fontSize:9, color:"#334155", marginTop:3 }}>Manual · RIA model · Sat update</div>
                       </div>
                     );
@@ -846,12 +852,12 @@ RESPONSE RULES:
                     const status = yieldCurve<-0.5?"Inverted":yieldCurve<0.5?"Flat":"Normal";
                     return (
                       <div className="tile" style={{ position:"relative" }}>
-                        <Badge score={compositeScores.yc} />
+                        <Badge score={compositeScores.yc} max={2} />
                         <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Yield Curve</div>
                         <div className="valHero" style={{ color:"#fff" }}>{yieldCurve>=0?"+":""}{yieldCurve.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
                         <div className="status" style={{ color:c }}>{status}</div>
                         <div className="sub" style={{ marginTop:4 }}>10Y–2Y · {yieldCurve<-0.5?"Recession signal historically":yieldCurve<0.5?"Uncertain — watch closely":"Healthy term premium"}</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{"<"} –50bps = 2pts · –50 to +50 = 1pt · {">"} +50 = 0pts</div>
+                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{"<"} –50bps = 2pts · –50 to +50 = 1pt · {">"} +50 = 0pts · max 2</div>
                       </div>
                     );
                   })()}
@@ -862,12 +868,12 @@ RESPONSE RULES:
                     const status = breadthPct!=null?(breadthPct<50?"Weak":breadthPct<70?"Mixed":"Strong"):"Loading";
                     return (
                       <div className="tile" style={{ position:"relative" }}>
-                        <Badge score={compositeScores.breadth} />
+                        <Badge score={compositeScores.breadth} max={1} />
                         <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Breadth</div>
                         <div className="valHero" style={{ color:"#fff" }}>{breadthPct!=null?breadthPct.toFixed(0):"—"}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
                         <div className="status" style={{ color:c }}>{status}</div>
                         <div className="sub" style={{ marginTop:4 }}>% S&P 500 above 200-DMA · {breadthPct!=null?(breadthPct<50?"Broad selling underway":breadthPct<70?"Mixed internals":"Broad participation"):"Live $SPXA200R"}</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{"<"} 50% = 2pts · 50–70% = 1pt · {">"} 70% = 0pts</div>
+                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{"<"} 50% = 1pt · 50–70% = 0.5pts · {">"} 70% = 0pts · max 1</div>
                       </div>
                     );
                   })()}
@@ -878,28 +884,44 @@ RESPONSE RULES:
                     const status = ivyInvestedCount<=2?"Defensive":ivyInvestedCount<=4?"Mixed":"Invested";
                     return (
                       <div className="tile" style={{ position:"relative" }}>
-                        <Badge score={compositeScores.ivy} />
+                        <Badge score={compositeScores.ivy} max={1} />
                         <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Ivy Portfolio</div>
                         <div className="valHero" style={{ color:"#fff" }}>{ivyInvestedCount}<span style={{ fontSize:20, fontWeight:600 }}>/5</span></div>
                         <div className="status" style={{ color:c }}>{status}</div>
                         <div className="sub" style={{ marginTop:4 }}>10-mo SMA signals · {ivyInvestedCount<=2?"Trend breakdown across asset classes":ivyInvestedCount<=4?"Partial cash signal active":"Full trend confirmation"}</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>0–2 invested = 2pts · 3–4 = 1pt · 5/5 = 0pts</div>
+                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>0–2 invested = 1pt · 3–4 = 0.5pts · 5/5 = 0pts · max 1</div>
                       </div>
                     );
                   })()}
 
-                  {/* 9. 200-DMA — display only */}
+                  {/* 9. 200-DMA — display only, full tile copied from Market Structure */}
                   {(() => {
-                    const stColor = is200Broken?(spxDailyPct!=null&&spxDailyPct>0?"#fbbf24":"#ff6b88"):spx200Pct!=null&&spx200Pct<=3?"#fbbf24":"#4ade80";
+                    const isNear = spx200Pct != null && spx200Pct >= 0 && spx200Pct <= 3;
+                    const tileClass = is200Broken ? "tile tile200Red" : isNear ? "tile tile200" : "tile";
+                    const lblColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
+                    const badgeBg = is200Broken ? "#ef4444" : "#f59e0b";
+                    const statusColor = is200Broken ? "#ff6b88" : isNear ? "#fbbf24" : "#4ade80";
+                    const subColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
                     return (
-                      <div className="tile" style={{ position:"relative" }}>
+                      <div className={tileClass} style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("dma200")}>
                         <div style={{ position:"absolute", top:8, right:8, fontSize:9, color:"#334155", fontWeight:600 }}>display</div>
-                        <div className="lbl" style={{ marginBottom:6, paddingRight:36 }}>200-DMA</div>
-                        <div className="valHero" style={{ color:"#fff" }}>{spx200Pct!=null?`${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}`:"—"}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
-                        <div className="status" style={{ color:stColor }}>{dmaState(spx200Pct, slope200, true)}</div>
-                        <div className="sub" style={{ marginTop:4 }}>
-                          {spx200Pct!=null?`SPX ${spx200Pct>=0?"above":"below"} ${fmtWhole(spx200)} · Slope ${slope200!=null?(slope200>0?"↗":"↘"):"—"} ${slope200!=null?slope200.toFixed(1)+"%":""}`:"Waiting"}
+                        <div className="tileTop">
+                          <span className="lbl" style={{ color: lblColor, paddingRight:36 }}>200-DMA</span>
+                          {(is200Broken || isNear) && <span className="badge" style={{ background: badgeBg, color:"#000" }}>!</span>}
                         </div>
+                        <div className="valHero">{fmtWhole(spx200)}</div>
+                        <div className="status" style={{ color: statusColor }}>
+                          {dmaState(spx200Pct, slope200, true)}
+                        </div>
+                        <div className="sub" style={{ color: subColor }}>
+                          {spx200Pct != null ? `SPX ${fmtSigned1(spx200Pct)} ${spx200Pct >= 0 ? "above" : "below"}` : "Waiting"}
+                        </div>
+                        <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
+                        {slope200 != null && (
+                          <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                            Slope {slope200 > 0 ? "↗ +" : slope200 < 0 ? "↘ " : "→ "}{slope200.toFixed(1)}% · {slope200 > 0.02 ? "Bullish" : slope200 < -0.02 ? "Bearish" : "Neutral"}
+                          </div>
+                        )}
                         <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>Display only · not scored · Roberts&apos; primary trigger</div>
                       </div>
                     );
@@ -1865,7 +1887,7 @@ RESPONSE RULES:
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Valuation, Recession &amp; Sentiment Models</div><div className="panelSub">Sigma scores vs historical norm · Standard deviation from mean</div></div>
-              <div style={{ textAlign:"right" }}><div className="pstamp">Updated Apr 3 · Next: Apr 11</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
+              <div style={{ textAlign:"right" }}><div className="pstamp">Updated Apr 30 · Next: May 8</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
             </div>
 
             {/* Valuation Models */}
@@ -1874,12 +1896,12 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.08", color:"#ff6b88" },
-                  { name:"Price/Earnings (CAPE)",  rating:"Overvalued",          score:"1.89", color:"#fbbf24" },
-                  { name:"Price/Sales",            rating:"Overvalued",          score:"1.90", color:"#fbbf24" },
-                  { name:"Interest Rate Model",    rating:"Overvalued",          score:"1.47", color:"#fbbf24" },
-                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"1.98", color:"#ff6b88" },
-                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.29", color:"#94a3b8", muted:true },
+                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.49", color:"#ff6b88" },
+                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.24", color:"#ff6b88" },
+                  { name:"Price/Sales",            rating:"Strongly Overvalued", score:"2.30", color:"#ff6b88" },
+                  { name:"Interest Rate Model",    rating:"Overvalued",          score:"1.88", color:"#fbbf24" },
+                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.36", color:"#ff6b88" },
+                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.38", color:"#94a3b8", muted:true },
                 ].map(r => (
                   <tr key={r.name} style={{ opacity:(r as any).muted?0.4:1 }}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:(r as any).muted?"italic":"normal" }}>{r.name}</td>
@@ -1891,7 +1913,7 @@ RESPONSE RULES:
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Valuation Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>5 of 5 models overvalued · Apr 3</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>5 of 5 models overvalued · Apr 30</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
               <span style={{ fontSize:12, color:"#94a3b8" }}>Buffett Indicator and Mean Reversion re-elevated to Strongly Overvalued despite the March selloff. Margin of safety remains thin.</span>
             </div>
@@ -1902,9 +1924,9 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Yield Curve",       rating:"Very High Risk",  score:"2.56", color:"#ff6b88",  updated:"Apr 3" },
+                  { name:"Yield Curve",       rating:"Very High Risk",  score:"2.56", color:"#ff6b88",  updated:"Apr 30" },
                   { name:"Sahm Rule",         rating:"Normal",          score:"N/A",  color:"#4ade80",  updated:"Mar 31" },
-                  { name:"State Coincidence", rating:"Normal",          score:"0.66", color:"#4ade80",  updated:"Dec 31" },
+                  { name:"State Coincidence", rating:"Normal",          score:"0.64", color:"#4ade80",  updated:"Feb 28" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -1963,11 +1985,11 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Economic Uncertainty Index", rating:"Very Pessimistic", score:"5.37",  color:"#4ade80", updated:"Apr 3",  note:"contrarian bullish" },
-                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.30", color:"#4ade80", updated:"Mar 31", note:"contrarian bullish" },
-                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.12",  color:"#fbbf24", updated:"Feb 28", note:"still elevated" },
-                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.82",  color:"#94a3b8", updated:"Apr 3",  note:"CDX warning active" },
-                  { name:"VIX Index",                  rating:"Neutral",          score:"0.66",  color:"#94a3b8", updated:"Apr 3",  note:"below 30 trigger" },
+                  { name:"Economic Uncertainty Index", rating:"Very Pessimistic", score:"3.43",  color:"#4ade80", updated:"Apr 30", note:"contrarian bullish" },
+                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.80", color:"#4ade80", updated:"Apr 24", note:"contrarian bullish" },
+                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.18",  color:"#fbbf24", updated:"Mar 31", note:"still elevated" },
+                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.95",  color:"#94a3b8", updated:"Apr 30", note:"CDX warning active" },
+                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.32", color:"#94a3b8", updated:"Apr 30", note:"below 30 trigger" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -1985,7 +2007,7 @@ RESPONSE RULES:
             </table>
             <div className="sumBar">
               <span className="sumBarLabel">Sentiment Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism — Contrarian Bullish · Apr 3</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism — Contrarian Bullish · Apr 30</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
               <span style={{ fontSize:12, color:"#94a3b8" }}>Economic Uncertainty spiked to 5.37σ — historically extreme fear reading. Consumer Confidence deeply negative. Both are contrarian bullish signals. VIX and Junk Bond Spreads eased back to Neutral.</span>
             </div>
