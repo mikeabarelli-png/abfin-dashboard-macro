@@ -113,6 +113,7 @@ export default function Page() {
   // Composite Signal Score
   const breadthPct    = getNum(metrics?.breadth_pct,      marketData?.breadth_pct);
   const compositeScore: number = metrics?.composite_score ?? marketData?.composite_score ?? 10;
+  const compositeScore10 = Math.round((compositeScore / 16) * 10);
   const compositeScores = metrics?.composite_scores ?? marketData?.composite_scores ?? { cape:2, buffett:2, vix:1, hy:2, yc:1, breadth:1, erp:1, ivy:1 };
   const compositeAllocation: string = metrics?.composite_allocation ?? marketData?.composite_allocation ?? "42–45%";
   const compositeSignal: string = metrics?.composite_signal ?? marketData?.composite_signal ?? "SLIGHT TILT";
@@ -632,7 +633,7 @@ RESPONSE RULES:
           {/* ⓪-A COMPOSITE SCORE HERO — slim strategic banner */}
           {(() => {
             // Gradient color at exact score position (0=green → 14=red)
-            const pct = compositeScore / 14;
+            const pct = compositeScore / 16;
             const gradColor = pct <= 0.21 ? "#4ade80" : pct <= 0.43 ? "#86efac" : pct <= 0.57 ? "#94a3b8" : pct <= 0.79 ? "#fbbf24" : "#ff6b88";
             return (
               <section className="panel" style={{ background:"linear-gradient(135deg,rgba(15,23,42,0.97) 0%,rgba(20,27,71,0.97) 100%)", border:`1px solid ${gradColor}35`, marginBottom:8, padding:"16px 20px" }}>
@@ -641,8 +642,8 @@ RESPONSE RULES:
                   {/* Score number */}
                   <div style={{ flex:"0 0 auto", textAlign:"center", minWidth:80 }}>
                     <div style={{ fontSize:9, fontWeight:700, letterSpacing:"0.12em", color:"#475569", textTransform:"uppercase", marginBottom:4 }}>Composite Score</div>
-                    <div style={{ fontSize:64, fontWeight:900, color:gradColor, lineHeight:1, letterSpacing:"-0.04em" }}>{compositeScore}</div>
-                    <div style={{ fontSize:12, color:"#334155", fontWeight:600 }}>/16</div>
+                    <div style={{ fontSize:64, fontWeight:900, color:gradColor, lineHeight:1, letterSpacing:"-0.04em" }}>{compositeScore10}</div>
+                    <div style={{ fontSize:12, color:"#334155", fontWeight:600 }}>/10</div>
                   </div>
 
                   {/* Gradient gauge bar */}
@@ -653,8 +654,8 @@ RESPONSE RULES:
                     </div>
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155", marginTop:5 }}>
                       <span style={{ color:"#4ade80" }}>DEPLOY (0)</span>
-                      <span>4</span><span>7</span><span>10</span><span>13</span>
-                      <span style={{ color:"#ff6b88" }}>HOLD (16)</span>
+                      <span>3</span><span>4</span><span>6</span><span>8</span>
+                      <span style={{ color:"#ff6b88" }}>HOLD (10)</span>
                     </div>
                     {/* Signal pill */}
                     <div style={{ marginTop:8, display:"inline-flex", padding:"3px 12px", borderRadius:9999, background:`${gradColor}18`, border:`1px solid ${gradColor}55` }}>
