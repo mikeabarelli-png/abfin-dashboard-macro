@@ -722,9 +722,9 @@ RESPONSE RULES:
               return (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
 
-                  {/* ── Row 1 ── */}
+                  {/* ── Row 1: 3pts (CAPE, Buffett) + 2pts (HY, ERP, YC) ── */}
 
-                  {/* 1. CAPE — existing rich tile from Market Stress */}
+                  {/* 1. CAPE — 3pts max */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("cape")}>
                     <Badge score={compositeScores.cape} max={3} />
                     <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>CAPE Ratio (Shiller P/E)</div>
@@ -752,7 +752,24 @@ RESPONSE RULES:
                     <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{">"} 30 = 3pts · 20–30 = 1.5pts · {"<"} 20 = 0pts · max 3</div>
                   </div>
 
-                  {/* 2. HY Spread — existing rich tile from Stress Confirmation */}
+                  {/* 2. Buffett Indicator — 3pts max */}
+                  {(() => {
+                    const c = compositeScores.buffett===0?"#4ade80":compositeScores.buffett>=3?"#ff6b88":"#fbbf24";
+                    const status = buffettSigma>1.5?"Strongly OV":buffettSigma>0.5?"Overvalued":"Fair Value";
+                    return (
+                      <div className="tile" style={{ position:"relative" }}>
+                        <Badge score={compositeScores.buffett} max={3} />
+                        <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Buffett Indicator</div>
+                        <div className="valHero" style={{ color:"#fff" }}>{buffettSigma.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>σ</span></div>
+                        <div className="status" style={{ color:c }}>{status}</div>
+                        <div className="sub" style={{ marginTop:4 }}>vs. long-run trend · {buffettSigma>1.5?"Extreme deviation":buffettSigma>0.5?"Above trend":"Near trend"}</div>
+                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{">"} 1.5σ = 3pts · 0.5–1.5σ = 1.5pts · {"<"} 0.5σ = 0pts · max 3</div>
+                        <div style={{ fontSize:9, color:"#334155", marginTop:3 }}>Manual · RIA model · Sat update</div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 3. HY Spread — 2pts max */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("hy")}>
                     <Badge score={compositeScores.hy} max={2} />
                     <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>HY Spread</div>
@@ -780,7 +797,47 @@ RESPONSE RULES:
                     <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 350bps = 2pts · 350–550 = 1pt · {">"} 550 = 0pts · max 2</div>
                   </div>
 
-                  {/* 3. VIX — existing rich tile from Stress Confirmation */}
+                  {/* 4. ERP — 2pts max */}
+                  <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("erp")}>
+                    <Badge score={compositeScores.erp??1} max={2} />
+                    <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Equity Risk Premium</div>
+                    <div className="valHero" style={{ color:"#fff" }}>
+                      {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
+                    </div>
+                    <div className="status" style={{ color:erpBps==null?"#475569":erpBps<100?"#ff6b88":erpBps<300?"#fbbf24":"#4ade80" }}>
+                      {erpBps==null?"Loading":erpBps<100?"Thin":erpBps<300?"Moderate":"Healthy"}
+                    </div>
+                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:"25%", background:"#ef4444", borderRadius:"9999px 0 0 9999px" }} />
+                      {erpBps!=null && erpBps>200 && <div style={{ position:"absolute", left:"25%", top:0, height:6, width:`${Math.max(0,Math.min(((erpBps-200)/800)*100,75))}%`, background:"#fbbf24" }} />}
+                      <div style={{ position:"absolute", top:-6, left:"25%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                      <div style={{ position:"absolute", top:-4, left:"62.5%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                    </div>
+                    <div style={{ fontSize:11, marginTop:8, fontWeight:600, color:erpBps!=null&&erpBps<100?"#ff6b88":erpBps!=null&&erpBps<230?"#fbbf24":"#64748b" }}>
+                      {erpBps!=null&&erpBps<100?"▼ Stocks barely beating T-bills":erpBps!=null&&erpBps<300?`▼ ${((erpBps)/100).toFixed(2)}% — moderate compensation`:"Above healthy threshold"}
+                    </div>
+                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 1% = 2pts · 1–3% = 1pt · {">"} 3% = 0pts · max 2</div>
+                  </div>
+
+                  {/* 5. Yield Curve — 2pts max */}
+                  {(() => {
+                    const c = compositeScores.yc===0?"#4ade80":compositeScores.yc>=2?"#ff6b88":"#fbbf24";
+                    const status = yieldCurve<-0.5?"Inverted":yieldCurve<0.5?"Flat":"Normal";
+                    return (
+                      <div className="tile" style={{ position:"relative" }}>
+                        <Badge score={compositeScores.yc} max={2} />
+                        <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Yield Curve</div>
+                        <div className="valHero" style={{ color:"#fff" }}>{yieldCurve>=0?"+":""}{yieldCurve.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                        <div className="status" style={{ color:c }}>{status}</div>
+                        <div className="sub" style={{ marginTop:4 }}>10Y–2Y · {yieldCurve<-0.5?"Recession signal historically":yieldCurve<0.5?"Uncertain — watch closely":"Healthy term premium"}</div>
+                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{"<"} –50bps = 2pts · –50 to +50 = 1pt · {">"} +50 = 0pts · max 2</div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── Row 2: 1pt supporting signals + display ── */}
+
+                  {/* 6. VIX — 1pt max */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("vix")}>
                     <Badge score={compositeScores.vix} max={1} />
                     <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>VIX</div>
@@ -805,66 +862,9 @@ RESPONSE RULES:
                     <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 20 = 1pt · 20–28 = 0.5pts · {">"} 28 = 0pts · max 1</div>
                   </div>
 
-                  {/* 4. ERP — existing rich tile from Stress Confirmation */}
-                  <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("erp")}>
-                    <Badge score={compositeScores.erp??1} max={2} />
-                    <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Equity Risk Premium</div>
-                    <div className="valHero" style={{ color:"#fff" }}>
-                      {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
-                    </div>
-                    <div className="status" style={{ color:erpBps==null?"#475569":erpBps<100?"#ff6b88":erpBps<300?"#fbbf24":"#4ade80" }}>
-                      {erpBps==null?"Loading":erpBps<100?"Thin":erpBps<300?"Moderate":"Healthy"}
-                    </div>
-                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                      <div style={{ position:"absolute", left:0, top:0, height:6, width:"25%", background:"#ef4444", borderRadius:"9999px 0 0 9999px" }} />
-                      {erpBps!=null && erpBps>200 && <div style={{ position:"absolute", left:"25%", top:0, height:6, width:`${Math.max(0,Math.min(((erpBps-200)/800)*100,75))}%`, background:"#fbbf24" }} />}
-                      <div style={{ position:"absolute", top:-6, left:"25%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
-                      <div style={{ position:"absolute", top:-4, left:"62.5%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
-                    </div>
-                    <div style={{ fontSize:11, marginTop:8, fontWeight:600, color:erpBps!=null&&erpBps<100?"#ff6b88":erpBps!=null&&erpBps<230?"#fbbf24":"#64748b" }}>
-                      {erpBps!=null&&erpBps<100?"▼ Stocks barely beating T-bills":erpBps!=null&&erpBps<300?`▼ ${((erpBps)/100).toFixed(2)}% — moderate compensation`:"Above healthy threshold"}
-                    </div>
-                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 1% = 2pts · 1–3% = 1pt · {">"} 3% = 0pts · max 2</div>
-                  </div>
-
-                  {/* 5. Buffett Indicator — simple tile */}
+                  {/* 7. Breadth — 1pt max */}
                   {(() => {
-                    const c = compositeScores.buffett===2?"#ff6b88":compositeScores.buffett===1?"#fbbf24":"#4ade80";
-                    const status = buffettSigma>1.5?"Strongly OV":buffettSigma>0.5?"Overvalued":"Fair Value";
-                    return (
-                      <div className="tile" style={{ position:"relative" }}>
-                        <Badge score={compositeScores.buffett} max={3} />
-                        <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Buffett Indicator</div>
-                        <div className="valHero" style={{ color:"#fff" }}>{buffettSigma.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>σ</span></div>
-                        <div className="status" style={{ color:c }}>{status}</div>
-                        <div className="sub" style={{ marginTop:4 }}>vs. long-run trend · {buffettSigma>1.5?"Extreme deviation":buffettSigma>0.5?"Above trend":"Near trend"}</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{">"} 1.5σ = 3pts · 0.5–1.5σ = 1.5pts · {"<"} 0.5σ = 0pts · max 3</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:3 }}>Manual · RIA model · Sat update</div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* ── Row 2 ── */}
-
-                  {/* 6. Yield Curve — simple tile */}
-                  {(() => {
-                    const c = compositeScores.yc===2?"#ff6b88":compositeScores.yc===1?"#fbbf24":"#4ade80";
-                    const status = yieldCurve<-0.5?"Inverted":yieldCurve<0.5?"Flat":"Normal";
-                    return (
-                      <div className="tile" style={{ position:"relative" }}>
-                        <Badge score={compositeScores.yc} max={2} />
-                        <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Yield Curve</div>
-                        <div className="valHero" style={{ color:"#fff" }}>{yieldCurve>=0?"+":""}{yieldCurve.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
-                        <div className="status" style={{ color:c }}>{status}</div>
-                        <div className="sub" style={{ marginTop:4 }}>10Y–2Y · {yieldCurve<-0.5?"Recession signal historically":yieldCurve<0.5?"Uncertain — watch closely":"Healthy term premium"}</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{"<"} –50bps = 2pts · –50 to +50 = 1pt · {">"} +50 = 0pts · max 2</div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* 7. Market Breadth — simple tile */}
-                  {(() => {
-                    const c = compositeScores.breadth===2?"#ff6b88":compositeScores.breadth===1?"#fbbf24":"#4ade80";
+                    const c = compositeScores.breadth===0?"#4ade80":compositeScores.breadth>=1?"#ff6b88":"#fbbf24";
                     const status = breadthPct!=null?(breadthPct<50?"Weak":breadthPct<70?"Mixed":"Strong"):"Loading";
                     return (
                       <div className="tile" style={{ position:"relative" }}>
@@ -878,9 +878,9 @@ RESPONSE RULES:
                     );
                   })()}
 
-                  {/* 8. Ivy Portfolio — simple tile */}
+                  {/* 8. Ivy Portfolio — 1pt max */}
                   {(() => {
-                    const c = compositeScores.ivy===2?"#ff6b88":compositeScores.ivy===1?"#fbbf24":"#4ade80";
+                    const c = compositeScores.ivy===0?"#4ade80":compositeScores.ivy>=1?"#ff6b88":"#fbbf24";
                     const status = ivyInvestedCount<=2?"Defensive":ivyInvestedCount<=4?"Mixed":"Invested";
                     return (
                       <div className="tile" style={{ position:"relative" }}>
@@ -894,7 +894,7 @@ RESPONSE RULES:
                     );
                   })()}
 
-                  {/* 9. 200-DMA — display only, full tile copied from Market Structure */}
+                  {/* 9. 200-DMA — display only */}
                   {(() => {
                     const isNear = spx200Pct != null && spx200Pct >= 0 && spx200Pct <= 3;
                     const tileClass = is200Broken ? "tile tile200Red" : isNear ? "tile tile200" : "tile";
@@ -923,6 +923,31 @@ RESPONSE RULES:
                           </div>
                         )}
                         <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>Display only · not scored · Roberts&apos; primary trigger</div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 10. CNN Fear & Greed — display only · inverted color logic: Greed=red, Fear=green */}
+                  {(() => {
+                    const score = fearGreedScore;
+                    const tileColor = score <= 25 ? "#4ade80" : score >= 75 ? "#ff6b88" : "#fbbf24";
+                    const statusLabel = score <= 25 ? "Extreme Fear" : score <= 45 ? "Fear" : score <= 55 ? "Neutral" : score <= 74 ? "Greed" : "Extreme Greed";
+                    return (
+                      <div className="tile" style={{ position:"relative" }}>
+                        <div style={{ position:"absolute", top:8, right:8, fontSize:9, color:"#334155", fontWeight:600 }}>display</div>
+                        <div className="lbl" style={{ marginBottom:6, paddingRight:36 }}>CNN Fear &amp; Greed</div>
+                        <div className="valHero" style={{ color:"#fff" }}>{Math.round(score)}</div>
+                        <div className="status" style={{ color:tileColor }}>{statusLabel}</div>
+                        <div style={{ position:"relative", height:6, borderRadius:9999, overflow:"hidden", background:"linear-gradient(to right,#4ade80 0%,#86efac 20%,#fbbf24 45%,#f97316 65%,#ff6b88 100%)", marginTop:10 }}>
+                          <div style={{ position:"absolute", top:0, left:`${Math.min(Math.max(score,0),100)}%`, width:3, height:6, background:"#fff", borderRadius:1, transform:"translateX(-50%)" }} />
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#475569", marginTop:3 }}>
+                          <span style={{ color:"#4ade80" }}>Fear</span><span>Neutral</span><span style={{ color:"#ff6b88" }}>Greed</span>
+                        </div>
+                        <div style={{ fontSize:11, marginTop:5, fontWeight:600, color:tileColor }}>
+                          {score <= 25 ? "▲ Contrarian deploy signal" : score >= 75 ? "▼ Extreme greed — defensive" : `${Math.round(score)} — watch zone`}
+                        </div>
+                        <div style={{ fontSize:9, color:"#334155", marginTop:4 }}>Display only · not scored · Zeberg contrarian</div>
                       </div>
                     );
                   })()}
@@ -1948,38 +1973,6 @@ RESPONSE RULES:
 
             {/* Sentiment Models */}
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Sentiment Models</div>
-
-            {/* CNN Fear & Greed Live Gauge */}
-            <div style={{ background:"#050a35", borderRadius:10, padding:14, marginBottom:10, border:"0.5px solid rgba(255,255,255,0.06)" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
-                <div>
-                  <div style={{ fontSize:11, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.04em" }}>CNN Fear &amp; Greed Index</div>
-                  <div style={{ fontSize:10, color:"#475569", marginTop:2 }}>Live · 0 = Max Fear · 100 = Max Greed</div>
-                </div>
-                <div style={{ textAlign:"right" }}>
-                  <div style={{ fontSize:32, fontWeight:700, color: fearGreedScore <= 25 ? "#ff6b88" : fearGreedScore <= 45 ? "#fbbf24" : fearGreedScore <= 55 ? "#94a3b8" : fearGreedScore <= 75 ? "#4ade80" : "#22c55e", lineHeight:1 }}>{Math.round(fearGreedScore)}</div>
-                  <div style={{ fontSize:11, fontWeight:700, color: fearGreedScore <= 25 ? "#ff6b88" : fearGreedScore <= 45 ? "#fbbf24" : fearGreedScore <= 55 ? "#94a3b8" : "#4ade80", marginTop:2 }}>{fearGreedRating}</div>
-                </div>
-              </div>
-              {/* Gauge bar */}
-              <div style={{ position:"relative", height:8, borderRadius:9999, overflow:"hidden", background:"linear-gradient(to right, #ef4444 0%, #f97316 25%, #94a3b8 45%, #4ade80 65%, #22c55e 100%)" }}>
-                <div style={{ position:"absolute", top:0, left:`${Math.min(Math.max(fearGreedScore,0),100)}%`, width:3, height:8, background:"#fff", borderRadius:2, transform:"translateX(-50%)", boxShadow:"0 0 4px rgba(255,255,255,0.8)" }} />
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginTop:4 }}>
-                <span>Extreme Fear</span><span>Fear</span><span>Neutral</span><span>Greed</span><span>Extreme Greed</span>
-              </div>
-              {/* Contrarian note when extreme */}
-              {fearGreedScore <= 20 && (
-                <div style={{ marginTop:8, fontSize:11, fontWeight:600, color:"#4ade80" }}>
-                  ▲ Contrarian signal — readings ≤20 historically precede sharp short-term rallies (Zeberg &quot;most hated rally&quot; setup)
-                </div>
-              )}
-              {fearGreedScore >= 80 && (
-                <div style={{ marginTop:8, fontSize:11, fontWeight:600, color:"#ff6b88" }}>
-                  ▼ Extreme greed — historically precedes corrections. Grantham bubble warning applies.
-                </div>
-              )}
-            </div>
 
             <table className="valTable" style={{ marginBottom:8 }}>
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
