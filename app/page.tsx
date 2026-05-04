@@ -651,7 +651,7 @@ RESPONSE RULES:
                   <div style={{ flex:"1 1 200px", minWidth:160 }}>
                     <div style={{ position:"relative", height:10, borderRadius:9999, background:"linear-gradient(to right,#4ade80,#86efac,#fbbf24,#f97316,#ff6b88)", overflow:"visible" }}>
                       {/* Position marker */}
-                      <div style={{ position:"absolute", top:-5, left:`calc(${(compositeScore/15)*100}% - 2px)`, width:4, height:20, background:"#fff", borderRadius:2, boxShadow:"0 0 6px rgba(255,255,255,0.6)", zIndex:2 }} />
+                      <div style={{ position:"absolute", top:-5, left:`calc(${(compositeScore10/10)*100}% - 2px)`, width:4, height:20, background:"#fff", borderRadius:2, boxShadow:"0 0 6px rgba(255,255,255,0.6)", zIndex:2 }} />
                     </div>
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155", marginTop:5 }}>
                       <span style={{ color:"#4ade80" }}>DEPLOY (0)</span>
