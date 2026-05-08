@@ -241,6 +241,29 @@ async function fetchIvyPosition(ticker: string): Promise<{
 export async function GET() {
   const diagnostics: Record<string, string> = {};
 
+  // ═══════════════════════════════════════════════════════════════════
+  // SATURDAY MANUAL UPDATE CHECKLIST — update every weekend
+  // ═══════════════════════════════════════════════════════════════════
+  // NOTE: These are the ONLY values you need to update each Saturday.
+  // Do not modify anything else in this file during weekly maintenance.
+  // ───────────────────────────────────────────────────────────────────
+  const MANUAL_CAPE_FALLBACK       = 41.69;    // multpl.com/shiller-pe          · May 7 2026
+  const MANUAL_BUFFETT_SIGMA       = 2.49;     // currentmarketvaluation.com     · Apr 30 2026
+  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · May 7 2026
+  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · May 7 2026
+  const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
+  const MANUAL_BREADTH_FALLBACK    = 57;       // macromicro $SPXA200R (%)       · May 3 2026
+  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "holding";
+  //                                           // easing | holding | tightening  · May 2026
+  const MANUAL_AD = {                          // StockCharts $NYAD              · May 3 2026
+    signal:      "neutral" as "bullish_divergence" | "neutral" | "confirming_weakness",
+    adTrend:     "flat"    as "higher_lows" | "flat" | "lower_lows",
+    adVsSpx:     "tracking" as "diverging_up" | "tracking" | "diverging_down",
+    note:        "A/D line recovering with market",
+    updatedDate: "May 3",
+  };
+  // ═══════════════════════════════════════════════════════════════════
+
   // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
   const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthChart] = await Promise.all([
     fetchChart("^GSPC", 420),
@@ -467,29 +490,6 @@ export async function GET() {
   // NYSE Advance/Decline Line — manually updated weekly (Saturday)
   // Source: stockcharts.com $NYAD or barchart.com — cumulative breadth line
   // signal: "bullish_divergence" | "neutral" | "confirming_weakness"
-  // ═══════════════════════════════════════════════════════════════════
-  // SATURDAY MANUAL UPDATE CHECKLIST — update every weekend
-  // ═══════════════════════════════════════════════════════════════════
-  // NOTE: These are the ONLY values you need to update each Saturday.
-  // Do not modify anything else in this file during weekly maintenance.
-  // ───────────────────────────────────────────────────────────────────
-  const MANUAL_CAPE_FALLBACK       = 41.69;    // multpl.com/shiller-pe          · May 7 2026
-  const MANUAL_BUFFETT_SIGMA       = 2.49;     // currentmarketvaluation.com     · Apr 30 2026
-  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · May 7 2026
-  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · May 7 2026
-  const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
-  const MANUAL_BREADTH_FALLBACK    = 57;       // macromicro $SPXA200R (%)       · May 3 2026
-  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "holding";
-  //                                           // easing | holding | tightening  · May 2026
-  const MANUAL_AD = {                          // StockCharts $NYAD              · May 3 2026
-    signal:      "neutral" as "bullish_divergence" | "neutral" | "confirming_weakness",
-    adTrend:     "flat"    as "higher_lows" | "flat" | "lower_lows",
-    adVsSpx:     "tracking" as "diverging_up" | "tracking" | "diverging_down",
-    note:        "A/D line recovering with market",
-    updatedDate: "May 3",
-  };
-  // ═══════════════════════════════════════════════════════════════════
-
   // ── Composite Signal Score (0–16) ──
   // 8 variables × 0–2pts each → drives glide path equity allocation
   const scoreCAFE    = capeRatio > 30 ? 2 : capeRatio > 20 ? 1 : 0;
