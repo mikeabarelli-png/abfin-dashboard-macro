@@ -294,7 +294,7 @@ export async function GET() {
   // Source: Yahoo Finance ^SPXA200R · Updates daily after market close
   const breadthPct: number | null = breadthChart.closes.length > 0
     ? breadthChart.closes[breadthChart.closes.length - 1]
-    : breadthChart.meta.regularMarketPrice ?? null;
+    : breadthChart.meta.regularMarketPrice ?? MANUAL_BREADTH_FALLBACK;
   console.log(`Breadth (% above 200-DMA): ${breadthPct}%`);
 
   // Brent Crude — Roberts' "master switch"
@@ -438,12 +438,6 @@ export async function GET() {
   const real10y: number = fredReal10y.value ?? 1.92;
   const nom10y: number = fredNom10y.value ?? 4.30;
 
-  // HY Spread — FRED BAMLH0A0HYM2 lags by ~1 business day (cash bond market)
-  // CDX HY (derivatives) trades wider and updates intraday — may diverge on stress days
-  // Update MANUAL_HY_FALLBACK each Saturday if FRED hasn't captured Friday's move yet
-  // Source: FRED https://fred.stlouisfed.org/series/BAMLH0A0HYM2
-  // Note: value is already in percentage points — do NOT divide by 100
-  const MANUAL_HY_FALLBACK = 3.21; // Last manually verified: Mar 28 2026
   const hySpread: number = fredHY.value ?? MANUAL_HY_FALLBACK;
 
   const yieldCurve: number = fredYC.value ?? 0.55;
@@ -458,7 +452,6 @@ export async function GET() {
   // Put/Call Ratio
   const putCallRatio: number | null = putCall.meta.regularMarketPrice ?? putCall.closes[putCall.closes.length - 1] ?? null;
 
-  const MANUAL_PE_FALLBACK = 24.2; // SPX trailing P/E — update manually each Saturday
   const trailingPE: number | null = peData.value ?? spx.meta.trailingPE ?? MANUAL_PE_FALLBACK;
   let erp: number | null = null;
   if (trailingPE != null && trailingPE > 0) {
@@ -469,30 +462,33 @@ export async function GET() {
 
   // CAPE (Shiller P/E) — Nasdaq Data Link, updated monthly
   // Falls back to manual constant if API key missing or fetch fails
-  const MANUAL_CAPE_FALLBACK = 41.69; // Last manually verified: May 7 2026 — source: multpl.com/shiller-pe · Max ever: 44.19 (Dec 1999)
   const capeRatio: number = capeData.value ?? MANUAL_CAPE_FALLBACK;
 
   // NYSE Advance/Decline Line — manually updated weekly (Saturday)
   // Source: stockcharts.com $NYAD or barchart.com — cumulative breadth line
   // signal: "bullish_divergence" | "neutral" | "confirming_weakness"
-  // adTrend: direction over last 4 weeks: "higher_lows" | "flat" | "lower_lows"
-  // adVsSpx: how A/D is behaving relative to SPX: "diverging_up" | "tracking" | "diverging_down"
-  const MANUAL_AD = {
-    signal: "confirming_weakness" as "bullish_divergence" | "neutral" | "confirming_weakness",
-    adTrend: "lower_lows" as "higher_lows" | "flat" | "lower_lows",
-    adVsSpx: "diverging_down" as "diverging_up" | "tracking" | "diverging_down",
-    note: "A/D line declining with SPX — broad-based selling",
-    updatedDate: "Mar 21",
+  // ═══════════════════════════════════════════════════════════════════
+  // SATURDAY MANUAL UPDATE CHECKLIST — update every weekend
+  // ═══════════════════════════════════════════════════════════════════
+  // NOTE: These are the ONLY values you need to update each Saturday.
+  // Do not modify anything else in this file during weekly maintenance.
+  // ───────────────────────────────────────────────────────────────────
+  const MANUAL_CAPE_FALLBACK       = 41.69;    // multpl.com/shiller-pe          · May 7 2026
+  const MANUAL_BUFFETT_SIGMA       = 2.49;     // currentmarketvaluation.com     · Apr 30 2026
+  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · May 7 2026
+  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · May 7 2026
+  const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
+  const MANUAL_BREADTH_FALLBACK    = 57;       // macromicro $SPXA200R (%)       · May 3 2026
+  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "holding";
+  //                                           // easing | holding | tightening  · May 2026
+  const MANUAL_AD = {                          // StockCharts $NYAD              · May 3 2026
+    signal:      "neutral" as "bullish_divergence" | "neutral" | "confirming_weakness",
+    adTrend:     "flat"    as "higher_lows" | "flat" | "lower_lows",
+    adVsSpx:     "tracking" as "diverging_up" | "tracking" | "diverging_down",
+    note:        "A/D line recovering with market",
+    updatedDate: "May 3",
   };
-
-  // Buffett Indicator sigma — from RIA Advisors model table
-  // Update each Saturday from RIA model page screenshot
-  // Current value: 2.08 = Strongly Overvalued (>1.5σ above trend)
-  const MANUAL_BUFFETT_SIGMA = 2.49; // Last updated: Apr 30 2026 — source: currentmarketvaluation.com
-
-  // Fed Policy stance — derived from Fed Funds rate trend and Fed communications
-  // Manual: "easing" | "holding" | "tightening"
-  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "holding"; // Apr 2026 — discussing hikes
+  // ═══════════════════════════════════════════════════════════════════
 
   // ── Composite Signal Score (0–16) ──
   // 8 variables × 0–2pts each → drives glide path equity allocation
@@ -529,9 +525,6 @@ export async function GET() {
     compositeScore >= 7  ? "#94a3b8" :
     compositeScore >= 4  ? "#4ade80" : "#22d3ee";
 
-  // CNN Fear & Greed Index — live fetch with manual fallback
-  // Update MANUAL_FEAR_GREED_FALLBACK each Saturday if live fetch fails
-  const MANUAL_FEAR_GREED_FALLBACK = 15; // Last manually verified: Mar 20 2026 — Extreme Fear
   const fearGreedScore: number = fearGreedData.value ?? MANUAL_FEAR_GREED_FALLBACK;
   const fearGreedRating: string = fearGreedData.rating ?? "Extreme Fear";
 
