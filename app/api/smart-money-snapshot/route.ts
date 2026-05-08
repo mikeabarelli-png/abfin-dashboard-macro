@@ -488,7 +488,7 @@ export async function GET() {
   // Buffett Indicator sigma — from RIA Advisors model table
   // Update each Saturday from RIA model page screenshot
   // Current value: 2.08 = Strongly Overvalued (>1.5σ above trend)
-  const MANUAL_BUFFETT_SIGMA = 2.08; // Last updated: Apr 3 2026
+  const MANUAL_BUFFETT_SIGMA = 2.49; // Last updated: Apr 30 2026 — source: currentmarketvaluation.com
 
   // Fed Policy stance — derived from Fed Funds rate trend and Fed communications
   // Manual: "easing" | "holding" | "tightening"
