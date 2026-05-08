@@ -292,12 +292,9 @@ export async function GET() {
 
   // Market Breadth — % of S&P 500 stocks above their 200-DMA
   // Source: Yahoo Finance ^SPXA200R · Updates daily after market close
-  // Falls back to MANUAL_BREADTH_FALLBACK if Yahoo returns nothing (unreliable ticker)
-  // Manual source: macromicro.me/series/22718 — update each Saturday
-  const MANUAL_BREADTH_FALLBACK = 57; // Last manually verified: May 1 2026
   const breadthPct: number | null = breadthChart.closes.length > 0
     ? breadthChart.closes[breadthChart.closes.length - 1]
-    : breadthChart.meta.regularMarketPrice ?? MANUAL_BREADTH_FALLBACK;
+    : breadthChart.meta.regularMarketPrice ?? null;
   console.log(`Breadth (% above 200-DMA): ${breadthPct}%`);
 
   // Brent Crude — Roberts' "master switch"
@@ -472,7 +469,7 @@ export async function GET() {
 
   // CAPE (Shiller P/E) — Nasdaq Data Link, updated monthly
   // Falls back to manual constant if API key missing or fetch fails
-  const MANUAL_CAPE_FALLBACK = 39.46; // Last manually verified: May 4 2026 — source: multpl.com/shiller-pe
+  const MANUAL_CAPE_FALLBACK = 41.69; // Last manually verified: May 7 2026 — source: multpl.com/shiller-pe · Max ever: 44.19 (Dec 1999)
   const capeRatio: number = capeData.value ?? MANUAL_CAPE_FALLBACK;
 
   // NYSE Advance/Decline Line — manually updated weekly (Saturday)
@@ -491,56 +488,46 @@ export async function GET() {
   // Buffett Indicator sigma — from RIA Advisors model table
   // Update each Saturday from RIA model page screenshot
   // Current value: 2.08 = Strongly Overvalued (>1.5σ above trend)
-  const MANUAL_BUFFETT_SIGMA = 2.49; // Last updated: May 4 2026
+  const MANUAL_BUFFETT_SIGMA = 2.08; // Last updated: Apr 3 2026
 
   // Fed Policy stance — derived from Fed Funds rate trend and Fed communications
   // Manual: "easing" | "holding" | "tightening"
   const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "holding"; // Apr 2026 — discussing hikes
 
-  // ── Composite Signal Score — Differential Weighted (max 15pts raw → 0–10 display) ──
-  // Valuation anchors (slow-moving, high conviction): CAPE + Buffett = 3pts each
-  // Credit/risk pricing (real-time): HY + ERP + Yield Curve = 2pts each
-  // Supporting signals (confirming, not leading): VIX + Breadth + Ivy = 1pt each
-  // Threshold conditions unchanged — only point values awarded change
-  const scoreCAFE    = capeRatio > 30 ? 3 : capeRatio > 20 ? 1.5 : 0;
-  const scoreBuffett = MANUAL_BUFFETT_SIGMA > 1.5 ? 3 : MANUAL_BUFFETT_SIGMA > 0.5 ? 1.5 : 0;
-  const scoreVIX     = vixPrice != null ? (vixPrice < 20 ? 1 : vixPrice < 28 ? 0.5 : 0) : 0.5;
+  // ── Composite Signal Score (0–16) ──
+  // 8 variables × 0–2pts each → drives glide path equity allocation
+  const scoreCAFE    = capeRatio > 30 ? 2 : capeRatio > 20 ? 1 : 0;
+  const scoreBuffett = MANUAL_BUFFETT_SIGMA > 1.5 ? 2 : MANUAL_BUFFETT_SIGMA > 0.5 ? 1 : 0;
+  const scoreVIX     = vixPrice != null ? (vixPrice < 20 ? 2 : vixPrice < 28 ? 1 : 0) : 1;
   const scoreHY      = hySpread < 3.5 ? 2 : hySpread < 5.5 ? 1 : 0;
   const scoreYC      = yieldCurve < -0.5 ? 2 : yieldCurve < 0.5 ? 1 : 0;
-  const scoreBreadth = breadthPct != null ? (breadthPct < 50 ? 1 : breadthPct < 70 ? 0.5 : 0) : 0.5;
-  // ERP: <1% = 2pts, 1–3% = 1pt, >3% = 0pts
+  const scoreBreadth = breadthPct != null ? (breadthPct < 50 ? 2 : breadthPct < 70 ? 1 : 0) : 1;
+  // ERP: <1% = 2pts defensive (equity barely beats risk-free), 1-3% = 1pt, >3% = 0pts deploy
   const scoreERP     = erp != null ? (erp < 100 ? 2 : erp < 300 ? 1 : 0) : 1;
-  // Ivy: 0–2/5 invested = 1pt, 3–4/5 = 0.5pts, 5/5 = 0pts
+  // Ivy: 0-2/5 invested=2pts, 3-4/5=1pt, 5/5=0pts
   const ivyInvestedCount = [ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC].filter(p => p.signal === "Invest").length;
-  const scoreIvy     = ivyInvestedCount <= 2 ? 1 : ivyInvestedCount <= 4 ? 0.5 : 0;
+  const scoreIvy     = ivyInvestedCount <= 2 ? 2 : ivyInvestedCount <= 4 ? 1 : 0;
 
   const compositeScore = scoreCAFE + scoreBuffett + scoreVIX + scoreHY + scoreYC + scoreBreadth + scoreERP + scoreIvy;
-  // Max raw = 15. Display: Math.round(raw / 15 × 10)
 
-  // Allocation tiers — calibrated to 0–15 raw (≈ 0–10 display)
-  const compositeAllocationRaw =
-    compositeScore >= 12 ? "40%" :
-    compositeScore >= 9  ? "42–45%" :
-    compositeScore >= 6  ? "47–53%" :
-    compositeScore >= 3  ? "55–58%" : "60%+";
+  // Allocation recommendation — scaled for 0–16 max
+  const compositeAllocation =
+    compositeScore >= 13 ? "40%" :
+    compositeScore >= 10 ? "42–45%" :
+    compositeScore >= 7  ? "47–53%" :
+    compositeScore >= 4  ? "55–58%" : "60%+";
 
-  const compositeSignalRaw =
-    compositeScore >= 12 ? "HOLD" :
-    compositeScore >= 9  ? "SLIGHT TILT" :
-    compositeScore >= 6  ? "DEPLOY" :
-    compositeScore >= 3  ? "LEAN IN" : "FULL POSTURE";
-
-  // Valuation floor: CAPE >35 or Buffett >2σ overrides equity target to HOLD/40%
-  // Score number still displays normally — only action/allocation text is floored
-  const valuationFloorActive = capeRatio > 35 || MANUAL_BUFFETT_SIGMA > 2.0;
-  const compositeAllocation = valuationFloorActive ? "40%" : compositeAllocationRaw;
-  const compositeSignal     = valuationFloorActive ? "HOLD" : compositeSignalRaw;
+  const compositeSignal =
+    compositeScore >= 13 ? "HOLD" :
+    compositeScore >= 10 ? "SLIGHT TILT" :
+    compositeScore >= 7  ? "DEPLOY" :
+    compositeScore >= 4  ? "LEAN IN" : "FULL POSTURE";
 
   const compositeColor =
-    compositeScore >= 12 ? "#ff6b88" :
-    compositeScore >= 9  ? "#fbbf24" :
-    compositeScore >= 6  ? "#94a3b8" :
-    compositeScore >= 3  ? "#4ade80" : "#22d3ee";
+    compositeScore >= 13 ? "#ff6b88" :
+    compositeScore >= 10 ? "#fbbf24" :
+    compositeScore >= 7  ? "#94a3b8" :
+    compositeScore >= 4  ? "#4ade80" : "#22d3ee";
 
   // CNN Fear & Greed Index — live fetch with manual fallback
   // Update MANUAL_FEAR_GREED_FALLBACK each Saturday if live fetch fails
@@ -622,7 +609,6 @@ export async function GET() {
       composite_allocation: compositeAllocation,
       composite_signal: compositeSignal,
       composite_color: compositeColor,
-      valuation_floor_active: valuationFloorActive,
       buffett_sigma: MANUAL_BUFFETT_SIGMA,
       fed_stance: MANUAL_FED_STANCE,
       djt_price: djtPrice,
