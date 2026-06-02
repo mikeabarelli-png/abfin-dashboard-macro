@@ -114,9 +114,10 @@ export default function Page() {
   const breadthPct    = getNum(metrics?.breadth_pct,      marketData?.breadth_pct);
   const compositeScore: number = metrics?.composite_score ?? marketData?.composite_score ?? 10;
   const compositeScores = metrics?.composite_scores ?? marketData?.composite_scores ?? { cape:2, buffett:2, vix:1, hy:2, yc:1, breadth:1, erp:1, ivy:1 };
-  const compositeAllocation: string = metrics?.composite_allocation ?? marketData?.composite_allocation ?? "42–45%";
+  const compositeAllocation: string = metrics?.composite_allocation ?? marketData?.composite_allocation ?? "45–50%";
   const compositeSignal: string = metrics?.composite_signal ?? marketData?.composite_signal ?? "SLIGHT TILT";
   const compositeColor: string = metrics?.composite_color ?? marketData?.composite_color ?? "#fbbf24";
+  const regimeGate: string = metrics?.regime_gate ?? marketData?.regime_gate ?? "hold";
   const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.08;
   const fedStance: string = metrics?.fed_stance ?? marketData?.fed_stance ?? "holding";
   const djtPrice      = getNum(metrics?.djt_price,      marketData?.djt_price);
@@ -292,6 +293,15 @@ CORE FRAMEWORKS YOU APPLY:
 10. LEVERAGE UNWIND RISK (Noland): When crowded levered trades break, correlations go to 1. Diversification fails exactly when needed. External shocks don't create vulnerabilities — they reveal ones already there.
 11. SENTIMENT & WAVE STRUCTURE (Zeberg): Markets move on expectations and positioning, not just fundamentals. When sentiment is extremely bearish and positioning is defensively crowded, the path of least resistance is often a sharp counter-trend rally — the "most hated rally" — before the fundamental thesis ultimately plays out. The 2007 analog: Nasdaq rallied 25% August–October while recession was already inevitable. Wave 5 structures in long-term bull markets are characterized by acceleration, narrative dominance, and overconfidence — then severe structural correction. Current tech bull market (2002–2026) shows Wave 5 exhaustion characteristics. The contrarian read: extreme fear and defensive positioning can fuel violent short-term rallies that feel like confirmation the system is holding — but are actually the final phase. Do not panic-sell into maximum fear, but do not interpret the resulting rally as an all-clear. Use Zeberg's framework to AVOID reactive decisions at emotional extremes in either direction.
 12. CDX / CREDIT LEADING INDICATOR (Roberts — Mar 21 2026): The CDX Index (credit default swaps) is the bond market's real stress gauge — harder to manipulate than equities, not susceptible to retail momentum. KEY SIGNAL: When CDX hits a 9-month high while SPX is within 5% of its all-time high, a bear market has followed every single time over 20 years (2007 → GFC, 2015 → correction, 2022 → -25% bear). This signal is currently ACTIVE in 2026. Direction of travel matters more than absolute level — don't wait for the spike, act on the trend. Current backdrop per Roberts (Mar 21 2026): S&P closed at 6,506, down 7.1% from January ATH of 7,002. Fourth consecutive weekly loss. 200-DMA (~6,620) decisively broken and failed every attempt to reclaim. Failed mid-week bull trap (Monday/Tuesday relief rally reversed violently on Fed Wednesday). PPI +0.7% MoM hottest since July 2025, pipeline inflation building. Fed hawkish hold at 3.5-3.75%, dot plot pointing to just 1 cut in 2026, 7 participants signaling zero cuts. Powell: "not as much progress as we had hoped." Private credit deteriorating quietly — Blackstone, Blue Owl, BlackRock redemption requests approaching 5% threshold. Iraq force majeure on oil fields broadening Hormuz disruption. Brent above $108. Technical composite at 23.98 — very oversold, reflexive rally odds increasing. Roberts' framework: "This is a shopping list market, not a buy-everything market. Accumulate quality at pre-defined levels (6,400 then 6,300). Treat every bounce as suspect until VIX sustains below 20 and oil finds a ceiling. Defense over offense." Oil is the master switch — Brent below $95 gives Fed breathing room; above $110 keeps Fed frozen and deepens the landing.
+13. ROBERTS 15 RULES — THE PROCESS GUARDRAILS (Roberts — May 2026): These rules govern every recommendation you make for this investor. They are not predictions. They are circuit breakers that prevent emotional decisions from overriding the framework. Apply them explicitly when generating recommendations.
+  RULE 4 — FOLLOW THE TREND: 80% of portfolio performance is determined by the long-term monthly trend. In a bull market, be LONG or NEUTRAL. In a bear market, be NEUTRAL or short. The 200-DMA defines the regime. Currently: 200-DMA rising at +1.6%, SPX +11% above it. Trend is BULL. Correct posture: Long + Neutral (currently 40% Long + 60% Neutral). Do NOT short the trend. Do NOT add aggressively at extremes.
+  RULE 8 — FUNDAMENTALS CONFIRMED BY PRICE: When fundamental story and price action diverge, sit on your hands. Currently: Price action is BULLISH (new ATH, momentum intact). Fundamentals are BEARISH (CAPE 42x, Buffett 2.6σ, ERP 2.07%). This divergence means hold current exposure — don't add and don't reduce unless the trigger fires.
+  RULE 10 — POSITION FOR THE REGIME: Long or Neutral in a bull market. Never short a bull trend. The regime is defined by the 200-DMA, not by valuation. This investor is correctly positioned: 40% Long (equity) + 60% Neutral (SGOV/VTIP/VGIT). That IS the rule in practice.
+  RULE 11 — AT EXTREMES, DO THE OPPOSITE: When cover of every magazine is bullish, take some off the table. When panic is maximum, start scaling in. Currently: Fear & Greed at 67 (Greed zone, not Extreme Greed yet). Consumer Confidence still at -2.90σ (still fearful). Not yet at the extreme that triggers the fade. Watch for Fear & Greed approaching 85+ as the signal to reduce equity.
+  RULE 15 — MANAGE RISK FIRST, RETURNS ARE A BYPRODUCT: A 50% loss requires a 100% gain to recover. A 20% loss requires only 25%. This investor with 5 years to retirement cannot afford the 50% scenario. Every recommendation must answer: what is the maximum drawdown of this position, and can this investor recover from it on their timeline? SGOV at 60% of portfolio means maximum drawdown from fixed income is minimal. The equity sleeve at 40% in a 50% bear market = 20% total portfolio loss. Recoverable. At 60% equity in same bear = 30% total loss. Harder to recover with 5 years of runway.
+  RULE 3 — EMOTION VOIDS PROCESS: If the recommendation changes because the market just went up 18% in 8 weeks, that is an emotional decision. FOMO is not a framework. The planner saying "invest like a grandma" is social pressure, not data. The composite score is the framework. Follow it.
+  RULE 5 — TRADING OPPORTUNITY vs LONG-TERM INVESTMENT: SGOV at 5% yield is a tactical position tied to the current rate environment. When Fed cuts and T-bill yields fall to 3%, the calculus changes. SGOV is not a permanent allocation — it is the right allocation NOW. Monitor and adjust when the rate regime shifts.
+  SYNTHESIS FOR THIS INVESTOR: Long/Neutral posture at 40/60 is correct per Rule 10. No emotional override per Rule 3. No adding to equity at CAPE 42x with fundamental/price divergence per Rule 8. No shorting the trend per Rule 4. Manage the downside per Rule 15. Fade extreme euphoria per Rule 11 when F&G hits 85+. The rules say: hold the line.
 
 OUTPUT FORMAT — CRITICAL INSTRUCTION:
 Write in Lance Roberts' voice — direct, confident, data-anchored prose. NOT bullet points. Think of his weekly Bull Bear Report style: short punchy paragraphs, every claim backed by a specific number, clear narrative arc from tape → credit → valuation → action. 
@@ -674,14 +684,23 @@ RESPONSE RULES:
 
                   {/* ── LEFT: Posture ── */}
                   <div style={{ paddingRight:28 }}>
-                    <div style={{ fontSize:10, fontWeight:700, letterSpacing:"0.12em", color:"#475569", textTransform:"uppercase", marginBottom:10 }}>Current Posture</div>
-                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                    <div style={{ fontSize:10, color:"#475569", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:4 }}>Current Posture</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
                       <span style={{ fontSize:28 }}>{postureEmoji}</span>
                       <div style={{ fontSize:20, fontWeight:900, color:gradColor, letterSpacing:"-0.01em", lineHeight:1.1 }}>{postureLabel}</div>
                     </div>
-                    <div style={{ fontSize:13, color:"#94a3b8", lineHeight:1.7, marginBottom:12 }}>{actionSentence}</div>
+                    <div style={{ fontSize:13, color:"#94a3b8", lineHeight:1.7, marginBottom:10 }}>{actionSentence}</div>
+                    {/* Two-layer indicator */}
+                    <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
+                      <div style={{ padding:"3px 10px", borderRadius:9999, background: regimeGate==="trend_broken"?"rgba(255,107,136,0.15)":regimeGate==="near_ma"?"rgba(251,191,36,0.15)":"rgba(74,222,128,0.15)", border:`1px solid ${regimeGate==="trend_broken"?"#ff6b88":regimeGate==="near_ma"?"#fbbf24":"#4ade80"}40`, fontSize:10, fontWeight:700, color:regimeGate==="trend_broken"?"#ff6b88":regimeGate==="near_ma"?"#fbbf24":"#4ade80" }}>
+                        L1: {regimeGate==="trend_broken"?"RISK OFF":regimeGate==="near_ma"?"RISK WATCH":regimeGate==="reclaiming"?"RECLAIMING":"RISK ON"}
+                      </div>
+                      <div style={{ padding:"3px 10px", borderRadius:9999, background:"rgba(148,163,184,0.1)", border:"1px solid rgba(148,163,184,0.2)", fontSize:10, fontWeight:700, color:"#94a3b8" }}>
+                        L2 SCORE: {compositeScore}/16
+                      </div>
+                    </div>
                     <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <div style={{ fontSize:11, color:"#475569" }}>{compositeScore}/16 signals defensive</div>
+                      <div style={{ fontSize:11, color:"#475569" }}>{compositeScore}/16 valuation signals defensive</div>
                       <div style={{ width:80, height:4, borderRadius:9999, background:"#202a64", position:"relative" }}>
                         <div style={{ position:"absolute", left:0, top:0, height:4, width:`${(compositeScore/16)*100}%`, background:gradColor, borderRadius:9999 }} />
                       </div>
@@ -949,6 +968,75 @@ RESPONSE RULES:
                           {spx200Pct!=null?`SPX ${spx200Pct>=0?"above":"below"} ${fmtWhole(spx200)} · Slope ${slope200!=null?(slope200>0?"↗":"↘"):"—"} ${slope200!=null?slope200.toFixed(1)+"%":""}`:"Waiting"}
                         </div>
                         <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>Display only · not scored · Roberts&apos; primary trigger</div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 10. Roberts 40-Week Signal — Reduce / Hold / Re-entry */}
+                  {(() => {
+                    const ma40w = spx200;
+                    const pctAbove = spx200Pct;
+                    const isBelow = is200Broken;
+                    const isReclaiming = isBelow && spxDailyPct != null && spxDailyPct > 0;
+                    const isTesting = !isBelow && pctAbove != null && pctAbove <= 3;
+
+                    const state =
+                      isBelow && !isReclaiming ? "trend_broken" :
+                      isReclaiming             ? "reclaiming"   :
+                      isTesting                ? "near_ma"      : "trend_intact";
+
+                    const stateLabel =
+                      state === "trend_broken" ? "RISK OFF" :
+                      state === "reclaiming"   ? "RECLAIMING" :
+                      state === "near_ma"      ? "RISK WATCH" : "RISK ON";
+
+                    const stateColor =
+                      state === "trend_broken" ? "#ff6b88" :
+                      state === "reclaiming"   ? "#60a5fa" :
+                      state === "near_ma"      ? "#fbbf24" : "#4ade80";
+
+                    const stateNote =
+                      state === "trend_broken" ? "Below 40-wk MA · trim 10–20%" :
+                      state === "reclaiming"   ? "Reclaimed MA · add tranche 1" :
+                      state === "near_ma"      ? `${pctAbove?.toFixed(1)}% above · watch` :
+                      `${pctAbove?.toFixed(1)}% above · trend intact`;
+
+                    const t1 = !isBelow && pctAbove != null && pctAbove > 0;
+                    const t2 = t1 && pctAbove != null && pctAbove > 3;
+                    const t3 = t2 && breadthPct != null && breadthPct > 55;
+
+                    const barPct = pctAbove != null ? Math.max(0, Math.min(50 + pctAbove * 2, 100)) : 50;
+
+                    return (
+                      <div className="tile" style={{ position:"relative" }}>
+                        <div style={{ position:"absolute", top:8, right:8, fontSize:9, color:"#334155", fontWeight:600 }}>display</div>
+                        <div className="lbl" style={{ marginBottom:4, paddingRight:36, fontSize:10 }}>40-Week Signal</div>
+
+                        <div style={{ fontSize:20, fontWeight:900, color:stateColor, letterSpacing:"-0.01em", lineHeight:1, marginBottom:3 }}>
+                          {stateLabel}
+                        </div>
+                        <div style={{ fontSize:10, color:"#64748b", lineHeight:1.4, marginBottom:6 }}>{stateNote}</div>
+
+                        {/* Proximity bar */}
+                        <div style={{ position:"relative", height:3, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80,#fbbf24,#ff6b88)", marginBottom:6 }}>
+                          <div style={{ position:"absolute", top:-3, left:`${barPct}%`, transform:"translateX(-50%)", width:2, height:9, background:"#fff", borderRadius:2 }} />
+                        </div>
+
+                        {/* Tranche tracker — compact */}
+                        <div style={{ fontSize:9, fontWeight:700, color:"#475569", letterSpacing:"0.08em", marginBottom:4 }}>RE-ENTRY</div>
+                        {[
+                          { label:"① MA Reclaimed", active:t1 },
+                          { label:"② Retest Holds", active:t2 },
+                          { label:"③ Breadth >55%", active:t3 },
+                        ].map(r => (
+                          <div key={r.label} style={{ display:"flex", alignItems:"center", gap:5, marginBottom:3 }}>
+                            <div style={{ width:7, height:7, borderRadius:"50%", background:r.active?"#4ade80":"#202a64", border:`1px solid ${r.active?"#4ade80":"#334155"}`, flexShrink:0 }} />
+                            <div style={{ fontSize:9, color:r.active?"#4ade80":"#475569" }}>{r.label}</div>
+                          </div>
+                        ))}
+                        <div style={{ fontSize:9, color:"#334155", marginTop:4, lineHeight:1.4 }}>
+                          {t3?"All tranches ✓ — re-entry confirmed":t2?"Await breadth confirm":t1?"Await retest":"Await MA reclaim"}
+                        </div>
                       </div>
                     );
                   })()}
