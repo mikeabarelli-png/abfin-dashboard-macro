@@ -639,123 +639,122 @@ RESPONSE RULES:
 
           {feedError && <div className="errorBar">Feed error: {feedError}</div>}
 
-          {/* ⓪-A COMPOSITE SCORE HERO — posture · allocation · watch */}
+          {/* ⓪-A COMPOSITE SCORE HERO — tile-style, matches Signal Inputs aesthetic */}
           {(() => {
             const pct = compositeScore / 16;
             const gradColor = pct <= 0.25 ? "#4ade80" : pct <= 0.44 ? "#86efac" : pct <= 0.56 ? "#94a3b8" : pct <= 0.75 ? "#fbbf24" : "#ff6b88";
 
-            // Posture label and action sentence
-            const postureLabel =
-              compositeScore >= 13 ? "HOLD DEFENSIVE POSTURE" :
-              compositeScore >= 10 ? "HOLD — SLIGHT TILT POSSIBLE" :
-              compositeScore >= 7  ? "MODERATE DEPLOYMENT" :
-              compositeScore >= 4  ? "LEAN INTO EQUITIES" : "FULL DEPLOYMENT";
+            const regimeColor = regimeGate==="trend_broken"?"#ff6b88":regimeGate==="near_ma"?"#fbbf24":"#4ade80";
+            const regimeLabel = regimeGate==="trend_broken"?"RISK OFF":regimeGate==="near_ma"?"RISK WATCH":regimeGate==="reclaiming"?"RECLAIMING":"RISK ON";
+            const regimeSub = regimeGate==="trend_broken"?"Trend broken · floor at 35–40%":regimeGate==="near_ma"?"Within 3% of 200-DMA · watch closely":regimeGate==="reclaiming"?"Reclaiming MA · add first tranche":`SPX ${spx200Pct!=null?`+${spx200Pct.toFixed(1)}%`:"—"} above 200-DMA · trend intact`;
 
-            const postureEmoji =
-              compositeScore >= 13 ? "🔴" :
-              compositeScore >= 10 ? "🟡" :
-              compositeScore >= 7  ? "⚪" :
-              compositeScore >= 4  ? "🟢" : "🟢";
+            const actionLabel =
+              regimeGate==="trend_broken" ? "REDUCE EQUITY" :
+              regimeGate==="near_ma"      ? "WATCH CLOSELY" :
+              compositeScore >= 13 ? "HOLD POSITIONS" :
+              compositeScore >= 10 ? "ADD TO VALUE EQUITY" :
+              compositeScore >= 7  ? "DEPLOY INTO EQUITY" :
+              compositeScore >= 4  ? "BUY AGGRESSIVELY" : "FULLY INVESTED";
 
-            const actionSentence =
-              compositeScore >= 13 ? "No trigger has fired. Valuations extreme, credit tight. Stay at minimum equity posture." :
-              compositeScore >= 10 ? "No trigger has fired. Elevated valuations with mixed signals. Hold near defensive — slight tactical flexibility." :
-              compositeScore >= 7  ? "Conditions moderating. Gradual equity deployment appropriate as signals confirm improvement." :
-              compositeScore >= 4  ? "Multiple stress indicators reversing. Lean into equity as fundamentals support deployment." :
-              "Rare maximum deployment signal. Deep value, oversold breadth, credit distress at peak.";
+            const actionColor =
+              regimeGate==="trend_broken" ? "#ff6b88" :
+              regimeGate==="near_ma"      ? "#fbbf24" :
+              compositeScore >= 13 ? "#fbbf24" :
+              compositeScore >= 10 ? "#94a3b8" :
+              "#4ade80";
 
-            // Closest trigger to firing
             const triggerWatch = hySpread >= 4
-              ? `HY trigger ACTIVE at ${Math.round(hySpread*100)}bps`
+              ? `HY TRIGGER ACTIVE — ${Math.round(hySpread*100)}bps`
               : vixValue != null && vixValue >= 30
-              ? `VIX trigger ACTIVE at ${vixValue.toFixed(1)}`
-              : vixValue != null && vixValue >= 25
-              ? `VIX ${vixValue.toFixed(1)} — ${(30-vixValue).toFixed(1)}pts from trigger`
-              : `HY ${Math.round(hySpread*100)}bps — ${Math.round((4-hySpread)*100)}bps from trigger`;
+              ? `VIX TRIGGER ACTIVE — ${vixValue.toFixed(1)}`
+              : `Both triggers clear`;
+
+            const triggerColor = hySpread >= 4 || (vixValue != null && vixValue >= 30) ? "#ff6b88" : "#4ade80";
 
             return (
-              <section className="panel" style={{
-                background:"linear-gradient(135deg,rgba(15,23,42,0.98) 0%,rgba(20,27,71,0.98) 100%)",
-                border:`1px solid ${gradColor}40`,
-                marginBottom:8,
-                padding:"20px 24px"
-              }}>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr auto 1fr", gap:0, alignItems:"stretch" }}>
+              <section className="panel" style={{ marginBottom:8, padding:"12px 16px" }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
 
-                  {/* ── LEFT: Posture ── */}
-                  <div style={{ paddingRight:28 }}>
-                    <div style={{ fontSize:10, color:"#475569", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:4 }}>Current Posture</div>
-                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-                      <span style={{ fontSize:28 }}>{postureEmoji}</span>
-                      <div style={{ fontSize:20, fontWeight:900, color:gradColor, letterSpacing:"-0.01em", lineHeight:1.1 }}>{postureLabel}</div>
+                  {/* Tile 1 — Regime */}
+                  <div className="tile" style={{ background:"rgba(255,255,255,0.02)" }}>
+                    <div className="lbl" style={{ marginBottom:6 }}>Regime</div>
+                    <div style={{ fontSize:32, fontWeight:900, color:regimeColor, letterSpacing:"-0.02em", lineHeight:1 }}>{regimeLabel}</div>
+                    <div className="status" style={{ color:regimeColor, marginTop:6 }}>Trend is {regimeGate==="trend_broken"?"broken":"intact"}</div>
+                    <div className="sub" style={{ marginTop:4 }}>{regimeSub}</div>
+                    {spxPrice!=null && spx200!=null && (
+                      <div style={{ marginTop:8, display:"flex", gap:12 }}>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase" }}>SPX</div>
+                          <div style={{ fontSize:16, fontWeight:800, color:"#fff" }}>{fmtWhole(spxPrice)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase" }}>200-DMA</div>
+                          <div style={{ fontSize:16, fontWeight:800, color:"#64748b" }}>{fmtWhole(spx200)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase" }}>Gap</div>
+                          <div style={{ fontSize:16, fontWeight:800, color:regimeColor }}>{spx200Pct!=null?`${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}%`:"—"}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tile 2 — Action */}
+                  <div className="tile" style={{ background:"rgba(255,255,255,0.02)" }}>
+                    <div className="lbl" style={{ marginBottom:6 }}>Signal</div>
+                    <div style={{ fontSize:32, fontWeight:900, color:actionColor, letterSpacing:"-0.02em", lineHeight:1 }}>{actionLabel}</div>
+                    <div className="status" style={{ color:actionColor, marginTop:6 }}>8 indicators · {compositeScore}/16 defensive</div>
+                    <div className="sub" style={{ marginTop:4 }}>
+                      {compositeScore >= 13 ? "Valuations extreme · stay defensive" :
+                       compositeScore >= 10 ? "Mixed signals · slight tilt toward value equity" :
+                       compositeScore >= 7  ? "Conditions improving · deploy gradually" :
+                       compositeScore >= 4  ? "Stress reversing · lean into equities" :
+                       "Maximum deployment · deep value setup"}
                     </div>
-                    <div style={{ fontSize:13, color:"#94a3b8", lineHeight:1.7, marginBottom:10 }}>{actionSentence}</div>
-                    {/* Two-layer indicator */}
-                    <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
-                      <div style={{ padding:"3px 10px", borderRadius:9999, background: regimeGate==="trend_broken"?"rgba(255,107,136,0.15)":regimeGate==="near_ma"?"rgba(251,191,36,0.15)":"rgba(74,222,128,0.15)", border:`1px solid ${regimeGate==="trend_broken"?"#ff6b88":regimeGate==="near_ma"?"#fbbf24":"#4ade80"}40`, fontSize:10, fontWeight:700, color:regimeGate==="trend_broken"?"#ff6b88":regimeGate==="near_ma"?"#fbbf24":"#4ade80" }}>
-                        L1: {regimeGate==="trend_broken"?"RISK OFF":regimeGate==="near_ma"?"RISK WATCH":regimeGate==="reclaiming"?"RECLAIMING":"RISK ON"}
-                      </div>
-                      <div style={{ padding:"3px 10px", borderRadius:9999, background:"rgba(148,163,184,0.1)", border:"1px solid rgba(148,163,184,0.2)", fontSize:10, fontWeight:700, color:"#94a3b8" }}>
-                        L2 SCORE: {compositeScore}/16
-                      </div>
-                    </div>
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <div style={{ fontSize:11, color:"#475569" }}>{compositeScore}/16 valuation signals defensive</div>
-                      <div style={{ width:80, height:4, borderRadius:9999, background:"#202a64", position:"relative" }}>
-                        <div style={{ position:"absolute", left:0, top:0, height:4, width:`${(compositeScore/16)*100}%`, background:gradColor, borderRadius:9999 }} />
-                      </div>
+                    {/* Mini score bar */}
+                    <div style={{ marginTop:8, height:3, borderRadius:9999, background:"#202a64" }}>
+                      <div style={{ height:3, width:`${(compositeScore/16)*100}%`, background:gradColor, borderRadius:9999 }} />
                     </div>
                   </div>
 
-                  {/* ── DIVIDER ── */}
-                  <div style={{ width:1, background:"rgba(255,255,255,0.07)", margin:"0 24px" }} />
-
-                  {/* ── RIGHT: Allocation + Watch ── */}
-                  <div style={{ paddingLeft:4, display:"grid", gridTemplateColumns:"1fr 1fr", gap:0 }}>
-
-                    {/* Allocation */}
-                    <div style={{ paddingRight:20, borderRight:"1px solid rgba(255,255,255,0.07)" }}>
-                      <div style={{ fontSize:10, fontWeight:700, letterSpacing:"0.12em", color:"#475569", textTransform:"uppercase", marginBottom:8 }}>Target Equity Allocation</div>
-                      <div style={{ fontSize:48, fontWeight:900, color:"#fff", letterSpacing:"-0.03em", lineHeight:1 }}>{compositeAllocation}</div>
-                      <div style={{ fontSize:11, color:"#64748b", marginTop:8, lineHeight:1.6 }}>
-                        Based on {compositeScore}/16 composite score
-                      </div>
-                      <div style={{ marginTop:10, fontSize:11, color:"#475569", lineHeight:1.6 }}>
-                        <span style={{ color: fedStance==="tightening"?"#ff6b88":fedStance==="easing"?"#4ade80":"#fbbf24", fontWeight:700 }}>
-                          Fed {fedStance.toUpperCase()}
-                        </span>
-                        {" · "}{fedStance==="tightening"?"amplifies valuation headwind":fedStance==="easing"?"offsets valuation risk":"no amplification"}
-                      </div>
+                  {/* Tile 3 — Target Allocation */}
+                  <div className="tile" style={{ background:"rgba(255,255,255,0.02)" }}>
+                    <div className="lbl" style={{ marginBottom:6 }}>Target Equity Allocation</div>
+                    <div style={{ fontSize:36, fontWeight:900, color:"#fff", letterSpacing:"-0.03em", lineHeight:1 }}>{compositeAllocation}</div>
+                    <div className="sub" style={{ marginTop:8, lineHeight:1.6 }}>
+                      Fed is {fedStance==="tightening"?"raising rates — makes stocks less attractive":fedStance==="easing"?"cutting rates — supports stock valuations":"on hold — rates unchanged, watching data"}
                     </div>
-
-                    {/* Trigger watch */}
-                    <div style={{ paddingLeft:20 }}>
-                      <div style={{ fontSize:10, fontWeight:700, letterSpacing:"0.12em", color:"#475569", textTransform:"uppercase", marginBottom:8 }}>Trigger Watch</div>
-                      <div style={{ fontSize:13, fontWeight:700, color: hySpread>=4||vixValue!=null&&vixValue>=30 ? "#ff6b88" : "#fbbf24", marginBottom:6 }}>
-                        {triggerWatch}
-                      </div>
-                      <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:8 }}>
-                        {[
-                          { label:"HY Spread", val:`${Math.round(hySpread*100)}bps`, target:"400bps", pct: Math.min((hySpread/4)*100, 100), color: hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80" },
-                          { label:"VIX", val:vixValue!=null?vixValue.toFixed(1):"—", target:"30", pct:vixValue!=null?Math.min((vixValue/30)*100,100):0, color:vixValue!=null&&vixValue>=30?"#ff6b88":vixValue!=null&&vixValue>=20?"#fbbf24":"#4ade80" },
-                        ].map(t => (
-                          <div key={t.label}>
-                            <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginBottom:2 }}>
-                              <span>{t.label}</span>
-                              <span style={{ color:t.color, fontWeight:700 }}>{t.val} <span style={{ color:"#334155" }}>/ {t.target}</span></span>
-                            </div>
-                            <div style={{ height:3, borderRadius:9999, background:"#202a64" }}>
-                              <div style={{ height:3, width:`${t.pct}%`, background:t.color, borderRadius:9999, transition:"width 0.3s" }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ marginTop:10, fontSize:10, color:"#334155", lineHeight:1.5 }}>
-                        Trigger: 2 Friday closes below 200-DMA + VIX {">"}30 or HY {">"}400bps
-                      </div>
-                    </div>
-
                   </div>
+
+                  {/* Tile 4 — Trigger Watch */}
+                  <div className="tile" style={{ background:"rgba(255,255,255,0.02)" }}>
+                    <div className="lbl" style={{ marginBottom:6 }}>Trigger Watch</div>
+                    <div style={{ fontSize:16, fontWeight:800, color:triggerColor, letterSpacing:"-0.01em", lineHeight:1.2, marginBottom:8 }}>{triggerWatch}</div>
+                    {/* HY bar */}
+                    <div style={{ marginBottom:6 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginBottom:2 }}>
+                        <span>HY Spread</span>
+                        <span style={{ color: hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80", fontWeight:700 }}>{Math.round(hySpread*100)}bps <span style={{ color:"#334155" }}>/ 400</span></span>
+                      </div>
+                      <div style={{ height:4, borderRadius:9999, background:"#202a64" }}>
+                        <div style={{ height:4, width:`${Math.min((hySpread/4)*100,100)}%`, background:hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80", borderRadius:9999 }} />
+                      </div>
+                    </div>
+                    {/* VIX bar */}
+                    <div>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginBottom:2 }}>
+                        <span>VIX</span>
+                        <span style={{ color:vixValue!=null&&vixValue>=30?"#ff6b88":vixValue!=null&&vixValue>=20?"#fbbf24":"#4ade80", fontWeight:700 }}>{vixValue!=null?vixValue.toFixed(1):"—"} <span style={{ color:"#334155" }}>/ 30</span></span>
+                      </div>
+                      <div style={{ height:4, borderRadius:9999, background:"#202a64" }}>
+                        <div style={{ height:4, width:`${vixValue!=null?Math.min((vixValue/30)*100,100):0}%`, background:vixValue!=null&&vixValue>=30?"#ff6b88":vixValue!=null&&vixValue>=20?"#fbbf24":"#4ade80", borderRadius:9999 }} />
+                      </div>
+                    </div>
+                    <div style={{ marginTop:6, fontSize:9, color:"#334155", lineHeight:1.5 }}>
+                      2 Friday closes below 200-DMA + VIX {">"}30 or HY {">"}400bps
+                    </div>
+                  </div>
+
                 </div>
               </section>
             );
