@@ -490,39 +490,55 @@ export async function GET() {
   // NYSE Advance/Decline Line — manually updated weekly (Saturday)
   // Source: stockcharts.com $NYAD or barchart.com — cumulative breadth line
   // signal: "bullish_divergence" | "neutral" | "confirming_weakness"
-  // ── Composite Signal Score (0–16) ──
-  // 8 variables × 0–2pts each → drives glide path equity allocation
+  // ── Two-Layer Composite System ──
+  // Layer 1: Roberts 40-Week Regime Gate — gates the allocation range
+  // Layer 2: Valuation/Stress Score (0–16) — calibrates within the regime
+  // Rationale: Roberts Rule 4 — 80% of returns are regime-driven. Trend is the master switch.
+  // Hussman caveat acknowledged but 15 years of being early = functionally wrong for portfolios.
+
+  // Layer 1 — 40-Week Regime Gate (= 200-DMA, same calculation)
+  const spxPctAbove200 = spx200dma != null && spxPrice != null
+    ? ((spxPrice - spx200dma) / spx200dma) * 100 : null;
+  const isBelow200 = spxPctAbove200 != null && spxPctAbove200 < 0;
+
+  const regimeGate: "trend_broken" | "near_ma" | "trend_intact" | "reclaiming" =
+    isBelow200                                    ? "trend_broken" :
+    spxPctAbove200 != null && spxPctAbove200 <= 3 ? "near_ma"      : "trend_intact";
+
+  // Layer 2 — Valuation/Stress Score (8 variables, equal weight, max 16pts)
   const scoreCAFE    = capeRatio > 30 ? 2 : capeRatio > 20 ? 1 : 0;
   const scoreBuffett = MANUAL_BUFFETT_SIGMA > 1.5 ? 2 : MANUAL_BUFFETT_SIGMA > 0.5 ? 1 : 0;
   const scoreVIX     = vixPrice != null ? (vixPrice < 20 ? 2 : vixPrice < 28 ? 1 : 0) : 1;
   const scoreHY      = hySpread < 3.5 ? 2 : hySpread < 5.5 ? 1 : 0;
   const scoreYC      = yieldCurve < -0.5 ? 2 : yieldCurve < 0.5 ? 1 : 0;
   const scoreBreadth = breadthPct != null ? (breadthPct < 50 ? 2 : breadthPct < 70 ? 1 : 0) : 1;
-  // ERP: <1% = 2pts defensive (equity barely beats risk-free), 1-3% = 1pt, >3% = 0pts deploy
   const scoreERP     = erp != null ? (erp < 100 ? 2 : erp < 300 ? 1 : 0) : 1;
-  // Ivy: 0-2/5 invested=2pts, 3-4/5=1pt, 5/5=0pts
   const ivyInvestedCount = [ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC].filter(p => p.signal === "Invest").length;
   const scoreIvy     = ivyInvestedCount <= 2 ? 2 : ivyInvestedCount <= 4 ? 1 : 0;
-
   const compositeScore = scoreCAFE + scoreBuffett + scoreVIX + scoreHY + scoreYC + scoreBreadth + scoreERP + scoreIvy;
 
-  // Allocation recommendation — scaled for 0–16 max
   const compositeAllocation =
-    compositeScore >= 13 ? "40%" :
-    compositeScore >= 10 ? "42–45%" :
-    compositeScore >= 7  ? "47–53%" :
-    compositeScore >= 4  ? "55–58%" : "60%+";
+    regimeGate === "trend_broken" ? "35–40%" :
+    regimeGate === "near_ma"      ? "42–45%" :
+    compositeScore >= 13 ? "42–45%" :
+    compositeScore >= 10 ? "45–50%" :
+    compositeScore >= 7  ? "50–55%" :
+    compositeScore >= 4  ? "55–60%" : "60%+";
 
   const compositeSignal =
-    compositeScore >= 13 ? "HOLD" :
-    compositeScore >= 10 ? "SLIGHT TILT" :
-    compositeScore >= 7  ? "DEPLOY" :
-    compositeScore >= 4  ? "LEAN IN" : "FULL POSTURE";
+    regimeGate === "trend_broken" ? "RISK OFF — REDUCE" :
+    regimeGate === "near_ma"      ? "RISK WATCH — NEAR MA" :
+    compositeScore >= 13 ? "RISK ON — HOLD DEFENSIVE" :
+    compositeScore >= 10 ? "RISK ON — SLIGHT TILT" :
+    compositeScore >= 7  ? "RISK ON — DEPLOY" :
+    compositeScore >= 4  ? "RISK ON — LEAN IN" : "RISK ON — FULL POSTURE";
 
   const compositeColor =
-    compositeScore >= 13 ? "#ff6b88" :
-    compositeScore >= 10 ? "#fbbf24" :
-    compositeScore >= 7  ? "#94a3b8" :
+    regimeGate === "trend_broken" ? "#ff6b88" :
+    regimeGate === "near_ma"      ? "#fbbf24" :
+    compositeScore >= 13 ? "#fbbf24" :
+    compositeScore >= 10 ? "#94a3b8" :
+    compositeScore >= 7  ? "#4ade80" :
     compositeScore >= 4  ? "#4ade80" : "#22d3ee";
 
   const fearGreedScore: number = fearGreedData.value ?? MANUAL_FEAR_GREED_FALLBACK;
@@ -602,6 +618,7 @@ export async function GET() {
       composite_allocation: compositeAllocation,
       composite_signal: compositeSignal,
       composite_color: compositeColor,
+      regime_gate: regimeGate,
       buffett_sigma: MANUAL_BUFFETT_SIGMA,
       fed_stance: MANUAL_FED_STANCE,
       djt_price: djtPrice,
