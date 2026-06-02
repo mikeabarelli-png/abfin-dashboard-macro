@@ -135,13 +135,13 @@ export default function Page() {
   const ivyData = metrics?.ivy ?? marketData?.ivy ?? null;
 
   // Official last month-end signals — update each month when Advisor Perspectives publishes
-  // Source: advisorperspectives.com/dshort · Last updated: Mar 31, 2026
-  // VTI: Cash (-1.2%) · VEU: Invested (+4.7%) · IEF: Invested (+0.7%) · VNQ: Cash (-0.1%) · DBC: Invested (+25.5%)
+  // Source: advisorperspectives.com/dshort · Last updated: May 31, 2026
+  // VTI: Invested (+10.7%) · VEU: Invested (+11.7%) · IEF: Invested (0.0% — yellow) · VNQ: Invested (+5.6%) · DBC: Invested (+18.7%)
   const ivyOfficialSignals: Record<string, "Invest" | "Cash"> = {
-    vti: "Cash", veu: "Invest", ief: "Invest", vnq: "Cash", dbc: "Invest"
+    vti: "Invest", veu: "Invest", ief: "Invest", vnq: "Invest", dbc: "Invest"
   };
-  const ivyOfficialDate = "Mar 31";
-  const ivyEOMDate = "Apr 30";
+  const ivyOfficialDate = "May 31";
+  const ivyEOMDate = "Jun 30";
 
   const ivyPositions = [
     { ticker:"VTI", name:"US Stocks",     key:"vti" },
@@ -2001,7 +2001,7 @@ RESPONSE RULES:
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Valuation, Recession &amp; Sentiment Models</div><div className="panelSub">Sigma scores vs historical norm · Standard deviation from mean</div></div>
-              <div style={{ textAlign:"right" }}><div className="pstamp">Updated May 15 · Next: May 23</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
+              <div style={{ textAlign:"right" }}><div className="pstamp">Updated May 31 · Next: Jun 8</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
             </div>
 
             {/* Valuation Models */}
@@ -2010,12 +2010,12 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.58", color:"#ff6b88" },
-                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.29", color:"#ff6b88" },
-                  { name:"Price/Sales",            rating:"Strongly Overvalued", score:"2.40", color:"#ff6b88" },
-                  { name:"Interest Rate Model",    rating:"Overvalued",          score:"1.97", color:"#fbbf24" },
-                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.43", color:"#ff6b88" },
-                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.46", color:"#94a3b8", muted:true },
+                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.73", color:"#ff6b88" },
+                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.39", color:"#ff6b88" },
+                  { name:"Price/Sales",            rating:"Strongly Overvalued", score:"2.50", color:"#ff6b88" },
+                  { name:"Interest Rate Model",    rating:"Strongly Overvalued", score:"2.07", color:"#ff6b88" },
+                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.53", color:"#ff6b88" },
+                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.49", color:"#94a3b8", muted:true },
                 ].map(r => (
                   <tr key={r.name} style={{ opacity:(r as any).muted?0.4:1 }}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:(r as any).muted?"italic":"normal" }}>{r.name}</td>
@@ -2027,9 +2027,9 @@ RESPONSE RULES:
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Valuation Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>5 of 5 models overvalued · May 15 · 4 Strongly Overvalued</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>5 of 5 Strongly Overvalued · May 31 · Historic extreme</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Buffett at 2.58σ — approaching dot-com peak levels. CAPE at 41.66x. Both within striking distance of all-time extremes.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>All 5 valuation models now Strongly Overvalued — first time all 5 simultaneously at this rating. Buffett 2.73σ exceeds dot-com peak. CAPE 42.78x approaching all-time high of 44.19x.</span>
             </div>
 
             {/* Recession Models */}
@@ -2038,9 +2038,9 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Yield Curve",       rating:"Very High Risk", score:"2.56",  color:"#ff6b88", updated:"May 15" },
+                  { name:"Yield Curve",       rating:"Very High Risk", score:"2.56",  color:"#ff6b88", updated:"May 31" },
                   { name:"Sahm Rule",         rating:"Normal",         score:"N/A",   color:"#4ade80", updated:"Apr 30" },
-                  { name:"State Coincidence", rating:"Normal",         score:"-0.24", color:"#4ade80", updated:"Mar 31" },
+                  { name:"State Coincidence", rating:"Normal",         score:"-4.33", color:"#4ade80", updated:"Apr 30" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -2099,11 +2099,11 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Economic Uncertainty Index", rating:"Very Pessimistic", score:"2.56",  color:"#4ade80", updated:"May 15", note:"contrarian bullish" },
-                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.90", color:"#4ade80", updated:"May 8",  note:"contrarian bullish" },
-                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.48",  color:"#fbbf24", updated:"Mar 31", note:"still elevated" },
-                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.98",  color:"#94a3b8", updated:"May 15", note:"tightening" },
-                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.27", color:"#94a3b8", updated:"May 15", note:"below 20 — calm" },
+                  { name:"Economic Uncertainty Index", rating:"Pessimistic",      score:"1.71",  color:"#fbbf24", updated:"May 29", note:"elevated uncertainty" },
+                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-3.20", color:"#4ade80", updated:"May 22", note:"contrarian bullish" },
+                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.48",  color:"#fbbf24", updated:"Apr 30", note:"still elevated" },
+                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.99",  color:"#94a3b8", updated:"May 31", note:"tightening" },
+                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.47", color:"#94a3b8", updated:"May 31", note:"below 20 — calm" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -2121,9 +2121,9 @@ RESPONSE RULES:
             </table>
             <div className="sumBar">
               <span className="sumBarLabel">Sentiment Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism — Contrarian Bullish · May 15</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism — Contrarian Bullish · May 31</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Consumer Confidence -2.90σ deepening. Economic Uncertainty at 2.56σ. Both historically extreme fear readings — contrarian bullish signal. VIX normalized to Neutral.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Consumer Confidence deepened to -3.20σ — historically extreme fear. Economic Uncertainty eased to Pessimistic from Very Pessimistic. VIX normalized further to -0.47σ. Contrarian signal remains intact.</span>
             </div>
           </section>
 
