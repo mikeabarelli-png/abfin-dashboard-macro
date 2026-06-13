@@ -789,8 +789,8 @@ RESPONSE RULES:
                 );
               };
               // Gradient bar with dot-position marker — shared across tiles
-              const GradBar = ({ posPct, markerColor }: { posPct: number; markerColor: string }) => (
-                <div style={{ position:"relative", height:5, borderRadius:9999, background:"linear-gradient(to right,#4ade80,#fbbf24,#ff6b88)", marginTop:10, marginBottom:4 }}>
+              const GradBar = ({ posPct, markerColor, reverse }: { posPct: number; markerColor: string; reverse?: boolean }) => (
+                <div style={{ position:"relative", height:5, borderRadius:9999, background: reverse ? "linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)" : "linear-gradient(to right,#4ade80,#fbbf24,#ff6b88)", marginTop:10, marginBottom:4 }}>
                   <div style={{ position:"absolute", top:"50%", left:`${Math.max(4,Math.min(posPct,96))}%`, transform:"translate(-50%,-50%)", width:9, height:9, borderRadius:"50%", background:"#fff", border:`2px solid ${markerColor}`, zIndex:2 }} />
                 </div>
               );
@@ -862,7 +862,7 @@ RESPONSE RULES:
                     <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
                       {erpBps!=null&&erpBps<100?"Stocks barely beating T-bills":erpBps!=null&&erpBps<300?`${((erpBps)/100).toFixed(2)}% equity premium — modest`:"Above 3% healthy threshold"}
                     </div>
-                    <GradBar posPct={erpBps!=null?Math.max(0,Math.min((erpBps/1000)*100,100)):25} markerColor={erpBps==null?"#475569":erpBps<100?"#ff6b88":erpBps<300?"#fbbf24":"#4ade80"} />
+                    <GradBar posPct={erpBps!=null?Math.max(0,Math.min((erpBps/1000)*100,100)):25} markerColor={erpBps==null?"#475569":erpBps<100?"#ff6b88":erpBps<300?"#fbbf24":"#4ade80"} reverse />
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Thin</span><span>Fair</span><span>Rich</span></div>
                   </div>
 
@@ -894,7 +894,7 @@ RESPONSE RULES:
                     <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
                       {yieldCurve<-0.5?"Recession signal historically active":yieldCurve<0.5?"Uncertain — watch closely":"Healthy term premium"}
                     </div>
-                    <GradBar posPct={Math.max(0,Math.min(((yieldCurve+1)/2)*100,100))} markerColor={yieldCurve<-0.5?"#ff6b88":yieldCurve<0.5?"#fbbf24":"#4ade80"} />
+                    <GradBar posPct={Math.max(0,Math.min(((yieldCurve+1)/2)*100,100))} markerColor={yieldCurve<-0.5?"#ff6b88":yieldCurve<0.5?"#fbbf24":"#4ade80"} reverse />
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Inverted</span><span>Flat</span><span>Normal</span></div>
                   </div>
 
@@ -909,7 +909,7 @@ RESPONSE RULES:
                     <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
                       {breadthPct!=null?`${breadthPct.toFixed(0)}% of S&P 500 above 200-DMA`:"Live $SPXA200R"}
                     </div>
-                    <GradBar posPct={breadthPct??50} markerColor={breadthPct==null?"#94a3b8":breadthPct<50?"#ff6b88":breadthPct<70?"#fbbf24":"#4ade80"} />
+                    <GradBar posPct={breadthPct??50} markerColor={breadthPct==null?"#94a3b8":breadthPct<50?"#ff6b88":breadthPct<70?"#fbbf24":"#4ade80"} reverse />
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Weak</span><span>Mixed</span><span>Strong</span></div>
                   </div>
 
@@ -928,7 +928,7 @@ RESPONSE RULES:
                         <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
                           {ivyInvestedCount>=5?"10-mo SMA · full trend confirmation":ivyInvestedCount>=3?"Some assets near cash signal":"Multiple assets below 10-mo SMA"}
                         </div>
-                        <GradBar posPct={(ivyInvestedCount/5)*100} markerColor={ivyDotColor} />
+                        <GradBar posPct={(ivyInvestedCount/5)*100} markerColor={ivyDotColor} reverse />
                         <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>0/5</span><span>3/5</span><span>5/5</span></div>
                       </div>
                     );
