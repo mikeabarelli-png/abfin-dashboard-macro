@@ -836,11 +836,7 @@ RESPONSE RULES:
                     <GradBar posPct={vixValue!=null?Math.min(vixValue/50*100,100):0} markerColor={vixValue==null?"#94a3b8":vixValue>=30?"#ff6b88":vixValue>=20?"#fbbf24":"#4ade80"} />
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Calm</span><span>Watch</span><span>Stress</span></div>
                   </div>
-                          {v>20 && <div style={{ position:"absolute", left:"40%", top:0, height:6, width:`${Math.min(pos,60)-40}%`, background:"#fbbf24" }} />}
-                          {v>30 && <div style={{ position:"absolute", left:"60%", top:0, height:6, width:`${pos-60}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
-                          <div style={{ position:"absolute", top:-4, left:"40%", width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
-                          <div style={{ position:"absolute", top:-6, left:"60%", width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
-                        </>;
+
                   {/* 4. ERP */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("erp")}>
                     <Badge score={compositeScores.erp??1} />
