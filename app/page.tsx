@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 
 type AnyObj = Record<string, any>;
-type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | "dxy" | "ad" | null;
+type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | "dxy" | "ad" | "roberts40w" | null;
 
 export default function Page() {
   const [modal, setModal] = useState<Modal>(null);
@@ -987,7 +987,7 @@ RESPONSE RULES:
                     const barPct = pctAbove != null ? Math.max(0, Math.min(50 + pctAbove * 2, 100)) : 50;
 
                     return (
-                      <div className="tile" style={{ position:"relative" }}>
+                      <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("roberts40w")}>
                         <div style={{ position:"absolute", top:8, right:8, fontSize:9, color:"#334155", fontWeight:600 }}>display</div>
                         <div className="lbl" style={{ marginBottom:4, paddingRight:36, fontSize:10 }}>40-Week Signal</div>
 
@@ -2286,6 +2286,131 @@ RESPONSE RULES:
       </div>
 
       {/* MODALS */}
+      {modal==="roberts40w" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="Roberts 40-Week Signal" sub="Lance Roberts · RIA Advisors · The primary trend gate for all allocation decisions">
+          <ModalGrid
+            left={<>
+              <SH>Current state</SH>
+              {(() => {
+                const stateColor = is200Broken?(spxDailyPct!=null&&spxDailyPct>0?"#60a5fa":"#ff6b88"):spx200Pct!=null&&spx200Pct<=3?"#fbbf24":"#4ade80";
+                const stateLabel = is200Broken&&spxDailyPct!=null&&spxDailyPct>0?"RECLAIMING":is200Broken?"RISK OFF":spx200Pct!=null&&spx200Pct<=3?"RISK WATCH":"RISK ON";
+                const t1 = !is200Broken && spx200Pct != null && spx200Pct > 0;
+                const t2 = t1 && spx200Pct != null && spx200Pct > 3;
+                const t3 = t2 && breadthPct != null && breadthPct > 55;
+                return <>
+                  <div style={{ fontSize:36, fontWeight:900, color:stateColor, letterSpacing:"-0.02em", lineHeight:1, marginBottom:4 }}>{stateLabel}</div>
+                  <div style={{ display:"flex", gap:16, marginBottom:12 }}>
+                    <div><div style={{ fontSize:9, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>SPX</div><div style={{ fontSize:18, fontWeight:800, color:"#fff" }}>{spxPrice!=null?fmtWhole(spxPrice):"—"}</div></div>
+                    <div><div style={{ fontSize:9, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>40-Wk MA</div><div style={{ fontSize:18, fontWeight:800, color:"#64748b" }}>{fmtWhole(spx200)}</div></div>
+                    <div><div style={{ fontSize:9, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>Gap</div><div style={{ fontSize:18, fontWeight:800, color:stateColor }}>{spx200Pct!=null?`${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}%`:"—"}</div></div>
+                    <div><div style={{ fontSize:9, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>MA Slope</div><div style={{ fontSize:18, fontWeight:800, color:slope200!=null&&slope200>0?"#4ade80":"#ff6b88" }}>{slope200!=null?`${slope200>0?"↗":"↘"} ${slope200.toFixed(1)}%`:"—"}</div></div>
+                  </div>
+                  {/* Proximity bar */}
+                  <div style={{ position:"relative", height:4, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80,#fbbf24,#ff6b88)", marginBottom:10 }}>
+                    <div style={{ position:"absolute", top:"50%", left:`${Math.max(2,Math.min(spx200Pct!=null?50+spx200Pct*2:50,98))}%`, transform:"translate(-50%,-50%)", width:10, height:10, borderRadius:"50%", background:"#fff", border:`2px solid ${stateColor}` }} />
+                  </div>
+                  {/* Re-entry tranche tracker */}
+                  <div style={{ background:"#0d1240", borderRadius:8, padding:"10px 12px", marginBottom:12 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Re-Entry Tranche Tracker</div>
+                    {[
+                      { label:"① MA Reclaimed — SPX above 40-wk MA", active:t1 },
+                      { label:"② Retest Holds — held above MA (+3% buffer)", active:t2 },
+                      { label:"③ Breadth >55% — broad market confirms", active:t3 },
+                    ].map(r => (
+                      <div key={r.label} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                        <div style={{ width:8, height:8, borderRadius:"50%", background:r.active?"#4ade80":"#202a64", border:`1.5px solid ${r.active?"#4ade80":"#334155"}`, flexShrink:0 }} />
+                        <div style={{ fontSize:11, color:r.active?"#4ade80":"#475569" }}>{r.label}</div>
+                      </div>
+                    ))}
+                    <div style={{ fontSize:10, color:t3?"#4ade80":"#fbbf24", marginTop:4, fontWeight:600 }}>
+                      {t3?"All tranches confirmed — full re-entry":t2?"Awaiting breadth confirmation":t1?"Awaiting retest to hold":"Awaiting MA reclaim"}
+                    </div>
+                  </div>
+                  {/* The core rule */}
+                  <MCard>
+                    <SH>The core rule</SH>
+                    <div style={{ display:"grid", gap:6, marginTop:8 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", background:"rgba(74,222,128,0.08)", borderRadius:8, border:"0.5px solid rgba(74,222,128,0.2)" }}>
+                        <div style={{ width:8, height:8, borderRadius:"50%", background:"#4ade80", flexShrink:0 }} />
+                        <div style={{ fontSize:11, color:"#cbd5e1", lineHeight:1.5 }}><span style={{ color:"#4ade80", fontWeight:700 }}>Above 40-wk MA</span> — portfolio allocated 100% to equity risk</div>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", background:"rgba(255,107,136,0.08)", borderRadius:8, border:"0.5px solid rgba(255,107,136,0.2)" }}>
+                        <div style={{ width:8, height:8, borderRadius:"50%", background:"#ff6b88", flexShrink:0 }} />
+                        <div style={{ fontSize:11, color:"#cbd5e1", lineHeight:1.5 }}><span style={{ color:"#ff6b88", fontWeight:700 }}>Below 40-wk MA</span> — reduce to 50% equity allocation</div>
+                      </div>
+                    </div>
+                  </MCard>
+                </>;
+              })()}
+            </>}
+            right={<>
+              {/* 6-indicator scorecard */}
+              <MCard>
+                <SH>Sustained vs brief break — 6-indicator scorecard</SH>
+                <BC>When the 40-wk MA breaks, these 6 indicators determine whether the break is a whipsaw (buy the dip) or a sustained bear. 3+ firing = sustained decline. 0–1 firing = whipsaw recovery.</BC>
+                <div style={{ display:"grid", gap:5, marginTop:10 }}>
+                  {[
+                    { label:"200-DMA slope direction", bearish: slope200!=null&&slope200<0, bearNote:"Flat/falling = sustained", bullNote:"Rising = whipsaw likely", live: slope200!=null?`${slope200>0?"↗":"↘"} ${slope200.toFixed(1)}%`:"—" },
+                    { label:"Weekly MACD", bearish: false, bearNote:"Negative before price confirms = sustained", bullNote:"Positive = corrective", live:"Manual — check chart" },
+                    { label:"RSI at break", bearish: false, bearNote:"Above 40 at break = no capitulation", bullNote:"Below 32 = fear capitulated = contrarian buy", live:"Manual — check chart" },
+                    { label:"AAII Bears", bearish: false, bearNote:"Below 45% = not enough pessimism", bullNote:"Above 45% = too bearish = contrarian buy", live:"Manual — check weekly" },
+                    { label:"Breadth at break", bearish: breadthPct!=null&&breadthPct<40, bearNote:"<40% above 200-DMA = broad selling", bullNote:">40% = large-cap only = whipsaw", live: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—" },
+                    { label:"Death cross forming", bearish: false, bearNote:"50-DMA converging toward 200-DMA = sustained", bullNote:"No convergence = whipsaw", live:"Display only" },
+                  ].map((ind, i) => (
+                    <div key={i} style={{ background:"#0d1240", borderRadius:7, padding:"8px 10px", border:`0.5px solid ${ind.bearish?"rgba(255,107,136,0.2)":"rgba(74,222,128,0.1)"}` }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:"#e2e8f0" }}>{ind.label}</div>
+                        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                          <div style={{ fontSize:10, color:"#64748b" }}>{ind.live}</div>
+                          <div style={{ width:7, height:7, borderRadius:"50%", background:ind.bearish?"#ff6b88":"#4ade80", flexShrink:0 }} />
+                        </div>
+                      </div>
+                      <div style={{ fontSize:9, color:"#475569", lineHeight:1.4 }}>
+                        <span style={{ color:"#ff6b88" }}>Bear: </span>{ind.bearNote} · <span style={{ color:"#4ade80" }}>Bull: </span>{ind.bullNote}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop:10, padding:"8px 10px", background:"rgba(251,191,36,0.08)", borderRadius:8, border:"0.5px solid rgba(251,191,36,0.2)" }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#fbbf24", marginBottom:2 }}>Base rates since 2000 — 12 breaks total</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, fontSize:10, color:"#94a3b8" }}>
+                    <div><span style={{ color:"#ff6b88", fontWeight:700 }}>7 sustained</span> — avg 12-mo return: –4.0% · zero positive first months</div>
+                    <div><span style={{ color:"#4ade80", fontWeight:700 }}>5 whipsaws</span> — avg 12-mo return: +19.8% · 100% positive at 3/6/9/12 mo</div>
+                  </div>
+                </div>
+              </MCard>
+              {/* Historical breaks table */}
+              <MCard>
+                <SH>Every 40-wk break since 2008</SH>
+                <BC>All resolved above the 200-week MA. None became a structural bear while above it.</BC>
+                <div style={{ display:"grid", gap:4, marginTop:8 }}>
+                  {[
+                    { year:"2012", event:"Euro crisis", outcome:"Corrective · Fed QE2 reversed it", result:"whipsaw" },
+                    { year:"2015", event:"Brexit / China", outcome:"Corrective · central bank response", result:"whipsaw" },
+                    { year:"2018", event:"Fed taper tantrum", outcome:"Corrective · Powell pivot", result:"whipsaw" },
+                    { year:"2020", event:"COVID crash", outcome:"Corrective · largest stimulus in history", result:"whipsaw" },
+                    { year:"2022", event:"Russia/Ukraine + inflation", outcome:"Sustained · 9 months · held 200-wk", result:"sustained" },
+                    { year:"2025", event:"Tariff shock", outcome:"Corrective · resolved, back above MA", result:"whipsaw" },
+                    { year:"Now", event:`SPX ${spx200Pct!=null?`+${spx200Pct.toFixed(1)}%`:"+8%"} above`, outcome:"RISK ON · trend intact · slope rising", result:"on" },
+                  ].map((r, i) => (
+                    <div key={i} style={{ display:"flex", gap:8, alignItems:"flex-start", padding:"6px 8px", borderRadius:6, background: r.year==="Now"?"rgba(74,222,128,0.06)":"rgba(255,255,255,0.02)", border:`0.5px solid ${r.year==="Now"?"rgba(74,222,128,0.2)":"rgba(255,255,255,0.04)"}` }}>
+                      <div style={{ fontSize:11, fontWeight:700, color: r.result==="sustained"?"#ff6b88":r.result==="on"?"#4ade80":"#94a3b8", minWidth:32, flexShrink:0 }}>{r.year}</div>
+                      <div style={{ fontSize:11, fontWeight:600, color:"#cbd5e1", minWidth:80, flexShrink:0 }}>{r.event}</div>
+                      <div style={{ fontSize:10, color:"#475569", lineHeight:1.4 }}>{r.outcome}</div>
+                    </div>
+                  ))}
+                </div>
+              </MCard>
+              {/* Roberts quote */}
+              <ActionCard>
+                {is200Broken
+                  ? "40-wk MA breached. Roberts rule: reduce to 50% equity immediately. Do not wait for confirmation — the rule exists so emotion doesn't override discipline at exactly this moment."
+                  : `SPX is ${spx200Pct!=null?`+${spx200Pct.toFixed(1)}%`:"well"} above the 40-wk MA with slope rising. Roberts rule: remain fully allocated to equity risk. "It may not be possible to time the market, but it is possible to reach intelligent conclusions about whether the market offers good value." The trend says yes. Valuation says be selective.`}
+              </ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
       {modal==="vix" && (
         <ModalWrapper onClose={()=>setModal(null)} title="VIX — Volatility Index" sub="CBOE Volatility Index · Implied 30-day S&P 500 volatility">
           <ModalGrid
