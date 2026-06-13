@@ -208,7 +208,7 @@ export default function Page() {
   const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" }
     : vixValue >= 30 ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" }
     : vixValue >= 20 ? { label: "Slightly Elevated", sub: "Rising fear and potential volatility", color: "#fbbf24" }
-    : { label: "Normal", sub: "Calm · No action required", color: "#4ade80" };
+    : { label: "Calm — Complacency Watch", sub: "Market calm · but low VIX = complacency risk", color: "#4ade80" };
 
   const vixPctTable: number[][] = [[9,1],[10,3],[11,6],[12,10],[13,15],[14,20],[15,27],[16,33],[17,40],[18,48],[19,56],[20,63],[21,68],[22,73],[23,77],[24,80],[25,83],[26,85],[27,87],[28,89],[29,91],[30,93],[32,95],[35,97],[40,98],[50,99],[82,100]];
   const getVixPct = (v: number) => {
@@ -825,6 +825,7 @@ RESPONSE RULES:
                     <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
                       {hySpread>=4?`Trigger active · ${Math.round((5-hySpread)*100)}bps to red line`:`${Math.round((4-hySpread)*100)}bps to trigger · ${Math.round((5-hySpread)*100)}bps to red line`}
                     </div>
+                    {hySpread<3.5 && <div style={{ fontSize:9, color:"#334155", fontStyle:"italic", marginBottom:2 }}>Tight spreads = complacency risk</div>}
                     {(() => {
                       const toPos = (v: number) => v<=3.5?Math.max(0,(v-2)/1.5*30):v<=4.5?30+(v-3.5)*20:v<=5?50+(v-4.5)*20:v<=7?60+(v-5)/2*25:Math.min(100,85+(v-7)/3*15);
                       return <GradBar posPct={toPos(hySpread)} markerColor={hySpread>=5?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80"} />;
@@ -843,6 +844,7 @@ RESPONSE RULES:
                     <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
                       {vixValue!=null&&vixValue>=30?"Stress trigger breached — pause buying":vixValue!=null?`${(30-vixValue).toFixed(1)} pts from stress level`:""}
                     </div>
+                    {vixValue!=null&&vixValue<20 && <div style={{ fontSize:9, color:"#334155", fontStyle:"italic", marginBottom:2 }}>Low VIX = complacency risk</div>}
                     <GradBar posPct={vixValue!=null?Math.min(vixValue/50*100,100):0} markerColor={vixValue==null?"#94a3b8":vixValue>=30?"#ff6b88":vixValue>=20?"#fbbf24":"#4ade80"} />
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Calm</span><span>Watch</span><span>Stress</span></div>
                   </div>
