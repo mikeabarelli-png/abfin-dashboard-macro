@@ -247,20 +247,20 @@ export async function GET() {
   // NOTE: These are the ONLY values you need to update each Saturday.
   // Do not modify anything else in this file during weekly maintenance.
   // ───────────────────────────────────────────────────────────────────
-  const MANUAL_CAPE_FALLBACK       = 42.78;    // multpl.com/shiller-pe          · Jun 1 2026
-  const MANUAL_BUFFETT_SIGMA       = 2.73;     // currentmarketvaluation.com     · May 31 2026
-  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · May 7 2026
-  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · May 7 2026
+  const MANUAL_CAPE_FALLBACK       = 41.43;    // multpl.com/shiller-pe          · Jun 12 2026
+  const MANUAL_BUFFETT_SIGMA       = 2.60;     // currentmarketvaluation.com     · Jun 12 2026
+  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 12 2026
+  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 12 2026
   const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
   const MANUAL_BREADTH_FALLBACK    = 57;       // macromicro $SPXA200R (%)       · May 3 2026
   const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "holding";
-  //                                           // easing | holding | tightening  · May 2026
-  const MANUAL_AD = {                          // StockCharts $NYAD              · May 3 2026
+  //                                           // easing | holding | tightening  · Jun 2026 · FOMC watch
+  const MANUAL_AD = {                          // StockCharts $NYAD              · Jun 12 2026
     signal:      "neutral" as "bullish_divergence" | "neutral" | "confirming_weakness",
     adTrend:     "flat"    as "higher_lows" | "flat" | "lower_lows",
     adVsSpx:     "tracking" as "diverging_up" | "tracking" | "diverging_down",
-    note:        "A/D line recovering with market",
-    updatedDate: "May 3",
+    note:        "A/D line tracking market recovery",
+    updatedDate: "Jun 12",
   };
   // ═══════════════════════════════════════════════════════════════════
 
