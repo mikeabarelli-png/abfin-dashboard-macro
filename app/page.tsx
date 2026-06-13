@@ -770,186 +770,158 @@ RESPONSE RULES:
               <div style={{ fontSize:11, color:"#475569" }}>2 pts = defensive · 1 pt = neutral · 0 pts = deploy</div>
             </div>
             {(() => {
-              // Score badge helper — overlaid top-right on each tile
+              // Score dot badge — red=defensive(2pts) yellow=neutral(1pt) green=deploy(0pts)
               const Badge = ({ score }: { score: number }) => {
                 const c = score === 2 ? "#ff6b88" : score === 1 ? "#fbbf24" : "#4ade80";
+                const glow = score === 2 ? "rgba(255,107,136,0.45)" : score === 1 ? "rgba(251,191,36,0.35)" : "rgba(74,222,128,0.4)";
                 return (
-                  <div style={{ position:"absolute", top:8, right:8, width:22, height:22, borderRadius:"50%", background:`${c}20`, border:`1.5px solid ${c}`, display:"flex", alignItems:"center", justifyContent:"center", zIndex:3 }}>
-                    <span style={{ fontSize:11, fontWeight:900, color:c }}>{score}</span>
-                  </div>
+                  <div style={{ position:"absolute", top:11, right:11, width:11, height:11, borderRadius:"50%", background:c, boxShadow:`0 0 6px ${glow}`, zIndex:3 }} />
                 );
               };
+              // Gradient bar with dot-position marker — shared across tiles
+              const GradBar = ({ posPct, markerColor }: { posPct: number; markerColor: string }) => (
+                <div style={{ position:"relative", height:5, borderRadius:9999, background:"linear-gradient(to right,#4ade80,#fbbf24,#ff6b88)", marginTop:10, marginBottom:4 }}>
+                  <div style={{ position:"absolute", top:"50%", left:`${Math.max(4,Math.min(posPct,96))}%`, transform:"translate(-50%,-50%)", width:9, height:9, borderRadius:"50%", background:"#fff", border:`2px solid ${markerColor}`, zIndex:2 }} />
+                </div>
+              );
               return (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
 
                   {/* ── Row 1 ── */}
 
-                  {/* 1. CAPE — existing rich tile from Market Stress */}
+                  {/* 1. CAPE */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("cape")}>
                     <Badge score={compositeScores.cape} />
-                    <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>CAPE Ratio (Shiller P/E)</div>
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>CAPE Ratio (Shiller P/E)</div>
                     <div className="valHero" style={{ color:"#fff" }}>{capeRatio.toFixed(1)}<span style={{ fontSize:20, fontWeight:600 }}>x</span></div>
-                    <div className="status" style={{ color:capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80" }}>
-                      {capeRatio>35?"Extreme":capeRatio>25?"Overvalued":capeRatio>20?"Elevated":"Fairly Valued"}
+                    <div className="status" style={{ color:capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {capeRatio>35?"Market stretched":capeRatio>25?"Market overvalued":capeRatio>20?"Fairly elevated":"Fairly valued"}
                     </div>
-                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                      {(() => {
-                        const toPos = (x: number) => Math.max(0,Math.min((x-5)/45*100,100));
-                        const pos=toPos(capeRatio), p25=toPos(25), p35=toPos(35);
-                        return <>
-                          <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos,p25)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
-                          {capeRatio>25 && <div style={{ position:"absolute", left:`${p25}%`, top:0, height:6, width:`${Math.min(pos,p35)-p25}%`, background:"#fbbf24" }} />}
-                          {capeRatio>35 && <div style={{ position:"absolute", left:`${p35}%`, top:0, height:6, width:`${pos-p35}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
-                          <div style={{ position:"absolute", top:-4, left:`${(25-5)/45*100}%`, width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
-                          <div style={{ position:"absolute", top:-6, left:`${(35-5)/45*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
-                        </>;
-                      })()}
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {capeRatio>35?`${(capeRatio-16).toFixed(1)}x above long-run avg (16x)`:"Hist. avg ~16x · Dot-com peak 44x"}
                     </div>
-                    <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>5x</span><span>25x</span><span>35x↑</span><span>50x</span></div>
-                    <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
-                      {capeRatio>35?`▲ ${(capeRatio-16).toFixed(1)}x above hist. avg (16x)`:"Hist. avg ~16x · Dot-com peak 44x"}
-                    </div>
-                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{">"} 30 = 2pts · 20–30 = 1pt · {"<"} 20 = 0pts</div>
+                    <GradBar posPct={Math.max(0,Math.min((capeRatio-5)/45*100,100))} markerColor={capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80"} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Cheap</span><span>Fair</span><span>Stretched</span></div>
                   </div>
 
-                  {/* 2. HY Spread — existing rich tile from Stress Confirmation */}
+                  {/* 2. HY Spread */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("hy")}>
                     <Badge score={compositeScores.hy} />
-                    <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>HY Spread</div>
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>HY Spread</div>
                     <div className="valHero" style={{ color:"#fff" }}>{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
-                    <div className="status" style={{ color:hySpread>=5?"#ff6b88":hySpread>=4?"#fbbf24":hySpread>=3.5?"#fbbf24":hySpread>=3?"#94a3b8":"#4ade80" }}>
-                      {hySpread>=5?"Stress":hySpread>=4?"⚠ Trigger":hySpread>=3.5?"Caution":hySpread>=3?"Firm":"Tight"}
+                    <div className="status" style={{ color:hySpread>=5?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {hySpread>=5?"Credit stress":hySpread>=4?"Trigger watch":hySpread>=3.5?"Credit caution":"Credit calm"}
                     </div>
-                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                      {(() => {
-                        const toPos = (v: number) => v<=3.5?Math.max(0,(v-2)/1.5*30):v<=4.5?30+(v-3.5)*20:v<=5?50+(v-4.5)*20:v<=7?60+(v-5)/2*25:Math.min(100,85+(v-7)/3*15);
-                        const pos=toPos(hySpread), p400=toPos(4), p500=toPos(5);
-                        return <>
-                          <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos,p400)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
-                          {hySpread>4 && <div style={{ position:"absolute", left:`${p400}%`, top:0, height:6, width:`${Math.min(pos,p500)-p400}%`, background:"#fbbf24" }} />}
-                          {hySpread>5 && <div style={{ position:"absolute", left:`${p500}%`, top:0, height:6, width:`${pos-p500}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
-                          <div style={{ position:"absolute", top:-4, left:`${p400}%`, width:2, height:14, background:"rgba(255,255,255,0.6)", borderRadius:2, zIndex:2 }} />
-                          <div style={{ position:"absolute", top:-6, left:`${p500}%`, width:3, height:18, background:"rgba(255,255,255,0.9)", borderRadius:2, zIndex:2 }} />
-                        </>;
-                      })()}
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {hySpread>=4?`Trigger active · ${Math.round((5-hySpread)*100)}bps to red line`:`${Math.round((4-hySpread)*100)}bps to trigger · ${Math.round((5-hySpread)*100)}bps to red line`}
                     </div>
-                    <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>200</span><span style={{ color:"#fbbf24", fontWeight:700 }}>400</span><span style={{ color:"#ff6b88", fontWeight:700 }}>500</span><span>700</span><span>1000+</span></div>
-                    <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
-                      {hySpread>=4?`▲ Trigger active · ${Math.round((5-hySpread)*100)}bps to red line`:`▲ ${Math.round((4-hySpread)*100)}bps to trigger · ${Math.round((5-hySpread)*100)}bps to red line`}
-                    </div>
-                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 350bps = 2pts · 350–550 = 1pt · {">"} 550 = 0pts</div>
+                    {(() => {
+                      const toPos = (v: number) => v<=3.5?Math.max(0,(v-2)/1.5*30):v<=4.5?30+(v-3.5)*20:v<=5?50+(v-4.5)*20:v<=7?60+(v-5)/2*25:Math.min(100,85+(v-7)/3*15);
+                      return <GradBar posPct={toPos(hySpread)} markerColor={hySpread>=5?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80"} />;
+                    })()}
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Calm</span><span style={{ color:"#fbbf24" }}>400</span><span style={{ color:"#ff6b88" }}>500</span><span>Stress</span></div>
                   </div>
 
-                  {/* 3. VIX — existing rich tile from Stress Confirmation */}
+                  {/* 3. VIX */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("vix")}>
                     <Badge score={compositeScores.vix} />
-                    <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>VIX</div>
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>VIX</div>
                     <div className="valHero">{vixValue!=null?fmt1(vixValue):"—"}</div>
-                    <div className="status" style={{ color:vixStatus.color }}>{vixValue==null?"Loading":vixValue>=30?"Stress":vixValue>=20?"Watch":"Normal"}</div>
-                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                      {(() => {
-                        const v=vixValue??0, pos=Math.min(v/50*100,100);
-                        return <>
-                          <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos,40)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                    <div className="status" style={{ color:vixValue==null?"#94a3b8":vixValue>=30?"#ff6b88":vixValue>=20?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {vixValue==null?"Loading":vixValue>=30?"Market stressed":vixValue>=20?"Market nervous":"Market calm"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {vixValue!=null&&vixValue>=30?"Stress trigger breached — pause buying":vixValue!=null?`${(30-vixValue).toFixed(1)} pts from stress level`:""}
+                    </div>
+                    <GradBar posPct={vixValue!=null?Math.min(vixValue/50*100,100):0} markerColor={vixValue==null?"#94a3b8":vixValue>=30?"#ff6b88":vixValue>=20?"#fbbf24":"#4ade80"} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Calm</span><span>Watch</span><span>Stress</span></div>
+                  </div>
                           {v>20 && <div style={{ position:"absolute", left:"40%", top:0, height:6, width:`${Math.min(pos,60)-40}%`, background:"#fbbf24" }} />}
                           {v>30 && <div style={{ position:"absolute", left:"60%", top:0, height:6, width:`${pos-60}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
                           <div style={{ position:"absolute", top:-4, left:"40%", width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
                           <div style={{ position:"absolute", top:-6, left:"60%", width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
                         </>;
-                      })()}
-                    </div>
-                    <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>20</span><span>30↑</span><span>50</span></div>
-                    <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
-                      {vixValue!=null&&vixValue>=30?"▲ Stress — pause buying":vixValue!=null?`▲ ${(30-vixValue).toFixed(1)} pts from Stress`:""}
-                    </div>
-                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 20 = 2pts · 20–28 = 1pt · {">"} 28 = 0pts</div>
-                  </div>
-
-                  {/* 4. ERP — existing rich tile from Stress Confirmation */}
+                  {/* 4. ERP */}
                   <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("erp")}>
                     <Badge score={compositeScores.erp??1} />
-                    <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Equity Risk Premium</div>
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>Equity Risk Premium</div>
                     <div className="valHero" style={{ color:"#fff" }}>
                       {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
                     </div>
-                    <div className="status" style={{ color:erpBps==null?"#475569":erpBps<100?"#ff6b88":erpBps<300?"#fbbf24":"#4ade80" }}>
-                      {erpBps==null?"Loading":erpBps<100?"Thin":erpBps<300?"Moderate":"Healthy"}
+                    <div className="status" style={{ color:erpBps==null?"#475569":erpBps<100?"#ff6b88":erpBps<300?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {erpBps==null?"Loading":erpBps<100?"Thin compensation":erpBps<300?"Moderate compensation":"Healthy compensation"}
                     </div>
-                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
-                      <div style={{ position:"absolute", left:0, top:0, height:6, width:"25%", background:"#ef4444", borderRadius:"9999px 0 0 9999px" }} />
-                      {erpBps!=null && erpBps>200 && <div style={{ position:"absolute", left:"25%", top:0, height:6, width:`${Math.max(0,Math.min(((erpBps-200)/800)*100,75))}%`, background:"#fbbf24" }} />}
-                      <div style={{ position:"absolute", top:-6, left:"25%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
-                      <div style={{ position:"absolute", top:-4, left:"62.5%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {erpBps!=null&&erpBps<100?"Stocks barely beating T-bills":erpBps!=null&&erpBps<300?`${((erpBps)/100).toFixed(2)}% equity premium — modest`:"Above 3% healthy threshold"}
                     </div>
-                    <div style={{ fontSize:11, marginTop:8, fontWeight:600, color:erpBps!=null&&erpBps<100?"#ff6b88":erpBps!=null&&erpBps<230?"#fbbf24":"#64748b" }}>
-                      {erpBps!=null&&erpBps<100?"▼ Stocks barely beating T-bills":erpBps!=null&&erpBps<300?`▼ ${((erpBps)/100).toFixed(2)}% — moderate compensation`:"Above healthy threshold"}
-                    </div>
-                    <div style={{ marginTop:6, fontSize:9, color:"#334155" }}>{"<"} 1% = 2pts · 1–3% = 1pt · {">"} 3% = 0pts</div>
+                    <GradBar posPct={erpBps!=null?Math.max(0,Math.min((erpBps/1000)*100,100)):25} markerColor={erpBps==null?"#475569":erpBps<100?"#ff6b88":erpBps<300?"#fbbf24":"#4ade80"} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Thin</span><span>Fair</span><span>Rich</span></div>
                   </div>
 
-                  {/* 5. Buffett Indicator — simple tile */}
-                  {(() => {
-                    const c = compositeScores.buffett===2?"#ff6b88":compositeScores.buffett===1?"#fbbf24":"#4ade80";
-                    const status = buffettSigma>1.5?"Strongly OV":buffettSigma>0.5?"Overvalued":"Fair Value";
-                    return (
-                      <div className="tile" style={{ position:"relative" }}>
-                        <Badge score={compositeScores.buffett} />
-                        <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Buffett Indicator</div>
-                        <div className="valHero" style={{ color:"#fff" }}>{buffettSigma.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>σ</span></div>
-                        <div className="status" style={{ color:c }}>{status}</div>
-                        <div className="sub" style={{ marginTop:4 }}>vs. long-run trend · {buffettSigma>1.5?"Extreme deviation":buffettSigma>0.5?"Above trend":"Near trend"}</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{">"} 1.5σ = 2pts · 0.5–1.5σ = 1pt · {"<"} 0.5σ = 0pts</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:3 }}>Manual · RIA model · Sat update</div>
-                      </div>
-                    );
-                  })()}
+                  {/* 5. Buffett Indicator */}
+                  <div className="tile" style={{ position:"relative" }}>
+                    <Badge score={compositeScores.buffett} />
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>Buffett Indicator</div>
+                    <div className="valHero" style={{ color:"#fff" }}>{buffettSigma.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>σ</span></div>
+                    <div className="status" style={{ color:buffettSigma>1.5?"#ff6b88":buffettSigma>0.5?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {buffettSigma>1.5?"Market cap extreme":buffettSigma>0.5?"Market cap elevated":"Near fair value"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {buffettSigma>1.5?"Historic extreme vs GDP trend":buffettSigma>0.5?"Above long-run trend":"Near long-run trend"}
+                    </div>
+                    <GradBar posPct={Math.max(0,Math.min((buffettSigma/3)*100,100))} markerColor={buffettSigma>1.5?"#ff6b88":buffettSigma>0.5?"#fbbf24":"#4ade80"} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Fair</span><span>Elevated</span><span>Extreme</span></div>
+                  </div>
 
                   {/* ── Row 2 ── */}
 
-                  {/* 6. Yield Curve — simple tile */}
-                  {(() => {
-                    const c = compositeScores.yc===2?"#ff6b88":compositeScores.yc===1?"#fbbf24":"#4ade80";
-                    const status = yieldCurve<-0.5?"Inverted":yieldCurve<0.5?"Flat":"Normal";
-                    return (
-                      <div className="tile" style={{ position:"relative" }}>
-                        <Badge score={compositeScores.yc} />
-                        <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Yield Curve</div>
-                        <div className="valHero" style={{ color:"#fff" }}>{yieldCurve>=0?"+":""}{yieldCurve.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
-                        <div className="status" style={{ color:c }}>{status}</div>
-                        <div className="sub" style={{ marginTop:4 }}>10Y–2Y · {yieldCurve<-0.5?"Recession signal historically":yieldCurve<0.5?"Uncertain — watch closely":"Healthy term premium"}</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{"<"} –50bps = 2pts · –50 to +50 = 1pt · {">"} +50 = 0pts</div>
-                      </div>
-                    );
-                  })()}
+                  {/* 6. Yield Curve */}
+                  <div className="tile" style={{ position:"relative" }}>
+                    <Badge score={compositeScores.yc} />
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>Yield Curve</div>
+                    <div className="valHero" style={{ color:"#fff" }}>{yieldCurve>=0?"+":""}{yieldCurve.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                    <div className="status" style={{ color:yieldCurve<-0.5?"#ff6b88":yieldCurve<0.5?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {yieldCurve<-0.5?"Curve inverted":yieldCurve<0.5?"Curve flat":"Curve healthy"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {yieldCurve<-0.5?"Recession signal historically active":yieldCurve<0.5?"Uncertain — watch closely":"Healthy term premium"}
+                    </div>
+                    <GradBar posPct={Math.max(0,Math.min(((yieldCurve+1)/2)*100,100))} markerColor={yieldCurve<-0.5?"#ff6b88":yieldCurve<0.5?"#fbbf24":"#4ade80"} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Inverted</span><span>Flat</span><span>Normal</span></div>
+                  </div>
 
-                  {/* 7. Market Breadth — simple tile */}
-                  {(() => {
-                    const c = compositeScores.breadth===2?"#ff6b88":compositeScores.breadth===1?"#fbbf24":"#4ade80";
-                    const status = breadthPct!=null?(breadthPct<50?"Weak":breadthPct<70?"Mixed":"Strong"):"Loading";
-                    return (
-                      <div className="tile" style={{ position:"relative" }}>
-                        <Badge score={compositeScores.breadth} />
-                        <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Breadth</div>
-                        <div className="valHero" style={{ color:"#fff" }}>{breadthPct!=null?breadthPct.toFixed(0):"—"}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
-                        <div className="status" style={{ color:c }}>{status}</div>
-                        <div className="sub" style={{ marginTop:4 }}>% S&P 500 above 200-DMA · {breadthPct!=null?(breadthPct<50?"Broad selling underway":breadthPct<70?"Mixed internals":"Broad participation"):"Live $SPXA200R"}</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>{"<"} 50% = 2pts · 50–70% = 1pt · {">"} 70% = 0pts</div>
-                      </div>
-                    );
-                  })()}
+                  {/* 7. Breadth */}
+                  <div className="tile" style={{ position:"relative" }}>
+                    <Badge score={compositeScores.breadth} />
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>Breadth</div>
+                    <div className="valHero" style={{ color:"#fff" }}>{breadthPct!=null?breadthPct.toFixed(0):"—"}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                    <div className="status" style={{ color:breadthPct==null?"#94a3b8":breadthPct<50?"#ff6b88":breadthPct<70?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {breadthPct==null?"Loading":breadthPct<50?"Broad selling":breadthPct<70?"Mixed internals":"Broad participation"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {breadthPct!=null?`${breadthPct.toFixed(0)}% of S&P 500 above 200-DMA`:"Live $SPXA200R"}
+                    </div>
+                    <GradBar posPct={breadthPct??50} markerColor={breadthPct==null?"#94a3b8":breadthPct<50?"#ff6b88":breadthPct<70?"#fbbf24":"#4ade80"} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Weak</span><span>Mixed</span><span>Strong</span></div>
+                  </div>
 
-                  {/* 8. Ivy Portfolio — simple tile */}
+                  {/* 8. Ivy Portfolio */}
                   {(() => {
-                    const c = compositeScores.ivy===2?"#ff6b88":compositeScores.ivy===1?"#fbbf24":"#4ade80";
-                    const status = ivyInvestedCount<=2?"Defensive":ivyInvestedCount<=4?"Mixed":"Invested";
+                    const ivyDotColor = ivyInvestedCount>=5?"#4ade80":ivyInvestedCount>=3?"#fbbf24":"#ff6b88";
+                    const ivyScore = ivyInvestedCount>=5?0:ivyInvestedCount>=3?1:2;
                     return (
                       <div className="tile" style={{ position:"relative" }}>
-                        <Badge score={compositeScores.ivy} />
-                        <div className="lbl" style={{ marginBottom:6, paddingRight:28 }}>Ivy Portfolio</div>
+                        <Badge score={ivyScore} />
+                        <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>Ivy Portfolio</div>
                         <div className="valHero" style={{ color:"#fff" }}>{ivyInvestedCount}<span style={{ fontSize:20, fontWeight:600 }}>/5</span></div>
-                        <div className="status" style={{ color:c }}>{status}</div>
-                        <div className="sub" style={{ marginTop:4 }}>10-mo SMA signals · {ivyInvestedCount<=2?"Trend breakdown across asset classes":ivyInvestedCount<=4?"Partial cash signal active":"Full trend confirmation"}</div>
-                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>0–2 invested = 2pts · 3–4 = 1pt · 5/5 = 0pts</div>
+                        <div className="status" style={{ color:ivyDotColor, marginBottom:2 }}>
+                          {ivyInvestedCount>=5?"All trends invested":ivyInvestedCount>=3?"Partial signal active":"Trend breakdown"}
+                        </div>
+                        <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                          {ivyInvestedCount>=5?"10-mo SMA · full trend confirmation":ivyInvestedCount>=3?"Some assets near cash signal":"Multiple assets below 10-mo SMA"}
+                        </div>
+                        <GradBar posPct={(ivyInvestedCount/5)*100} markerColor={ivyDotColor} />
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>0/5</span><span>3/5</span><span>5/5</span></div>
                       </div>
                     );
                   })()}
