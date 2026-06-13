@@ -700,20 +700,30 @@ RESPONSE RULES:
                   </div>
 
                   {/* Tile 2 — Action */}
-                  <div className="tile" style={{ background:"rgba(255,255,255,0.02)" }}>
-                    <div className="lbl" style={{ marginBottom:6 }}>Signal</div>
-                    <div style={{ fontSize:32, fontWeight:900, color:actionColor, letterSpacing:"-0.02em", lineHeight:1 }}>{actionLabel}</div>
-                    <div className="status" style={{ color:actionColor, marginTop:6 }}>8 indicators · {compositeScore}/16 defensive</div>
-                    <div className="sub" style={{ marginTop:4 }}>
-                      {compositeScore >= 13 ? "Valuations extreme · stay defensive" :
-                       compositeScore >= 10 ? "Mixed signals · slight tilt toward value equity" :
-                       compositeScore >= 7  ? "Conditions improving · deploy gradually" :
-                       compositeScore >= 4  ? "Stress reversing · lean into equities" :
-                       "Maximum deployment · deep value setup"}
+                  <div className="tile" style={{ background:"rgba(255,255,255,0.02)", position:"relative" }}>
+                    {/* Score badge — small, top-right */}
+                    <div style={{ position:"absolute", top:10, right:10, fontSize:10, fontWeight:700, color:"#475569", background:"rgba(255,255,255,0.06)", borderRadius:20, padding:"2px 8px" }}>{compositeScore}/16</div>
+                    <div className="lbl" style={{ marginBottom:6, paddingRight:36 }}>Signal</div>
+                    {/* Action — the headline */}
+                    <div style={{ fontSize:22, fontWeight:900, color:actionColor, letterSpacing:"-0.02em", lineHeight:1.1, marginBottom:6 }}>{actionLabel}</div>
+                    {/* Plain English context */}
+                    <div style={{ fontSize:11, color:"#64748b", marginBottom:10, lineHeight:1.5 }}>
+                      {compositeScore >= 13 ? "Most indicators cautious — hold allocation, protect capital" :
+                       compositeScore >= 10 ? "Market is trending — cautious tilt toward value equity" :
+                       compositeScore >= 7  ? "Conditions improving — deploy gradually into equities" :
+                       compositeScore >= 4  ? "Stress reversing — lean into equities" :
+                       "Deep value setup — maximum deployment"}
                     </div>
-                    {/* Mini score bar */}
-                    <div style={{ marginTop:8, height:3, borderRadius:9999, background:"#202a64" }}>
-                      <div style={{ height:3, width:`${(compositeScore/16)*100}%`, background:gradColor, borderRadius:9999 }} />
+                    {/* Thermometer bar — Deploy ← dot → Defensive */}
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155", marginBottom:3, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em" }}>
+                      <span>Deploy</span><span>Defensive</span>
+                    </div>
+                    <div style={{ position:"relative", height:5, borderRadius:9999, background:"linear-gradient(to right,#4ade80,#fbbf24,#ff6b88)", marginBottom:4 }}>
+                      <div style={{ position:"absolute", top:"50%", left:`${Math.max(4,Math.min((compositeScore/16)*100,96))}%`, transform:"translate(-50%,-50%)", width:10, height:10, borderRadius:"50%", background:"#fff", border:`2px solid ${gradColor}`, zIndex:2 }} />
+                    </div>
+                    {/* Sub-label */}
+                    <div style={{ fontSize:10, color:"#475569" }}>
+                      {Math.round((compositeScore/8)*10)/10} of 8 indicators cautious
                     </div>
                   </div>
 
