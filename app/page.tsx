@@ -13,6 +13,8 @@ export default function Page() {
   const [aiTab, setAiTab] = useState("summary");
   const [aiCache, setAiCache] = useState<Record<string, string>>({});
   const [aiLoading, setAiLoading] = useState(false);
+  const [lanceQuote, setLanceQuote] = useState<string>("");
+  const [lanceLoading, setLanceLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatHistory, setChatHistory] = useState<{ role: string; text: string }[]>([]);
@@ -34,6 +36,7 @@ export default function Page() {
         setMarketData(json);
         setFeedError("");
         setLastUpdated(new Date().toLocaleTimeString());
+        if (!lanceQuote) fetchLanceQuote(json?.metrics ?? json ?? {});
       } catch (err: any) {
         if (!mounted) return;
         setFeedError(err?.message || "Unknown fetch error");
@@ -367,6 +370,50 @@ RESPONSE RULES:
     callClaude(`Using the live dashboard data as context, write a market insight piece in the style of Lance Roberts' Bull Bear Report. Don't summarize the data — interpret it. What is the market really telling us right now that isn't obvious from the headline numbers? What is the tension between what equities are pricing and what credit markets are saying? What historical analog best fits the current setup and what does that analog predict about the path forward? What are most investors getting wrong about this moment? Write 3-4 paragraphs of genuine insight. End with the single most important thing to understand about this market right now.`, "summary");
   }, []);
 
+  const fetchLanceQuote = async (data: AnyObj) => {
+    setLanceLoading(true);
+    try {
+      const spxP  = data.spx_price ?? "—";
+      const dma   = data.spx_200dma ?? "—";
+      const gap   = data.spx_200_pct != null ? `+${data.spx_200_pct.toFixed(1)}%` : "—";
+      const vix   = data.vix ?? "—";
+      const hy    = data.hy_spread != null ? `${Math.round(data.hy_spread*100)}bps` : "—";
+      const cape  = data.cape_ratio ?? "—";
+      const buffy = data.buffett_sigma ?? "—";
+      const score = data.composite_score ?? "—";
+      const regime = data.regime_gate === "trend_broken" ? "RISK OFF" : data.regime_gate === "near_ma" ? "RISK WATCH" : "RISK ON";
+      const action = score >= 13 ? "HOLD POSITIONS" : score >= 10 ? "ADD TO VALUE EQUITY" : score >= 7 ? "DEPLOY INTO EQUITY" : "BUY AGGRESSIVELY";
+
+      const prompt = `You are Lance Roberts of RIA Advisors. A private investor has opened his market dashboard. Give him your 15-second read on the market right now. 
+
+Live data: SPX ${spxP} · 200-DMA ${dma} · Gap ${gap} · Regime ${regime} · Signal ${action} · Composite score ${score}/16 · CAPE ${cape}x · Buffett ${buffy}σ · VIX ${vix} · HY ${hy}
+
+Rules for your response:
+- 3 sentences maximum. No more.
+- Sentence 1: the trend. Sentence 2: the risk. Sentence 3: the action or watch item.
+- Sound exactly like Lance Roberts — direct, plain, no hedging, no jargon, no em-dashes
+- No bullet points. No lists. Just three sentences.
+- Do not start with "I" or refer to yourself
+- Do not use the word "significant" or "navigate" or "landscape"
+- End with something actionable or a specific level to watch`;
+
+      const res = await fetch("/api/ai-strategist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemPrompt: "You are Lance Roberts, Chief Investment Strategist at RIA Advisors. You write the Bull Bear Report. Your voice is direct, plain, and practitioner-focused. You follow the rules. You never predict — you assess. You never fight the trend. You always name a specific level or signal.",
+          messages: [{ role: "user", content: prompt }]
+        }),
+      });
+      const json = await res.json();
+      setLanceQuote(json.text ?? "Unable to load commentary.");
+    } catch {
+      setLanceQuote("Unable to load commentary.");
+    } finally {
+      setLanceLoading(false);
+    }
+  };
+
   const handleAiTab = (tab: string) => {
     setAiTab(tab);
     const prompts: Record<string, string> = {
@@ -673,7 +720,10 @@ RESPONSE RULES:
 
             return (
               <section className="panel" style={{ marginBottom:8, padding:"12px 16px" }}>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
+                <style>{`
+                  @media (max-width: 640px) { .hero-grid { grid-template-columns: 1fr 1fr !important; } }
+                `}</style>
+                <div className="hero-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
 
                   {/* Tile 1 — Regime */}
                   <div className="tile" style={{ background:"rgba(255,255,255,0.02)" }}>
@@ -701,12 +751,9 @@ RESPONSE RULES:
 
                   {/* Tile 2 — Action */}
                   <div className="tile" style={{ background:"rgba(255,255,255,0.02)", position:"relative" }}>
-                    {/* Score badge — small, top-right */}
                     <div style={{ position:"absolute", top:10, right:10, fontSize:10, fontWeight:700, color:"#475569", background:"rgba(255,255,255,0.06)", borderRadius:20, padding:"2px 8px" }}>{compositeScore}/16</div>
                     <div className="lbl" style={{ marginBottom:6, paddingRight:36 }}>Signal</div>
-                    {/* Action — the headline */}
                     <div style={{ fontSize:22, fontWeight:900, color:actionColor, letterSpacing:"-0.02em", lineHeight:1.1, marginBottom:6 }}>{actionLabel}</div>
-                    {/* Plain English context */}
                     <div style={{ fontSize:11, color:"#64748b", marginBottom:10, lineHeight:1.5 }}>
                       {compositeScore >= 13 ? "Most indicators cautious — hold allocation, protect capital" :
                        compositeScore >= 10 ? "Market is trending — cautious tilt toward value equity" :
@@ -714,14 +761,12 @@ RESPONSE RULES:
                        compositeScore >= 4  ? "Stress reversing — lean into equities" :
                        "Deep value setup — maximum deployment"}
                     </div>
-                    {/* Thermometer bar — Deploy ← dot → Defensive */}
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155", marginBottom:3, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em" }}>
                       <span>Deploy</span><span>Defensive</span>
                     </div>
                     <div style={{ position:"relative", height:5, borderRadius:9999, background:"linear-gradient(to right,#4ade80,#fbbf24,#ff6b88)", marginBottom:4 }}>
                       <div style={{ position:"absolute", top:"50%", left:`${Math.max(4,Math.min((compositeScore/16)*100,96))}%`, transform:"translate(-50%,-50%)", width:10, height:10, borderRadius:"50%", background:"#fff", border:`2px solid ${gradColor}`, zIndex:2 }} />
                     </div>
-                    {/* Sub-label */}
                     <div style={{ fontSize:10, color:"#475569" }}>
                       {Math.round((compositeScore/8)*10)/10} of 8 indicators cautious
                     </div>
@@ -736,39 +781,102 @@ RESPONSE RULES:
                     </div>
                   </div>
 
-                  {/* Tile 4 — Trigger Watch */}
-                  <div className="tile" style={{ background:"rgba(255,255,255,0.02)" }}>
-                    <div className="lbl" style={{ marginBottom:6 }}>Trigger Watch</div>
-                    <div style={{ fontSize:16, fontWeight:800, color:triggerColor, letterSpacing:"-0.01em", lineHeight:1.2, marginBottom:8 }}>{triggerWatch}</div>
-                    {/* HY bar */}
-                    <div style={{ marginBottom:6 }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginBottom:2 }}>
-                        <span>HY Spread</span>
-                        <span style={{ color: hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80", fontWeight:700 }}>{Math.round(hySpread*100)}bps <span style={{ color:"#334155" }}>/ 400</span></span>
+                  {/* Tile 4 — Trigger Watch — urgency-scaled */}
+                  {(() => {
+                    const hyFired   = hySpread >= 4;
+                    const vixFired  = vixValue != null && vixValue >= 30;
+                    const hyWatch   = !hyFired && hySpread >= 3.5;
+                    const vixWatch  = !vixFired && vixValue != null && vixValue >= 20;
+                    const anyFired  = hyFired || vixFired;
+                    const anyWatch  = hyWatch || vixWatch;
+
+                    const tileLabel = anyFired  ? "ACTION REQUIRED"
+                                    : anyWatch  ? "TRIGGER WATCH"
+                                    : "Triggers clear";
+                    const tileFontSize = anyFired ? 18 : anyWatch ? 16 : 13;
+                    const tileColor = anyFired ? "#ff6b88" : anyWatch ? "#fbbf24" : "#475569";
+                    const tileBorder = anyFired
+                      ? "1px solid rgba(255,107,136,0.35)"
+                      : anyWatch
+                      ? "1px solid rgba(251,191,36,0.2)"
+                      : "none";
+
+                    return (
+                      <div className="tile" style={{ background: anyFired?"rgba(255,107,136,0.06)":anyWatch?"rgba(251,191,36,0.04)":"rgba(255,255,255,0.02)", border:tileBorder, position:"relative" }}>
+                        <div className="lbl" style={{ marginBottom:4 }}>Trigger Watch</div>
+                        <div style={{ fontSize:tileFontSize, fontWeight:anyFired||anyWatch?900:600, color:tileColor, letterSpacing:"-0.01em", lineHeight:1.2, marginBottom:anyFired||anyWatch?8:6 }}>
+                          {tileLabel}
+                        </div>
+                        {/* HY bar */}
+                        <div style={{ marginBottom:6 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginBottom:2 }}>
+                            <span>HY Spread</span>
+                            <span style={{ color:hyFired?"#ff6b88":hyWatch?"#fbbf24":"#4ade80", fontWeight:700 }}>{Math.round(hySpread*100)}bps <span style={{ color:"#334155" }}>/ 400</span></span>
+                          </div>
+                          <div style={{ height:4, borderRadius:9999, background:"#202a64" }}>
+                            <div style={{ height:4, width:`${Math.min((hySpread/4)*100,100)}%`, background:hyFired?"#ff6b88":hyWatch?"#fbbf24":"#4ade80", borderRadius:9999, transition:"width 0.6s ease" }} />
+                          </div>
+                        </div>
+                        {/* VIX bar */}
+                        <div style={{ marginBottom:anyFired?8:0 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginBottom:2 }}>
+                            <span>VIX</span>
+                            <span style={{ color:vixFired?"#ff6b88":vixWatch?"#fbbf24":"#4ade80", fontWeight:700 }}>{vixValue!=null?vixValue.toFixed(1):"—"} <span style={{ color:"#334155" }}>/ 30</span></span>
+                          </div>
+                          <div style={{ height:4, borderRadius:9999, background:"#202a64" }}>
+                            <div style={{ height:4, width:`${vixValue!=null?Math.min((vixValue/30)*100,100):0}%`, background:vixFired?"#ff6b88":vixWatch?"#fbbf24":"#4ade80", borderRadius:9999, transition:"width 0.6s ease" }} />
+                          </div>
+                        </div>
+                        {/* Action message — only shows when something is firing or watching */}
+                        {anyFired && (
+                          <div style={{ marginTop:6, padding:"6px 8px", background:"rgba(255,107,136,0.12)", borderRadius:6, fontSize:10, color:"#ff6b88", fontWeight:600, lineHeight:1.4 }}>
+                            {hyFired && vixFired ? "Both triggers active — reduce equity now" : hyFired ? "HY trigger active — pause new buying" : "VIX trigger active — pause new buying"}
+                          </div>
+                        )}
+                        {anyWatch && !anyFired && (
+                          <div style={{ marginTop:6, fontSize:9, color:"#fbbf24", lineHeight:1.4 }}>
+                            {hyWatch && vixWatch ? "Both approaching trigger" : hyWatch ? "HY approaching 400bps" : "VIX approaching 30"}
+                          </div>
+                        )}
+                        {!anyFired && !anyWatch && (
+                          <div style={{ marginTop:4, fontSize:9, color:"#334155", lineHeight:1.5 }}>2 Friday closes below 200-DMA + VIX {">"}30 or HY {">"}400bps</div>
+                        )}
                       </div>
-                      <div style={{ height:4, borderRadius:9999, background:"#202a64" }}>
-                        <div style={{ height:4, width:`${Math.min((hySpread/4)*100,100)}%`, background:hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80", borderRadius:9999 }} />
-                      </div>
-                    </div>
-                    {/* VIX bar */}
-                    <div>
-                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginBottom:2 }}>
-                        <span>VIX</span>
-                        <span style={{ color:vixValue!=null&&vixValue>=30?"#ff6b88":vixValue!=null&&vixValue>=20?"#fbbf24":"#4ade80", fontWeight:700 }}>{vixValue!=null?vixValue.toFixed(1):"—"} <span style={{ color:"#334155" }}>/ 30</span></span>
-                      </div>
-                      <div style={{ height:4, borderRadius:9999, background:"#202a64" }}>
-                        <div style={{ height:4, width:`${vixValue!=null?Math.min((vixValue/30)*100,100):0}%`, background:vixValue!=null&&vixValue>=30?"#ff6b88":vixValue!=null&&vixValue>=20?"#fbbf24":"#4ade80", borderRadius:9999 }} />
-                      </div>
-                    </div>
-                    <div style={{ marginTop:6, fontSize:9, color:"#334155", lineHeight:1.5 }}>
-                      2 Friday closes below 200-DMA + VIX {">"}30 or HY {">"}400bps
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                 </div>
               </section>
             );
           })()}
+
+          {/* ⓪-A.5 LANCE 15-SECOND READ */}
+          <section style={{ margin:"0 0 8px 0", padding:"10px 16px", background:"rgba(255,255,255,0.015)", borderRadius:12, border:"0.5px solid rgba(255,255,255,0.05)", display:"flex", alignItems:"flex-start", gap:12 }}>
+            <div style={{ flexShrink:0, marginTop:2 }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", background:"rgba(74,222,128,0.12)", border:"1px solid rgba(74,222,128,0.25)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <span style={{ fontSize:12, fontWeight:900, color:"#4ade80" }}>L</span>
+              </div>
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
+                <span style={{ fontSize:10, fontWeight:700, color:"#4ade80", textTransform:"uppercase", letterSpacing:"0.07em" }}>Lance Roberts</span>
+                <span style={{ fontSize:9, color:"#334155" }}>15-second read · updates on load</span>
+                <button
+                  onClick={() => marketData && fetchLanceQuote(marketData?.metrics ?? marketData ?? {})}
+                  disabled={lanceLoading}
+                  style={{ marginLeft:"auto", fontSize:9, fontWeight:700, color:"#475569", background:"rgba(255,255,255,0.04)", border:"0.5px solid rgba(255,255,255,0.08)", borderRadius:20, padding:"2px 10px", cursor:lanceLoading?"not-allowed":"pointer", opacity:lanceLoading?0.5:1 }}>
+                  {lanceLoading ? "Loading..." : "↺ Refresh"}
+                </button>
+              </div>
+              {lanceLoading ? (
+                <div style={{ fontSize:12, color:"#334155", fontStyle:"italic" }}>Generating commentary...</div>
+              ) : lanceQuote ? (
+                <div style={{ fontSize:13, color:"#cbd5e1", lineHeight:1.7, fontStyle:"italic" }}>"{lanceQuote}"</div>
+              ) : (
+                <div style={{ fontSize:12, color:"#334155" }}>Loading market commentary...</div>
+              )}
+            </div>
+          </section>
 
           {/* ⓪-B SIGNAL TILES — 7 scored variables */}
           <section className="panel" style={{ marginBottom:16 }}>
