@@ -112,7 +112,6 @@ async function fetchCape(): Promise<{ value: number | null; error?: string }> {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) return { value: null, error: `Nasdaq CAPE: HTTP ${res.status}` };
     const data = await res.json();
-    // Response shape: { dataset: { data: [["2026-03-01", 40.2], ...] } }
     const latest = data?.dataset?.data?.[0]?.[1];
     const val = latest != null ? parseFloat(latest) : null;
     console.log(`CAPE: ${val}`);
@@ -125,8 +124,6 @@ async function fetchCape(): Promise<{ value: number | null; error?: string }> {
 }
 
 async function fetchFearGreed(): Promise<{ value: number | null; rating: string | null; error?: string }> {
-  // CNN Fear & Greed Index — undocumented endpoint, may break without notice
-  // Falls back to MANUAL_FEAR_GREED_FALLBACK if unavailable
   const url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -154,33 +151,23 @@ async function fetchFearGreed(): Promise<{ value: number | null; rating: string 
   }
 }
 
-// ── Ivy Portfolio — 10-month SMA computation ─────────────────────────────────
-// Fetches ~220 calendar days of daily closes, identifies the last trading day
-// of each of the past 10 calendar months, averages those 10 month-end closes.
-// The Ivy rule: if month-end close > 10-mo SMA → Invest; otherwise → Cash.
-
 function computeMonthEndSma(
   closes: number[],
-  timestamps: number[],  // Unix seconds, one per close
+  timestamps: number[],
   months: number = 10
 ): { sma: number | null; monthEndCloses: number[] } {
   if (closes.length < months || timestamps.length !== closes.length) {
     return { sma: null, monthEndCloses: [] };
   }
-
-  // Build map: "YYYY-MM" → last close in that month
   const monthMap: Record<string, number> = {};
   for (let i = 0; i < closes.length; i++) {
     const d = new Date(timestamps[i] * 1000);
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    monthMap[key] = closes[i]; // later entries overwrite earlier → last trading day wins
+    monthMap[key] = closes[i];
   }
-
-  // Sort keys descending, take the most recent `months` months
   const sortedKeys = Object.keys(monthMap).sort().reverse();
   const recentKeys = sortedKeys.slice(0, months);
   if (recentKeys.length < months) return { sma: null, monthEndCloses: [] };
-
   const monthEndCloses = recentKeys.map(k => monthMap[k]);
   const sma = monthEndCloses.reduce((s, v) => s + v, 0) / months;
   return { sma: Math.round(sma * 100) / 100, monthEndCloses };
@@ -193,7 +180,6 @@ async function fetchIvyPosition(ticker: string): Promise<{
   signal: "Invest" | "Cash" | null;
   error?: string;
 }> {
-  // 320 calendar days ≈ 220 trading days ≈ 10.5 months — enough for 10 full month-ends
   const end = Math.floor(Date.now() / 1000);
   const start = end - 320 * 24 * 60 * 60;
   const url = `${BASE}/${encodeURIComponent(ticker)}?period1=${start}&period2=${end}&interval=1d&includePrePost=false`;
@@ -225,7 +211,7 @@ async function fetchIvyPosition(ticker: string): Promise<{
 
     if (sma == null || price == null) return { price, sma: null, variancePct: null, signal: null };
 
-    const variancePct = Math.round(((price - sma) / sma) * 1000) / 10; // 1 decimal
+    const variancePct = Math.round(((price - sma) / sma) * 1000) / 10;
     const signal: "Invest" | "Cash" = price >= sma ? "Invest" : "Cash";
     console.log(`Ivy ${ticker}: price=${price} sma=${sma} variance=${variancePct}% → ${signal}`);
     return { price, sma, variancePct, signal };
@@ -236,7 +222,6 @@ async function fetchIvyPosition(ticker: string): Promise<{
     clearTimeout(timer);
   }
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
 export async function GET() {
   const diagnostics: Record<string, string> = {};
@@ -244,27 +229,23 @@ export async function GET() {
   // ═══════════════════════════════════════════════════════════════════
   // SATURDAY MANUAL UPDATE CHECKLIST — update every weekend
   // ═══════════════════════════════════════════════════════════════════
-  // NOTE: These are the ONLY values you need to update each Saturday.
-  // Do not modify anything else in this file during weekly maintenance.
-  // ───────────────────────────────────────────────────────────────────
-  const MANUAL_CAPE_FALLBACK       = 41.43;    // multpl.com/shiller-pe          · Jun 12 2026
-  const MANUAL_BUFFETT_SIGMA       = 2.60;     // currentmarketvaluation.com     · Jun 12 2026
-  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 12 2026
-  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 12 2026
+  const MANUAL_CAPE_FALLBACK       = 41.71;    // multpl.com/shiller-pe          · Jun 18 2026
+  const MANUAL_BUFFETT_SIGMA       = 2.55;     // currentmarketvaluation.com     · Jun 18 2026
+  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 18 2026
+  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 18 2026
   const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
-  const MANUAL_BREADTH_FALLBACK    = 57;       // macromicro $SPXA200R (%)       · May 3 2026
+  const MANUAL_BREADTH_FALLBACK    = 57;       // macromicro $SPXA200R (%)       · Jun 18 2026
   const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "holding";
-  //                                           // easing | holding | tightening  · Jun 2026 · FOMC watch
-  const MANUAL_AD = {                          // StockCharts $NYAD              · Jun 12 2026
+  //                                           · Jun 18 2026 · FOMC held 3.50-3.75%, dot plot turned hawkish (median 3.8% vs prior 3.4%)
+  const MANUAL_AD = {                          // StockCharts $NYAD              · Jun 18 2026
     signal:      "neutral" as "bullish_divergence" | "neutral" | "confirming_weakness",
-    adTrend:     "flat"    as "higher_lows" | "flat" | "lower_lows",
+    adTrend:     "higher_lows" as "higher_lows" | "flat" | "lower_lows",
     adVsSpx:     "tracking" as "diverging_up" | "tracking" | "diverging_down",
-    note:        "A/D line tracking market recovery",
-    updatedDate: "Jun 12",
+    note:        "A/D line tracking market recovery post-FOMC, Iran deal rally",
+    updatedDate: "Jun 18",
   };
   // ═══════════════════════════════════════════════════════════════════
 
-  // 420 calendar days = ~290 trading days — enough for full 200-DMA on 1Y chart
   const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthChart] = await Promise.all([
     fetchChart("^GSPC", 420),
     fetchChart("^VIX", 5),
@@ -284,10 +265,10 @@ export async function GET() {
     fetchIvyPosition("IEF"),
     fetchIvyPosition("VNQ"),
     fetchIvyPosition("DBC"),
-    fetchFred("WALCL", 2),   // Fed balance sheet: millions USD, weekly; limit=2 for direction
-    fetchChart("^DJT", 420), // Dow Jones Transports — Dow Theory confirmation
-    fetchChart("BZ=F", 5),   // Brent crude — Roberts' "master switch" for Fed policy room
-    fetchChart("^SPXA200R", 5), // % of S&P 500 stocks above 200-DMA — composite signal input
+    fetchFred("WALCL", 2),
+    fetchChart("^DJT", 420),
+    fetchChart("BZ=F", 5),
+    fetchChart("^SPXA200R", 5),
   ]);
 
   if (spx.error) diagnostics["spx"] = spx.error;
@@ -313,15 +294,11 @@ export async function GET() {
   if (brent.error) diagnostics["brent"] = brent.error;
   if (breadthChart.error) diagnostics["breadth"] = breadthChart.error;
 
-  // Market Breadth — % of S&P 500 stocks above their 200-DMA
-  // Source: Yahoo Finance ^SPXA200R · Updates daily after market close
   const breadthPct: number | null = breadthChart.closes.length > 0
     ? breadthChart.closes[breadthChart.closes.length - 1]
     : breadthChart.meta.regularMarketPrice ?? MANUAL_BREADTH_FALLBACK;
   console.log(`Breadth (% above 200-DMA): ${breadthPct}%`);
 
-  // Brent Crude — Roberts' "master switch"
-  // Below $80 = Fed has room to cut; $80-95 = neutral; $95-110 = watch; above $110 = Fed frozen
   const brentPrice: number | null = brent.meta.regularMarketPrice ?? brent.closes[brent.closes.length - 1] ?? null;
   const brentPrev: number | null = brent.closes.length >= 2 ? brent.closes[brent.closes.length - 2] : null;
   const brentChangePct: number | null = brentPrice != null && brentPrev != null
@@ -333,14 +310,12 @@ export async function GET() {
     brentPrice < 110 ? "watch" : "frozen";
   console.log(`Brent: $${brentPrice} (${brentChangePct?.toFixed(2)}%) → ${brentRegime}`);
 
-  // ── Dow Jones Transports (DJT) — Dow Theory confirmation signal ──────────────
   const djtCloses = djt.closes;
   const djtPrice: number | null = djt.meta.regularMarketPrice ?? djtCloses[djtCloses.length - 1] ?? null;
   const djtPrev: number | null = djtCloses.length >= 2 ? djtCloses[djtCloses.length - 2] : null;
   const djtChangePct: number | null = djtPrice != null && djtPrev != null
     ? ((djtPrice - djtPrev) / djtPrev) * 100 : null;
 
-  // DJT 200-DMA and slope (same method as SPX)
   const djt200dma: number | null = djtCloses.length >= 200
     ? avg(djtCloses.slice(-200)) : null;
   const djt200dma_prev: number | null = djtCloses.length >= 220
@@ -353,11 +328,9 @@ export async function GET() {
   const djtAbove200 = djtVs200 != null && djtVs200 >= 0;
   console.log(`DJT: ${djtPrice} vs 200-DMA ${djt200dma?.toFixed(2)} (${djtVs200?.toFixed(2)}%)`);
 
-  // Fed Balance Sheet (WALCL) — in millions USD from FRED
-  // Convert to billions for display; compute WoW change
-  const walclMil: number | null = fredWALCL.value;          // e.g. 6,800,000 (millions)
+  const walclMil: number | null = fredWALCL.value;
   const walclPrevMil: number | null = fredWALCL.prev;
-  const walclBn: number | null  = walclMil  != null ? Math.round(walclMil  / 1000) : null;  // billions
+  const walclBn: number | null  = walclMil  != null ? Math.round(walclMil  / 1000) : null;
   const walclPrevBn: number | null = walclPrevMil != null ? Math.round(walclPrevMil / 1000) : null;
   const walclChgBn: number | null  = walclBn != null && walclPrevBn != null ? walclBn - walclPrevBn : null;
   const walclDirection: "expanding" | "contracting" | "flat" | null =
@@ -386,7 +359,6 @@ export async function GET() {
   const spx200dma = spxCloses.length >= 200 ? avg(spxCloses.slice(-200)) : null;
   const spxTrend14d = spxCloses.slice(-14);
 
-  // ── Schannep 2-of-3 Signal — placed here so spxPrice + spx200dma are in scope ──
   const spxAbove200 = spxPrice != null && spx200dma != null && spxPrice > spx200dma;
   type SchanenpSignal = "bull" | "bear" | "non_confirmation_bull" | "non_confirmation_bear";
   const schannepSignal: SchanenpSignal =
@@ -408,26 +380,20 @@ export async function GET() {
   };
   console.log(`Schannep: ${schannepSignal} (SPX ${spxAbove200 ? "above" : "below"} 200-DMA, DJT ${djtAbove200 ? "above" : "below"} 200-DMA)`);
 
-  // ── DMA Slopes: compare current DMA to same DMA from N days ago ──
-  // 20-DMA slope: compare to 10 trading days ago
   const spx20dma_prev = spxCloses.length >= 30 ? avg(spxCloses.slice(-30, -10)) : null;
   const spx20slope = spx20dma != null && spx20dma_prev != null
     ? ((spx20dma - spx20dma_prev) / spx20dma_prev) * 100 : null;
 
-  // 50-DMA slope: compare to 20 trading days ago
   const spx50dma_prev = spxCloses.length >= 70 ? avg(spxCloses.slice(-70, -20)) : null;
   const spx50slope = spx50dma != null && spx50dma_prev != null
     ? ((spx50dma - spx50dma_prev) / spx50dma_prev) * 100 : null;
 
-  // 200-DMA slope: compare to 20 trading days ago (most important)
   const spx200dma_prev = spxCloses.length >= 220 ? avg(spxCloses.slice(-220, -20)) : null;
   const spx200slope = spx200dma != null && spx200dma_prev != null
     ? ((spx200dma - spx200dma_prev) / spx200dma_prev) * 100 : null;
 
-  // ── Market Regime Classification ──
-  // Uses price vs 200-DMA AND slope of 200-DMA
   const aboveDma200 = spxPrice != null && spx200dma != null && spxPrice > spx200dma;
-  const dma200Rising = spx200slope != null && spx200slope > 0.02; // >0.02% in 20 days = rising
+  const dma200Rising = spx200slope != null && spx200slope > 0.02;
   const dma200Falling = spx200slope != null && spx200slope < -0.02;
 
   type Regime = "bull" | "transition_above" | "transition_below" | "bear";
@@ -467,12 +433,10 @@ export async function GET() {
   const fedFunds: number = fredFedFunds.value ?? 4.33;
   const breakeven5y: number = fredBreakeven.value ?? 2.45;
 
-  // DXY — Dollar Index current price
   const dxyPrice: number | null = dxy.meta.regularMarketPrice ?? dxy.closes[dxy.closes.length - 1] ?? null;
   const dxyPrev: number | null = dxy.closes.length >= 2 ? dxy.closes[dxy.closes.length - 2] : null;
   const dxyChangePct: number | null = dxyPrice != null && dxyPrev != null ? ((dxyPrice - dxyPrev) / dxyPrev) * 100 : null;
 
-  // Put/Call Ratio
   const putCallRatio: number | null = putCall.meta.regularMarketPrice ?? putCall.closes[putCall.closes.length - 1] ?? null;
 
   const trailingPE: number | null = peData.value ?? spx.meta.trailingPE ?? MANUAL_PE_FALLBACK;
@@ -483,20 +447,8 @@ export async function GET() {
     console.log(`ERP: ${erp} bps`);
   }
 
-  // CAPE (Shiller P/E) — Nasdaq Data Link, updated monthly
-  // Falls back to manual constant if API key missing or fetch fails
   const capeRatio: number = capeData.value ?? MANUAL_CAPE_FALLBACK;
 
-  // NYSE Advance/Decline Line — manually updated weekly (Saturday)
-  // Source: stockcharts.com $NYAD or barchart.com — cumulative breadth line
-  // signal: "bullish_divergence" | "neutral" | "confirming_weakness"
-  // ── Two-Layer Composite System ──
-  // Layer 1: Roberts 40-Week Regime Gate — gates the allocation range
-  // Layer 2: Valuation/Stress Score (0–16) — calibrates within the regime
-  // Rationale: Roberts Rule 4 — 80% of returns are regime-driven. Trend is the master switch.
-  // Hussman caveat acknowledged but 15 years of being early = functionally wrong for portfolios.
-
-  // Layer 1 — 40-Week Regime Gate (= 200-DMA, same calculation)
   const spxPctAbove200 = spx200dma != null && spxPrice != null
     ? ((spxPrice - spx200dma) / spx200dma) * 100 : null;
   const isBelow200 = spxPctAbove200 != null && spxPctAbove200 < 0;
@@ -505,7 +457,6 @@ export async function GET() {
     isBelow200                                    ? "trend_broken" :
     spxPctAbove200 != null && spxPctAbove200 <= 3 ? "near_ma"      : "trend_intact";
 
-  // Layer 2 — Valuation/Stress Score (8 variables, equal weight, max 16pts)
   const scoreCAFE    = capeRatio > 30 ? 2 : capeRatio > 20 ? 1 : 0;
   const scoreBuffett = MANUAL_BUFFETT_SIGMA > 1.5 ? 2 : MANUAL_BUFFETT_SIGMA > 0.5 ? 1 : 0;
   const scoreVIX     = vixPrice != null ? (vixPrice < 20 ? 2 : vixPrice < 28 ? 1 : 0) : 1;
