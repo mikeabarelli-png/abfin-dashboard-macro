@@ -229,20 +229,20 @@ export async function GET() {
   // ═══════════════════════════════════════════════════════════════════
   // SATURDAY MANUAL UPDATE CHECKLIST — update every weekend
   // ═══════════════════════════════════════════════════════════════════
-  const MANUAL_CAPE_FALLBACK       = 41.71;    // multpl.com/shiller-pe          · Jun 18 2026
-  const MANUAL_BUFFETT_SIGMA       = 2.55;     // currentmarketvaluation.com     · Jun 18 2026
-  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 18 2026
-  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 18 2026
+  const MANUAL_CAPE_FALLBACK       = 40.70;    // multpl.com/shiller-pe          · Jun 26 2026
+  const MANUAL_BUFFETT_SIGMA       = 2.45;     // currentmarketvaluation.com     · Jun 26 2026
+  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 26 2026
+  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 26 2026
   const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
-  const MANUAL_BREADTH_FALLBACK    = 57;       // macromicro $SPXA200R (%)       · Jun 18 2026
+  const MANUAL_BREADTH_FALLBACK    = 57;       // macromicro $SPXA200R (%)       · Jun 26 2026
   const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "holding";
-  //                                           · Jun 18 2026 · FOMC held 3.50-3.75%, dot plot turned hawkish (median 3.8% vs prior 3.4%)
-  const MANUAL_AD = {                          // StockCharts $NYAD              · Jun 18 2026
+  //                                           · Jun 26 2026 · FOMC held 3.50-3.75%, dot plot turned hawkish (median 3.8% vs prior 3.4%)
+  const MANUAL_AD = {                          // StockCharts $NYAD              · Jun 26 2026
     signal:      "neutral" as "bullish_divergence" | "neutral" | "confirming_weakness",
     adTrend:     "higher_lows" as "higher_lows" | "flat" | "lower_lows",
     adVsSpx:     "tracking" as "diverging_up" | "tracking" | "diverging_down",
-    note:        "A/D line tracking market recovery post-FOMC, Iran deal rally",
-    updatedDate: "Jun 18",
+    note:        "A/D line tracking market recovery, all 5 valuation models still overvalued",
+    updatedDate: "Jun 26",
   };
   // ═══════════════════════════════════════════════════════════════════
 
