@@ -223,6 +223,61 @@ async function fetchIvyPosition(ticker: string): Promise<{
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// PORTFOLIO POSITION HEALTH — price vs 200-DMA, slope, daily change
+// Reuses the exact same avg/slope math already proven on the SPX tiles.
+// ═══════════════════════════════════════════════════════════════════
+
+type PositionMetrics = {
+  ticker: string;
+  price: number | null;
+  dailyChangePct: number | null;
+  dma200: number | null;
+  slope200: number | null;
+  pctVs200: number | null;
+  error?: string;
+};
+
+async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
+  // 380 calendar days covers 200 trading days for the DMA itself, plus the
+  // extra ~20 trading days of lookback the slope calc needs beyond that.
+  const chart = await fetchChart(ticker, 380);
+
+  if (chart.error || chart.closes.length < 220) {
+    return {
+      ticker,
+      price: null,
+      dailyChangePct: null,
+      dma200: null,
+      slope200: null,
+      pctVs200: null,
+      error: chart.error ?? `${ticker}: insufficient price history for 200-DMA`,
+    };
+  }
+
+  const closes = chart.closes;
+  const price: number | null = chart.meta.regularMarketPrice ?? closes[closes.length - 1] ?? null;
+  const prevClose: number | null =
+    closes.length >= 2 ? closes[closes.length - 2] : chart.meta.chartPreviousClose ?? null;
+  const dailyChangePct: number | null =
+    price != null && prevClose != null ? ((price - prevClose) / prevClose) * 100 : null;
+
+  const dma200: number = avg(closes.slice(-200));
+  const dma200_prev: number | null = closes.length >= 220 ? avg(closes.slice(-220, -20)) : null;
+  const slope200: number | null =
+    dma200_prev != null ? ((dma200 - dma200_prev) / dma200_prev) * 100 : null;
+  const pctVs200: number | null = price != null ? ((price - dma200) / dma200) * 100 : null;
+
+  console.log(
+    `${ticker}: price=${price} 200dma=${dma200.toFixed(2)} slope=${slope200?.toFixed(2)}% vs200=${pctVs200?.toFixed(2)}%`
+  );
+
+  return { ticker, price, dailyChangePct, dma200, slope200, pctVs200 };
+}
+
+// Update this list when the GLDM → SCHD swap executes.
+const POSITION_TICKERS = ["VTI", "SCHD", "VEA", "SGOV", "VTIP", "VGIT", "GLDM"] as const;
+
 export async function GET() {
   const diagnostics: Record<string, string> = {};
 
@@ -246,30 +301,42 @@ export async function GET() {
   };
   // ═══════════════════════════════════════════════════════════════════
 
-  const [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthChart] = await Promise.all([
-    fetchChart("^GSPC", 420),
-    fetchChart("^VIX", 5),
-    fetchChart("DX-Y.NYB", 5),
-    fetchChart("^CPCE", 5),
-    fetchFred("DFII10"),
-    fetchFred("DGS10"),
-    fetchFred("BAMLH0A0HYM2"),
-    fetchFred("T10Y2Y"),
-    fetchFred("FEDFUNDS"),
-    fetchFred("T5YIE"),
-    fetchPE(),
-    fetchCape(),
-    fetchFearGreed(),
-    fetchIvyPosition("VTI"),
-    fetchIvyPosition("VEU"),
-    fetchIvyPosition("IEF"),
-    fetchIvyPosition("VNQ"),
-    fetchIvyPosition("DBC"),
-    fetchFred("WALCL", 2),
-    fetchChart("^DJT", 420),
-    fetchChart("BZ=F", 5),
-    fetchChart("^SPXA200R", 5),
+  const [
+    [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthChart],
+    positionResults,
+  ] = await Promise.all([
+    Promise.all([
+      fetchChart("^GSPC", 420),
+      fetchChart("^VIX", 5),
+      fetchChart("DX-Y.NYB", 5),
+      fetchChart("^CPCE", 5),
+      fetchFred("DFII10"),
+      fetchFred("DGS10"),
+      fetchFred("BAMLH0A0HYM2"),
+      fetchFred("T10Y2Y"),
+      fetchFred("FEDFUNDS"),
+      fetchFred("T5YIE"),
+      fetchPE(),
+      fetchCape(),
+      fetchFearGreed(),
+      fetchIvyPosition("VTI"),
+      fetchIvyPosition("VEU"),
+      fetchIvyPosition("IEF"),
+      fetchIvyPosition("VNQ"),
+      fetchIvyPosition("DBC"),
+      fetchFred("WALCL", 2),
+      fetchChart("^DJT", 420),
+      fetchChart("BZ=F", 5),
+      fetchChart("^SPXA200R", 5),
+    ]),
+    Promise.all(POSITION_TICKERS.map((t) => fetchPositionMetrics(t))),
   ]);
+
+  const positions: Record<string, PositionMetrics> = {};
+  for (const p of positionResults) {
+    positions[p.ticker] = p;
+    if (p.error) diagnostics[`position_${p.ticker.toLowerCase()}`] = p.error;
+  }
 
   if (spx.error) diagnostics["spx"] = spx.error;
   if (vix.error) diagnostics["vix"] = vix.error;
@@ -347,11 +414,6 @@ export async function GET() {
     spxPrice != null && spxPrevClose != null
       ? ((spxPrice - spxPrevClose) / spxPrevClose) * 100
       : null;
-
-  function avg(arr: number[]) {
-    const clean = arr.filter((n) => Number.isFinite(n));
-    return clean.reduce((s, n) => s + n, 0) / clean.length;
-  }
 
   const spx20dma = spxCloses.length >= 20 ? avg(spxCloses.slice(-20)) : null;
   const spx50dma = spxCloses.length >= 50 ? avg(spxCloses.slice(-50)) : null;
@@ -589,6 +651,7 @@ export async function GET() {
         vnq: { price: ivyVNQ.price, sma: ivyVNQ.sma, variance: ivyVNQ.variancePct, signal: ivyVNQ.signal },
         dbc: { price: ivyDBC.price, sma: ivyDBC.sma, variance: ivyDBC.variancePct, signal: ivyDBC.signal },
       },
+      positions,
     },
   }, { status: 200 });
 }
