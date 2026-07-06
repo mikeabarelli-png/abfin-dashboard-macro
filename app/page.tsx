@@ -230,14 +230,18 @@ export default function Page() {
   const toneColor = (tone: string) => ({ danger: "#ff6b88", warning: "#fbbf24", healthy: "#4ade80", neutral: "#94a3b8" }[tone] ?? "#94a3b8");
 
   // Portfolio holdings — weights per current construction, GLDM exit pending
+  // "trend" sleeve is judged against the 200-DMA, same as SPX.
+  // "defensive" sleeve (capital preservation / cash-like) isn't supposed to
+  // trend, so it skips the Bullish/Bearish verdict entirely and just shows
+  // the numbers: price, YTD total return, and 200-DMA gap for reference.
   const PORTFOLIO_POSITIONS = [
-    { ticker: "VTIP", weight: 20, job: "Inflation protection" },
-    { ticker: "SGOV", weight: 20, job: "Capital preservation, yield" },
-    { ticker: "VEA",  weight: 15, job: "International equity, valuation discount" },
-    { ticker: "VGIT", weight: 15, job: "Intermediate duration" },
-    { ticker: "SCHD", weight: 15, job: "Quality equity, lower vol" },
-    { ticker: "VTI",  weight: 10, job: "Broad US market exposure" },
-    { ticker: "GLDM", weight: 5,  job: "Hard asset hedge — exit pending" },
+    { ticker: "VTIP", weight: 20, job: "Inflation protection",                    sleeve: "defensive" as const },
+    { ticker: "SGOV", weight: 20, job: "Capital preservation, yield",             sleeve: "defensive" as const },
+    { ticker: "VEA",  weight: 15, job: "International equity, valuation discount", sleeve: "trend" as const },
+    { ticker: "VGIT", weight: 15, job: "Intermediate duration",                   sleeve: "defensive" as const },
+    { ticker: "SCHD", weight: 15, job: "Quality equity, lower vol",               sleeve: "trend" as const },
+    { ticker: "VTI",  weight: 10, job: "Broad US market exposure",                sleeve: "trend" as const },
+    { ticker: "GLDM", weight: 5,  job: "Hard asset hedge — exit pending",         sleeve: "trend" as const },
   ];
 
   const positionCards = PORTFOLIO_POSITIONS.map(p => {
@@ -247,6 +251,7 @@ export default function Page() {
     const dma200: number | null = d?.dma200 ?? null;
     const slope200: number | null = d?.slope200 ?? null;
     const pctVs200: number | null = d?.pctVs200 ?? null;
+    const ytdReturnPct: number | null = d?.ytdReturnPct ?? null;
     const state = positionDmaState(pctVs200, slope200, dailyPct, true);
     const tone = positionDmaTone(pctVs200, slope200, dailyPct, true);
     const color = toneColor(tone);
@@ -254,7 +259,7 @@ export default function Page() {
     // an outsized move never pushes the dot off the track.
     const clampedPct = pctVs200 == null ? 0 : Math.max(-15, Math.min(15, pctVs200));
     const barPos = 50 + (clampedPct / 15) * 50;
-    return { ...p, price, dailyPct, dma200, slope200, pctVs200, state, tone, color, barPos };
+    return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, state, tone, color, barPos };
   });
 
   const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" }
@@ -1232,12 +1237,45 @@ RESPONSE RULES:
             <div className="panelHeader">
               <div>
                 <div className="panelTitle">Portfolio Position Health</div>
-                <div className="panelSub">Price vs 200-DMA per holding · same 5-state engine as the SPX tiles above · green = no action needed</div>
+                <div className="panelSub">Trend sleeve judged vs 200-DMA · defensive sleeve shown by YTD return, no trend verdict</div>
               </div>
               <div className="pstamp">LIVE · Yahoo Finance</div>
             </div>
             <div className="grid5">
               {positionCards.map(p => {
+                const ytdLabel = p.ytdReturnPct != null ? `${p.ytdReturnPct >= 0 ? "+" : ""}${p.ytdReturnPct.toFixed(1)}%` : "—";
+
+                if (p.sleeve === "defensive") {
+                  // No status word, no colored verdict, no bar. This sleeve
+                  // isn't supposed to trend, so judging it against a 200-DMA
+                  // gap is the wrong question. Just the numbers.
+                  return (
+                    <div key={p.ticker} className="tile" style={{ position:"relative", borderTop:"2px solid rgba(148,163,184,0.35)" }}>
+                      <div className="tileTop">
+                        <span className="lbl">{p.ticker} · {p.weight}%</span>
+                      </div>
+                      <div style={{ fontSize:11, color:"#64748b", marginBottom:6, marginTop:-4 }}>{p.job}</div>
+                      <div className="valHero" style={{ fontSize:26 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
+
+                      <div style={{ display:"flex", gap:14, marginTop:10 }}>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD Return</div>
+                          <div style={{ fontSize:15, fontWeight:700, color:"#cbd5e1" }}>{ytdLabel}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>vs 200-DMA</div>
+                          <div style={{ fontSize:15, fontWeight:700, color:"#cbd5e1" }}>
+                            {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}%` : "—"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="sub" style={{ marginTop:8 }}>
+                        {p.dma200 != null ? `200-DMA $${p.dma200.toFixed(2)}` : "Loading"}
+                      </div>
+                    </div>
+                  );
+                }
+
                 const barPos = Math.max(2, Math.min(p.barPos, 98));
                 return (
                   <div
@@ -1252,6 +1290,7 @@ RESPONSE RULES:
                     <div style={{ fontSize:11, color:"#64748b", marginBottom:6, marginTop:-4 }}>{p.job}</div>
                     <div className="valHero" style={{ fontSize:26 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
                     <div className="status" style={{ color:p.color }}>{p.state}</div>
+                    <div style={{ fontSize:11, color:"#64748b", marginTop:2 }}>YTD {ytdLabel}</div>
 
                     <div style={{ position:"relative", height:6, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)", marginTop:12, marginBottom:4 }}>
                       <div style={{ position:"absolute", left:"50%", top:-4, width:2, height:14, background:"#fff" }} />
