@@ -16,7 +16,13 @@ function avg(arr: number[]): number {
 async function fetchChart(
   ticker: string,
   days: number
-): Promise<{ closes: number[]; meta: Record<string, any>; error?: string }> {
+): Promise<{
+  closes: number[];
+  meta: Record<string, any>;
+  timestamps: number[];
+  adjcloses: (number | null)[];
+  error?: string;
+}> {
   const end = Math.floor(Date.now() / 1000);
   const start = end - days * 24 * 60 * 60;
   const url = `${BASE}/${encodeURIComponent(ticker)}?period1=${start}&period2=${end}&interval=1d&includePrePost=false`;
@@ -35,21 +41,36 @@ async function fetchChart(
     if (!res.ok) {
       const preview = await res.text().catch(() => "");
       console.error(`${ticker} error body: ${preview.slice(0, 200)}`);
-      return { closes: [], meta: {}, error: `Yahoo ${ticker}: HTTP ${res.status}` };
+      return { closes: [], meta: {}, timestamps: [], adjcloses: [], error: `Yahoo ${ticker}: HTTP ${res.status}` };
     }
     const data = await res.json();
     const result = data?.chart?.result?.[0];
-    if (!result) return { closes: [], meta: {}, error: `${ticker}: no chart result` };
+    if (!result) return { closes: [], meta: {}, timestamps: [], adjcloses: [], error: `${ticker}: no chart result` };
+    const rawTimestamps: number[] = result.timestamp ?? [];
     const rawCloses: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
-    const closes = rawCloses
-      .filter((c): c is number => c != null && Number.isFinite(c))
-      .map((c) => Math.round(c * 100) / 100);
+    // Dividend/split-adjusted close — only reliable input for a total-return
+    // calculation. NOT used for DMA/slope math, which needs the raw close
+    // a chart actually shows.
+    const rawAdjCloses: (number | null)[] = result.indicators?.adjclose?.[0]?.adjclose ?? [];
+
+    const closes: number[] = [];
+    const timestamps: number[] = [];
+    const adjcloses: (number | null)[] = [];
+    for (let i = 0; i < rawCloses.length; i++) {
+      const c = rawCloses[i];
+      if (c != null && Number.isFinite(c)) {
+        closes.push(Math.round(c * 100) / 100);
+        timestamps.push(rawTimestamps[i]);
+        const ac = rawAdjCloses[i];
+        adjcloses.push(ac != null && Number.isFinite(ac) ? Math.round(ac * 100) / 100 : null);
+      }
+    }
     console.log(`${ticker} closes: ${closes.length} points`);
-    return { closes, meta: result.meta ?? {} };
+    return { closes, meta: result.meta ?? {}, timestamps, adjcloses };
   } catch (err: any) {
     const msg = err?.name === "AbortError" ? `${ticker}: request timed out` : `${ticker}: ${err?.message}`;
     console.error(msg);
-    return { closes: [], meta: {}, error: msg };
+    return { closes: [], meta: {}, timestamps: [], adjcloses: [], error: msg };
   } finally {
     clearTimeout(timer);
   }
@@ -235,12 +256,15 @@ type PositionMetrics = {
   dma200: number | null;
   slope200: number | null;
   pctVs200: number | null;
+  ytdReturnPct: number | null;
   error?: string;
 };
 
 async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
   // 380 calendar days covers 200 trading days for the DMA itself, plus the
   // extra ~20 trading days of lookback the slope calc needs beyond that.
+  // It also comfortably reaches back before Jan 1 of the current year, so
+  // the same fetch covers the YTD return calc with no second network call.
   const chart = await fetchChart(ticker, 380);
 
   if (chart.error || chart.closes.length < 220) {
@@ -251,6 +275,7 @@ async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
       dma200: null,
       slope200: null,
       pctVs200: null,
+      ytdReturnPct: null,
       error: chart.error ?? `${ticker}: insufficient price history for 200-DMA`,
     };
   }
@@ -268,11 +293,26 @@ async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
     dma200_prev != null ? ((dma200 - dma200_prev) / dma200_prev) * 100 : null;
   const pctVs200: number | null = price != null ? ((price - dma200) / dma200) * 100 : null;
 
+  // YTD total return — dividend-adjusted close at the first trading day of
+  // the current calendar year, vs today's live price. Using adjclose at the
+  // start and live price at the end is the standard total-return method:
+  // the most recent adjclose already equals the most recent raw close, so
+  // pairing live price with it loses nothing and stays maximally current.
+  const currentYear = new Date().getUTCFullYear();
+  const ytdStartIdx = chart.timestamps.findIndex(
+    (t) => new Date(t * 1000).getUTCFullYear() === currentYear
+  );
+  const startAdjClose = ytdStartIdx >= 0 ? chart.adjcloses[ytdStartIdx] : null;
+  const ytdReturnPct: number | null =
+    startAdjClose != null && price != null && startAdjClose !== 0
+      ? ((price - startAdjClose) / startAdjClose) * 100
+      : null;
+
   console.log(
-    `${ticker}: price=${price} 200dma=${dma200.toFixed(2)} slope=${slope200?.toFixed(2)}% vs200=${pctVs200?.toFixed(2)}%`
+    `${ticker}: price=${price} 200dma=${dma200.toFixed(2)} slope=${slope200?.toFixed(2)}% vs200=${pctVs200?.toFixed(2)}% ytd=${ytdReturnPct?.toFixed(2)}%`
   );
 
-  return { ticker, price, dailyChangePct, dma200, slope200, pctVs200 };
+  return { ticker, price, dailyChangePct, dma200, slope200, pctVs200, ytdReturnPct, error: chart.error };
 }
 
 // Update this list when the GLDM → SCHD swap executes.
