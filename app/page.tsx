@@ -134,6 +134,9 @@ export default function Page() {
   // Live Ivy Portfolio data from route.ts
   const ivyData = metrics?.ivy ?? marketData?.ivy ?? null;
 
+  // Live per-position 200-DMA data from route.ts
+  const positionsData: AnyObj = metrics?.positions ?? marketData?.positions ?? {};
+
   // Official last month-end signals — update each month when Advisor Perspectives publishes
   // Source: advisorperspectives.com/dshort · Last updated: May 31, 2026
   // VTI: Invested (+10.7%) · VEU: Invested (+11.7%) · IEF: Invested (0.0% — yellow) · VNQ: Invested (+5.6%) · DBC: Invested (+18.7%)
@@ -203,7 +206,56 @@ export default function Page() {
     if (slope != null && slope > 0.02) return "healthy";
     return "healthy"; // above DMA is always at minimum healthy
   };
+
+  // Position-level version of the same 5-state engine above — takes the
+  // POSITION's own daily change instead of closing over spxDailyPct, since
+  // each holding's Recovering-vs-Bearish call must be based on its own tape,
+  // not what the S&P did today. Same thresholds, same logic, own inputs.
+  const positionDmaState = (pct: number | null, slope: number | null, dailyPct: number | null, isLong = false) => {
+    if (pct == null) return "Loading";
+    if (pct < 0) {
+      return (dailyPct != null && dailyPct > 0) ? "Recovering" : "Bearish";
+    }
+    if (isLong && pct <= 2) return "Testing Support";
+    if (slope != null && slope > 0.02) return "Bullish";
+    return "Holding Above";
+  };
+  const positionDmaTone = (pct: number | null, slope: number | null, dailyPct: number | null, isLong = false) => {
+    if (pct == null) return "neutral";
+    if (pct < 0) return (dailyPct != null && dailyPct > 0) ? "warning" : "danger";
+    if (isLong && pct <= 2) return "warning";
+    if (slope != null && slope > 0.02) return "healthy";
+    return "healthy";
+  };
   const toneColor = (tone: string) => ({ danger: "#ff6b88", warning: "#fbbf24", healthy: "#4ade80", neutral: "#94a3b8" }[tone] ?? "#94a3b8");
+
+  // Portfolio holdings — weights per current construction, GLDM exit pending
+  const PORTFOLIO_POSITIONS = [
+    { ticker: "VTIP", weight: 20, job: "Inflation protection" },
+    { ticker: "SGOV", weight: 20, job: "Capital preservation, yield" },
+    { ticker: "VEA",  weight: 15, job: "International equity, valuation discount" },
+    { ticker: "VGIT", weight: 15, job: "Intermediate duration" },
+    { ticker: "SCHD", weight: 15, job: "Quality equity, lower vol" },
+    { ticker: "VTI",  weight: 10, job: "Broad US market exposure" },
+    { ticker: "GLDM", weight: 5,  job: "Hard asset hedge — exit pending" },
+  ];
+
+  const positionCards = PORTFOLIO_POSITIONS.map(p => {
+    const d = positionsData?.[p.ticker] ?? null;
+    const price: number | null = d?.price ?? null;
+    const dailyPct: number | null = d?.dailyChangePct ?? null;
+    const dma200: number | null = d?.dma200 ?? null;
+    const slope200: number | null = d?.slope200 ?? null;
+    const pctVs200: number | null = d?.pctVs200 ?? null;
+    const state = positionDmaState(pctVs200, slope200, dailyPct, true);
+    const tone = positionDmaTone(pctVs200, slope200, dailyPct, true);
+    const color = toneColor(tone);
+    // Marker position on the bar: 0% gap = center (50%), clamp at ±15% so
+    // an outsized move never pushes the dot off the track.
+    const clampedPct = pctVs200 == null ? 0 : Math.max(-15, Math.min(15, pctVs200));
+    const barPos = 50 + (clampedPct / 15) * 50;
+    return { ...p, price, dailyPct, dma200, slope200, pctVs200, state, tone, color, barPos };
+  });
 
   const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" }
     : vixValue >= 30 ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" }
@@ -1978,30 +2030,45 @@ RESPONSE RULES:
             </div>
           </section>
 
-          {/* ⑦ VTI */}
+          {/* ⑦ PORTFOLIO POSITION HEALTH — live per-holding 200-DMA status */}
           <section className="panel">
-            <div className="panelHeader"><div><div className="panelTitle">VTI — Total Market Trend</div><div className="panelSub">Vanguard Total Market ETF · Key Moving Averages</div></div><div className="pstamp">LIVE · Yahoo Finance</div></div>
+            <div className="panelHeader">
+              <div>
+                <div className="panelTitle">Portfolio Position Health</div>
+                <div className="panelSub">Price vs 200-DMA per holding · same 5-state engine as the SPX tiles above · green = no action needed</div>
+              </div>
+              <div className="pstamp">LIVE · Yahoo Finance</div>
+            </div>
             <div className="grid5">
-              <div className="tile">
-                <div className="tileTop"><span className="lbl">VTI</span><span className="ytd">-2.4% YTD</span></div>
-                <div className="valHero">238.14</div>
-                <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline([248,245,244,244,241,242,240,237,238,238,237,235,234,238],"#ff6b88") }} />
-                <div className="subSpx">▲ 0.3% today</div>
-              </div>
-              {[{ label:"20-DMA", val:"242.80", sub:"VTI -1.9% below" }, { label:"50-DMA", val:"244.60", sub:"VTI -2.7% below" }, { label:"100-DMA", val:"241.10", sub:"VTI -1.2% below" }].map(d => (
-                <div key={d.label} className="tile">
-                  <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:"#ff4f72", color:"#fff" }}>!</span></div>
-                  <div className="valMuted">{d.val}</div>
-                  <div className="status" style={{ color:"#ff6b88" }}>Bearish</div>
-                  <div className="sub">{d.sub}</div>
-                </div>
-              ))}
-              <div className="tile tile200">
-                <div className="tileTop"><span className="lbl" style={{ color:"#f59e0b" }}>200-DMA</span><span className="badge" style={{ background:"#f59e0b", color:"#000" }}>!</span></div>
-                <div className="valHero">231.40</div>
-                <div className="status" style={{ color:"#fbbf24" }}>Testing Support</div>
-                <div className="sub" style={{ color:"#f59e0b" }}>VTI +2.9% above</div>
-              </div>
+              {positionCards.map(p => {
+                const barPos = Math.max(2, Math.min(p.barPos, 98));
+                return (
+                  <div
+                    key={p.ticker}
+                    className="tile"
+                    style={{ position:"relative", borderTop:`2px solid ${p.color}` }}
+                  >
+                    <div style={{ position:"absolute", top:11, right:11, width:9, height:9, borderRadius:"50%", background:p.color, boxShadow:`0 0 6px ${p.color}99` }} />
+                    <div className="tileTop" style={{ paddingRight:20 }}>
+                      <span className="lbl">{p.ticker} · {p.weight}%</span>
+                    </div>
+                    <div style={{ fontSize:11, color:"#64748b", marginBottom:6, marginTop:-4 }}>{p.job}</div>
+                    <div className="valHero" style={{ fontSize:26 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
+                    <div className="status" style={{ color:p.color }}>{p.state}</div>
+
+                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)", marginTop:12, marginBottom:4 }}>
+                      <div style={{ position:"absolute", left:"50%", top:-4, width:2, height:14, background:"#fff" }} />
+                      {p.pctVs200 != null && (
+                        <div style={{ position:"absolute", left:`${barPos}%`, top:-3, width:9, height:9, borderRadius:"50%", background:p.color, border:"2px solid #050a35", transform:"translateX(-50%)" }} />
+                      )}
+                    </div>
+                    <div className="sub">
+                      {p.dma200 != null ? `200-DMA $${p.dma200.toFixed(2)}` : "Loading"}
+                      {p.pctVs200 != null ? ` · ${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}%` : ""}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
 
