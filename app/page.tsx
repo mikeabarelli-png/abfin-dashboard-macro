@@ -1227,6 +1227,48 @@ RESPONSE RULES:
             ) : null}
           </section>
 
+          {/* ①-B PORTFOLIO POSITION HEALTH — live per-holding 200-DMA status */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div>
+                <div className="panelTitle">Portfolio Position Health</div>
+                <div className="panelSub">Price vs 200-DMA per holding · same 5-state engine as the SPX tiles above · green = no action needed</div>
+              </div>
+              <div className="pstamp">LIVE · Yahoo Finance</div>
+            </div>
+            <div className="grid5">
+              {positionCards.map(p => {
+                const barPos = Math.max(2, Math.min(p.barPos, 98));
+                return (
+                  <div
+                    key={p.ticker}
+                    className="tile"
+                    style={{ position:"relative", borderTop:`2px solid ${p.color}` }}
+                  >
+                    <div style={{ position:"absolute", top:11, right:11, width:9, height:9, borderRadius:"50%", background:p.color, boxShadow:`0 0 6px ${p.color}99` }} />
+                    <div className="tileTop" style={{ paddingRight:20 }}>
+                      <span className="lbl">{p.ticker} · {p.weight}%</span>
+                    </div>
+                    <div style={{ fontSize:11, color:"#64748b", marginBottom:6, marginTop:-4 }}>{p.job}</div>
+                    <div className="valHero" style={{ fontSize:26 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
+                    <div className="status" style={{ color:p.color }}>{p.state}</div>
+
+                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)", marginTop:12, marginBottom:4 }}>
+                      <div style={{ position:"absolute", left:"50%", top:-4, width:2, height:14, background:"#fff" }} />
+                      {p.pctVs200 != null && (
+                        <div style={{ position:"absolute", left:`${barPos}%`, top:-3, width:9, height:9, borderRadius:"50%", background:p.color, border:"2px solid #050a35", transform:"translateX(-50%)" }} />
+                      )}
+                    </div>
+                    <div className="sub">
+                      {p.dma200 != null ? `200-DMA $${p.dma200.toFixed(2)}` : "Loading"}
+                      {p.pctVs200 != null ? ` · ${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}%` : ""}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
           {/* ② STRESS CONFIRMATION */}
           <section className="panel">
             <div className="panelHeader">
@@ -2027,48 +2069,6 @@ RESPONSE RULES:
                 <div className="sub" style={{ marginTop:4 }}>3-mo: capitulating</div>
                 <span className="pillR">Oversold</span>
               </div>
-            </div>
-          </section>
-
-          {/* ⑦ PORTFOLIO POSITION HEALTH — live per-holding 200-DMA status */}
-          <section className="panel">
-            <div className="panelHeader">
-              <div>
-                <div className="panelTitle">Portfolio Position Health</div>
-                <div className="panelSub">Price vs 200-DMA per holding · same 5-state engine as the SPX tiles above · green = no action needed</div>
-              </div>
-              <div className="pstamp">LIVE · Yahoo Finance</div>
-            </div>
-            <div className="grid5">
-              {positionCards.map(p => {
-                const barPos = Math.max(2, Math.min(p.barPos, 98));
-                return (
-                  <div
-                    key={p.ticker}
-                    className="tile"
-                    style={{ position:"relative", borderTop:`2px solid ${p.color}` }}
-                  >
-                    <div style={{ position:"absolute", top:11, right:11, width:9, height:9, borderRadius:"50%", background:p.color, boxShadow:`0 0 6px ${p.color}99` }} />
-                    <div className="tileTop" style={{ paddingRight:20 }}>
-                      <span className="lbl">{p.ticker} · {p.weight}%</span>
-                    </div>
-                    <div style={{ fontSize:11, color:"#64748b", marginBottom:6, marginTop:-4 }}>{p.job}</div>
-                    <div className="valHero" style={{ fontSize:26 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
-                    <div className="status" style={{ color:p.color }}>{p.state}</div>
-
-                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)", marginTop:12, marginBottom:4 }}>
-                      <div style={{ position:"absolute", left:"50%", top:-4, width:2, height:14, background:"#fff" }} />
-                      {p.pctVs200 != null && (
-                        <div style={{ position:"absolute", left:`${barPos}%`, top:-3, width:9, height:9, borderRadius:"50%", background:p.color, border:"2px solid #050a35", transform:"translateX(-50%)" }} />
-                      )}
-                    </div>
-                    <div className="sub">
-                      {p.dma200 != null ? `200-DMA $${p.dma200.toFixed(2)}` : "Loading"}
-                      {p.pctVs200 != null ? ` · ${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}%` : ""}
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </section>
 
