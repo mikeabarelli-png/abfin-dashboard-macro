@@ -138,13 +138,13 @@ export default function Page() {
   const positionsData: AnyObj = metrics?.positions ?? marketData?.positions ?? {};
 
   // Official last month-end signals — update each month when Advisor Perspectives publishes
-  // Source: advisorperspectives.com/dshort · Last updated: May 31, 2026
-  // VTI: Invested (+10.7%) · VEU: Invested (+11.7%) · IEF: Invested (0.0% — yellow) · VNQ: Invested (+5.6%) · DBC: Invested (+18.7%)
+  // Source: advisorperspectives.com/dshort · Last updated: Jun 30, 2026
+  // VTI: Invested (+8.5%) · VEU: Invested (+9.5%) · IEF: Cash (-0.1%, closed below 10-mo SMA) · VNQ: Invested (+6.4%) · DBC: Invested (+5.1%)
   const ivyOfficialSignals: Record<string, "Invest" | "Cash"> = {
-    vti: "Invest", veu: "Invest", ief: "Invest", vnq: "Invest", dbc: "Invest"
+    vti: "Invest", veu: "Invest", ief: "Cash", vnq: "Invest", dbc: "Invest"
   };
-  const ivyOfficialDate = "May 31";
-  const ivyEOMDate = "Jun 30";
+  const ivyOfficialDate = "Jun 30";
+  const ivyEOMDate = "Jul 31";
 
   const ivyPositions = [
     { ticker:"VTI", name:"US Stocks",     key:"vti" },
@@ -354,7 +354,7 @@ CORE FRAMEWORKS YOU APPLY:
   RULE 4 — FOLLOW THE TREND: 80% of portfolio performance is determined by the long-term monthly trend. In a bull market, be LONG or NEUTRAL. In a bear market, be NEUTRAL or short. The 200-DMA defines the regime. Currently: 200-DMA rising at +1.6%, SPX +11% above it. Trend is BULL. Correct posture: Long + Neutral (currently 40% Long + 60% Neutral). Do NOT short the trend. Do NOT add aggressively at extremes.
   RULE 8 — FUNDAMENTALS CONFIRMED BY PRICE: When fundamental story and price action diverge, sit on your hands. Currently: Price action is BULLISH (new ATH, momentum intact). Fundamentals are BEARISH (CAPE 42x, Buffett 2.6σ, ERP 2.07%). This divergence means hold current exposure — don't add and don't reduce unless the trigger fires.
   RULE 10 — POSITION FOR THE REGIME: Long or Neutral in a bull market. Never short a bull trend. The regime is defined by the 200-DMA, not by valuation. This investor is correctly positioned: 40% Long (equity) + 60% Neutral (SGOV/VTIP/VGIT). That IS the rule in practice.
-  RULE 11 — AT EXTREMES, DO THE OPPOSITE: When cover of every magazine is bullish, take some off the table. When panic is maximum, start scaling in. Currently: Fear & Greed at 67 (Greed zone, not Extreme Greed yet). Consumer Confidence still at -2.90σ (still fearful). Not yet at the extreme that triggers the fade. Watch for Fear & Greed approaching 85+ as the signal to reduce equity.
+  RULE 11 — AT EXTREMES, DO THE OPPOSITE: When cover of every magazine is bullish, take some off the table. When panic is maximum, start scaling in. Currently: Fear & Greed at 67 (Greed zone, not Extreme Greed yet). Consumer Confidence still at -2.40σ (still fearful, though less extreme than a month ago). Not yet at the extreme that triggers the fade. Watch for Fear & Greed approaching 85+ as the signal to reduce equity.
   RULE 15 — MANAGE RISK FIRST, RETURNS ARE A BYPRODUCT: A 50% loss requires a 100% gain to recover. A 20% loss requires only 25%. This investor with 5 years to retirement cannot afford the 50% scenario. Every recommendation must answer: what is the maximum drawdown of this position, and can this investor recover from it on their timeline? SGOV at 60% of portfolio means maximum drawdown from fixed income is minimal. The equity sleeve at 40% in a 50% bear market = 20% total portfolio loss. Recoverable. At 60% equity in same bear = 30% total loss. Harder to recover with 5 years of runway.
   RULE 3 — EMOTION VOIDS PROCESS: If the recommendation changes because the market just went up 18% in 8 weeks, that is an emotional decision. FOMO is not a framework. The planner saying "invest like a grandma" is social pressure, not data. The composite score is the framework. Follow it.
   RULE 5 — TRADING OPPORTUNITY vs LONG-TERM INVESTMENT: SGOV at 5% yield is a tactical position tied to the current rate environment. When Fed cuts and T-bill yields fall to 3%, the calculus changes. SGOV is not a permanent allocation — it is the right allocation NOW. Monitor and adjust when the rate regime shifts.
@@ -388,8 +388,8 @@ CURRENT DASHBOARD DATA (live):
 - Fed Balance Sheet (WALCL): ${walclBn != null ? `$${(walclBn/1000).toFixed(2)}T` : "loading"}${walclChgBn != null ? ` · ${walclChgBn > 0 ? "▲" : "▼"} $${Math.abs(walclChgBn)}B WoW · ${walclDirection}` : ""}
 - Dow Transports (DJT): ${djtPrice != null ? fmtWhole(djtPrice) : "loading"} vs 200-DMA ${djt200dma != null ? fmtWhole(djt200dma) : "—"} (${djtVs200 != null ? `${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : "?"}) · Slope: ${djt200slope != null ? `${djt200slope > 0 ? "↗" : "↘"} ${djt200slope.toFixed(1)}%` : "—"}
 - Schannep 2-of-3 Signal: ${schannepLabel} — ${schannepSignal === "non_confirmation_bear" ? "SPX broken but DJT not confirming — watch closely" : schannepSignal === "bear" ? "Both indices below 200-DMA — strongest bear signal" : schannepSignal === "non_confirmation_bull" ? "DJT holding, potential recovery setup" : "Both confirming bull"}
-- Ivy Portfolio: ${ivyInvestedCount}/5 assets Invested · VTI and VNQ flipped to Cash at Mar 31 close · ${ivyPositions.filter(p => p.variance != null && Math.abs(p.variance) < 2).map(p => p.ticker + " NEAR SIGNAL").join(", ") || "No positions near signal line"}
-- Valuation models: 4/5 overvalued
+- Ivy Portfolio: ${ivyInvestedCount}/5 assets Invested · ${ivyPositions.filter(p => p.officialSignal === "Cash").map(p => p.ticker).join(", ") || "none"} in Cash as of ${ivyOfficialDate} close · ${ivyPositions.filter(p => p.variance != null && Math.abs(p.variance) < 2).map(p => p.ticker + " NEAR SIGNAL").join(", ") || "No positions near signal line"}
+- Valuation models: 5 of 6 overvalued (4 Strongly Overvalued, 1 Overvalued) · only Earnings Yield Gap reads Fairly Valued
 
 RESPONSE RULES:
 - Always use actual numbers from the dashboard — never speak in generalities
@@ -2124,12 +2124,12 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.73", color:"#ff6b88" },
-                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.39", color:"#ff6b88" },
-                  { name:"Price/Sales",            rating:"Strongly Overvalued", score:"2.50", color:"#ff6b88" },
-                  { name:"Interest Rate Model",    rating:"Strongly Overvalued", score:"2.07", color:"#ff6b88" },
-                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.53", color:"#ff6b88" },
-                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.49", color:"#94a3b8", muted:true },
+                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.48", color:"#ff6b88" },
+                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.20", color:"#ff6b88" },
+                  { name:"Price/Sales",            rating:"Strongly Overvalued", score:"2.00", color:"#ff6b88" },
+                  { name:"Interest Rate Model",    rating:"Overvalued",          score:"1.96", color:"#fbbf24" },
+                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.38", color:"#ff6b88" },
+                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.29", color:"#94a3b8", muted:true },
                 ].map(r => (
                   <tr key={r.name} style={{ opacity:(r as any).muted?0.4:1 }}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:(r as any).muted?"italic":"normal" }}>{r.name}</td>
@@ -2141,9 +2141,9 @@ RESPONSE RULES:
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Valuation Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>5 of 5 Strongly Overvalued · May 31 · Historic extreme</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>4 of 5 Strongly Overvalued · Jul 17 · Historically stretched</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>All 5 valuation models now Strongly Overvalued — first time all 5 simultaneously at this rating. Buffett 2.73σ exceeds dot-com peak. CAPE 42.78x approaching all-time high of 44.19x.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Interest Rate Model eased to Overvalued from Strongly Overvalued, ending the run of all 5 models at the top tier. Buffett 2.48σ and CAPE 40.94x remain deep in Strongly Overvalued territory, below but still near the 2000 dot-com extremes.</span>
             </div>
 
             {/* Recession Models */}
@@ -2152,9 +2152,9 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Yield Curve",       rating:"Very High Risk", score:"2.56",  color:"#ff6b88", updated:"May 31" },
-                  { name:"Sahm Rule",         rating:"Normal",         score:"N/A",   color:"#4ade80", updated:"Apr 30" },
-                  { name:"State Coincidence", rating:"Normal",         score:"-4.33", color:"#4ade80", updated:"Apr 30" },
+                  { name:"Yield Curve",       rating:"Very High Risk", score:"2.56",  color:"#ff6b88", updated:"Jul 17" },
+                  { name:"Sahm Rule",         rating:"Normal",         score:"N/A",   color:"#4ade80", updated:"Jun 30" },
+                  { name:"State Coincidence", rating:"Normal",         score:"-0.24", color:"#4ade80", updated:"May 31" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -2213,11 +2213,11 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Economic Uncertainty Index", rating:"Pessimistic",      score:"1.71",  color:"#fbbf24", updated:"May 29", note:"elevated uncertainty" },
-                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-3.20", color:"#4ade80", updated:"May 22", note:"contrarian bullish" },
-                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.48",  color:"#fbbf24", updated:"Apr 30", note:"still elevated" },
-                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.99",  color:"#94a3b8", updated:"May 31", note:"tightening" },
-                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.47", color:"#94a3b8", updated:"May 31", note:"below 20 — calm" },
+                  { name:"Economic Uncertainty Index", rating:"Pessimistic",      score:"1.55",  color:"#fbbf24", updated:"Jul 17", note:"elevated uncertainty" },
+                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.40", color:"#4ade80", updated:"Jul 17", note:"contrarian bullish" },
+                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.57",  color:"#fbbf24", updated:"May 31", note:"still elevated" },
+                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.99",  color:"#94a3b8", updated:"Jul 17", note:"tightening" },
+                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.34", color:"#94a3b8", updated:"Jul 17", note:"below 20 — calm" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -2237,7 +2237,7 @@ RESPONSE RULES:
               <span className="sumBarLabel">Sentiment Signal</span>
               <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism — Contrarian Bullish · May 31</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Consumer Confidence deepened to -3.20σ — historically extreme fear. Economic Uncertainty eased to Pessimistic from Very Pessimistic. VIX normalized further to -0.47σ. Contrarian signal remains intact.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Consumer Confidence improved slightly to -2.40σ from -3.20σ, still historically pessimistic. Economic Uncertainty eased to 1.55σ, still Pessimistic. VIX ticked up to -0.34σ, less complacent than last month but still calm. Contrarian signal remains intact.</span>
             </div>
           </section>
 
@@ -2340,10 +2340,10 @@ RESPONSE RULES:
                     <span style={{ fontSize:15, flexShrink:0 }}>🔴</span>
                     <div>
                       <div style={{ fontSize:12, fontWeight:700, color:"#ff6b88", marginBottom:3 }}>
-                        {confirmedCash.length} position{confirmedCash.length > 1 ? "s" : ""} flipped to Cash — Mar 31 official signal
+                        {confirmedCash.length} position{confirmedCash.length > 1 ? "s" : ""} flipped to Cash — {ivyOfficialDate} official signal
                       </div>
                       <div style={{ fontSize:12, color:"#fca5a5", lineHeight:1.6 }}>
-                        <strong>{confirmedCash.join(", ")}</strong> closed below their 10-month SMA at Mar 31 month-end. Ivy rule now signals <strong>Cash</strong> for these positions. Signal valid until Apr 30 close. Next action: monitor {ivyEOMDate} for potential re-entry if price reclaims SMA.
+                        <strong>{confirmedCash.join(", ")}</strong> closed below their 10-month SMA at {ivyOfficialDate} month-end. Ivy rule now signals <strong>Cash</strong> for these positions. Signal valid until {ivyEOMDate} close. Next action: monitor {ivyEOMDate} for potential re-entry if price reclaims SMA.
                       </div>
                     </div>
                   </div>
@@ -2352,9 +2352,9 @@ RESPONSE RULES:
                   <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
                     <span style={{ fontSize:15, flexShrink:0 }}>⚠️</span>
                     <div>
-                      <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:3 }}>Apr 30 flip risk</div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:3 }}>{ivyEOMDate} flip risk</div>
                       <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>
-                        <strong>{pendingRisk.map(p => p.ticker).join(", ")}</strong> currently trading below SMA but officially still Invested. If below at Apr 30 close, signal flips to Cash.
+                        <strong>{pendingRisk.map(p => p.ticker).join(", ")}</strong> currently trading below SMA but officially still Invested. If below at {ivyEOMDate} close, signal flips to Cash.
                       </div>
                     </div>
                   </div>
