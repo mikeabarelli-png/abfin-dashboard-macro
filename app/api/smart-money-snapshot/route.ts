@@ -324,8 +324,8 @@ export async function GET() {
   // ═══════════════════════════════════════════════════════════════════
   // SATURDAY MANUAL UPDATE CHECKLIST — update every weekend
   // ═══════════════════════════════════════════════════════════════════
-  const MANUAL_CAPE_FALLBACK       = 40.70;    // multpl.com/shiller-pe          · Jun 26 2026
-  const MANUAL_BUFFETT_SIGMA       = 2.45;     // currentmarketvaluation.com     · Jun 26 2026
+  const MANUAL_CAPE_FALLBACK       = 40.94;    // multpl.com/shiller-pe          · Jul 22 2026
+  const MANUAL_BUFFETT_SIGMA       = 2.48;     // currentmarketvaluation.com     · Jul 17 2026
   const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 26 2026
   const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 26 2026
   const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
