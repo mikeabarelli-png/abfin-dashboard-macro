@@ -274,8 +274,8 @@ export default function Page() {
 
   // Benchmarks — SPX already computed elsewhere as spxYtd; VBINX (Vanguard
   // 60/40 Balanced Index) comes from route.ts using the same YTD method.
-  const vbinxYtdPct = getNum(metrics?.benchmark_vbinx?.ytd_return_pct, marketData?.benchmark_vbinx?.ytd_return_pct);
-  const vbinxPrice = getNum(metrics?.benchmark_vbinx?.price, marketData?.benchmark_vbinx?.price);
+  const benchmark6040YtdPct = getNum(metrics?.benchmark_6040?.ytd_return_pct, marketData?.benchmark_6040?.ytd_return_pct);
+  const benchmark4060YtdPct = getNum(metrics?.benchmark_4060?.ytd_return_pct, marketData?.benchmark_4060?.ytd_return_pct);
 
   const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" }
     : vixValue >= 30 ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" }
@@ -1259,28 +1259,36 @@ RESPONSE RULES:
 
             {/* Performance vs benchmarks — portfolio YTD is an ESTIMATE: weight
                 × each position's own YTD return, held constant since Jan 1.
-                Will drift from actual brokerage-reported return if rebalanced. */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:10 }}>
+                Will drift from actual brokerage-reported return if rebalanced.
+                Grid5 matches the tile width of the position cards below. */}
+            <div className="grid5" style={{ marginBottom:10 }}>
               <div className="tile">
                 <div className="lbl">Your Portfolio · YTD (est.)</div>
-                <div className="valHero" style={{ fontSize:30, color: portfolioYtdPct == null ? "#fff" : portfolioYtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                <div className="valHero" style={{ fontSize:26, color: portfolioYtdPct == null ? "#fff" : portfolioYtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                   {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub">Weighted by current allocation · not your actual brokerage return</div>
+                <div className="sub">Weighted by current allocation · not brokerage return</div>
               </div>
               <div className="tile">
                 <div className="lbl">S&amp;P 500 · YTD</div>
-                <div className="valHero" style={{ fontSize:30, color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                <div className="valHero" style={{ fontSize:26, color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
                   {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
                 </div>
                 <div className="sub">{spxYtdIsTotalReturn ? "Total return, dividends included" : "Price only — total return series unavailable"}</div>
               </div>
               <div className="tile">
-                <div className="lbl">Vanguard 60/40 (VBINX) · YTD</div>
-                <div className="valHero" style={{ fontSize:30, color: vbinxYtdPct == null ? "#fff" : vbinxYtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  {vbinxYtdPct != null ? `${vbinxYtdPct >= 0 ? "+" : ""}${vbinxYtdPct.toFixed(1)}%` : "—"}
+                <div className="lbl">60/40 Index Proxy · YTD</div>
+                <div className="valHero" style={{ fontSize:26, color: benchmark6040YtdPct == null ? "#fff" : benchmark6040YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {benchmark6040YtdPct != null ? `${benchmark6040YtdPct >= 0 ? "+" : ""}${benchmark6040YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub">Total return, dividend-adjusted</div>
+                <div className="sub">60% VTI / 40% BND · same indices as VBINX</div>
+              </div>
+              <div className="tile">
+                <div className="lbl">40/60 Index Proxy · YTD</div>
+                <div className="valHero" style={{ fontSize:26, color: benchmark4060YtdPct == null ? "#fff" : benchmark4060YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div className="sub">40% VTI / 60% BND · closer to your actual posture</div>
               </div>
             </div>
 
