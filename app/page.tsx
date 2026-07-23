@@ -238,7 +238,7 @@ export default function Page() {
   const PORTFOLIO_POSITIONS = [
     { ticker: "VTIP", weight: 20, job: "Inflation protection",                    sleeve: "defensive" as const },
     { ticker: "SGOV", weight: 20, job: "Capital preservation, yield",             sleeve: "defensive" as const },
-    { ticker: "VEA",  weight: 15, job: "International equity, valuation discount", sleeve: "trend" as const },
+    { ticker: "VEA",  weight: 15, job: "International equity",                    sleeve: "trend" as const },
     { ticker: "VGIT", weight: 15, job: "Intermediate duration",                   sleeve: "defensive" as const },
     { ticker: "SCHD", weight: 15, job: "Quality equity, lower vol",               sleeve: "trend" as const },
     { ticker: "VTI",  weight: 10, job: "Broad US market exposure",                sleeve: "trend" as const },
@@ -1287,6 +1287,9 @@ RESPONSE RULES:
             <div className="grid5">
               {positionCards.map(p => {
                 const ytdLabel = p.ytdReturnPct != null ? `${p.ytdReturnPct >= 0 ? "+" : ""}${p.ytdReturnPct.toFixed(1)}%` : "—";
+                const todayLabel = p.dailyPct != null ? `${p.dailyPct >= 0 ? "+" : ""}${p.dailyPct.toFixed(1)}%` : "—";
+                const todayColor = p.dailyPct == null ? "#cbd5e1" : p.dailyPct >= 0 ? "#4ade80" : "#ff6b88";
+                const jobStyle: React.CSSProperties = { fontSize:11, color:"#64748b", marginBottom:8, marginTop:-4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" };
 
                 if (p.sleeve === "defensive") {
                   // No status word, no colored verdict, no bar. This sleeve
@@ -1297,23 +1300,21 @@ RESPONSE RULES:
                       <div className="tileTop">
                         <span className="lbl">{p.ticker} · {p.weight}%</span>
                       </div>
-                      <div style={{ fontSize:11, color:"#64748b", marginBottom:6, marginTop:-4 }}>{p.job}</div>
-                      <div className="valHero" style={{ fontSize:26 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
+                      <div style={jobStyle}>{p.job}</div>
+                      <div className="valHero" style={{ fontSize:24 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
 
-                      <div style={{ display:"flex", gap:14, marginTop:10 }}>
+                      <div style={{ display:"flex", gap:14, marginTop:8 }}>
                         <div>
-                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD Return</div>
-                          <div style={{ fontSize:15, fontWeight:700, color:"#cbd5e1" }}>{ytdLabel}</div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                          <div style={{ fontSize:15, fontWeight:700, color:p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{ytdLabel}</div>
                         </div>
                         <div>
-                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>vs 200-DMA</div>
-                          <div style={{ fontSize:15, fontWeight:700, color:"#cbd5e1" }}>
-                            {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}%` : "—"}
-                          </div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                          <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
                         </div>
                       </div>
                       <div className="sub" style={{ marginTop:8 }}>
-                        {p.dma200 != null ? `200-DMA $${p.dma200.toFixed(2)}` : "Loading"}
+                        {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}% vs 200-DMA` : "Loading"}
                       </div>
                     </div>
                   );
@@ -1330,20 +1331,33 @@ RESPONSE RULES:
                     <div className="tileTop" style={{ paddingRight:20 }}>
                       <span className="lbl">{p.ticker} · {p.weight}%</span>
                     </div>
-                    <div style={{ fontSize:11, color:"#64748b", marginBottom:6, marginTop:-4 }}>{p.job}</div>
-                    <div className="valHero" style={{ fontSize:26 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
-                    <div className="status" style={{ color:p.color }}>{p.state}</div>
-                    <div style={{ fontSize:11, color:"#64748b", marginTop:2 }}>YTD {ytdLabel}</div>
+                    <div style={jobStyle}>{p.job}</div>
+                    <div className="valHero" style={{ fontSize:24 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
 
-                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)", marginTop:12, marginBottom:4 }}>
-                      <div style={{ position:"absolute", left:"50%", top:-4, width:2, height:14, background:"#fff" }} />
+                    <div style={{ display:"flex", gap:14, marginTop:8 }}>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{ytdLabel}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
+                      </div>
+                    </div>
+
+                    {/* Trend verdict — demoted to a small caption, no longer
+                        the headline. Border color + corner dot already carry
+                        the signal; this is just the word for it. */}
+                    <div style={{ fontSize:10, color:p.color, fontWeight:600, marginTop:8 }}>{p.state}</div>
+
+                    <div style={{ position:"relative", height:5, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)", marginTop:6, marginBottom:4 }}>
+                      <div style={{ position:"absolute", left:"50%", top:-3, width:2, height:11, background:"#fff" }} />
                       {p.pctVs200 != null && (
-                        <div style={{ position:"absolute", left:`${barPos}%`, top:-3, width:9, height:9, borderRadius:"50%", background:p.color, border:"2px solid #050a35", transform:"translateX(-50%)" }} />
+                        <div style={{ position:"absolute", left:`${barPos}%`, top:-2.5, width:8, height:8, borderRadius:"50%", background:p.color, border:"2px solid #050a35", transform:"translateX(-50%)" }} />
                       )}
                     </div>
                     <div className="sub">
-                      {p.dma200 != null ? `200-DMA $${p.dma200.toFixed(2)}` : "Loading"}
-                      {p.pctVs200 != null ? ` · ${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}%` : ""}
+                      {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}% vs 200-DMA` : "Loading"}
                     </div>
                   </div>
                 );
