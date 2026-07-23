@@ -1252,57 +1252,63 @@ RESPONSE RULES:
             <div className="panelHeader">
               <div>
                 <div className="panelTitle">Portfolio Position Health</div>
-                <div className="panelSub">Trend sleeve judged vs 200-DMA · defensive sleeve shown by YTD return, no trend verdict</div>
+                <div className="panelSub">Live pricing · trend sleeve judged vs 200-DMA · fixed income shown by YTD return only</div>
               </div>
               <div className="pstamp">LIVE · Yahoo Finance</div>
             </div>
 
-            {/* Performance vs benchmarks — portfolio YTD is an ESTIMATE: weight
-                × each position's own YTD return, held constant since Jan 1.
-                Will drift from actual brokerage-reported return if rebalanced.
-                Grid5 matches the tile width of the position cards below. */}
-            <div className="grid5" style={{ marginBottom:10 }}>
+            {/* Row group label — small, uppercase, matches the style already
+                used elsewhere on the dashboard for row/section labels. */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+              Performance Benchmark
+            </div>
+
+            {/* Portfolio YTD is an ESTIMATE: weight × each position's own YTD
+                return, held constant since Jan 1. Will drift from actual
+                brokerage-reported return if rebalanced. Grid5 matches the
+                tile width of the position cards below. */}
+            <div className="grid5" style={{ marginBottom:16 }}>
               <div className="tile">
-                <div className="lbl">Your Portfolio · YTD (est.)</div>
+                <div className="lbl" style={{ lineHeight:1.4 }}>Your Portfolio<br/>YTD</div>
                 <div className="valHero" style={{ fontSize:26, color: portfolioYtdPct == null ? "#fff" : portfolioYtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                   {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
                 </div>
                 <div className="sub">Weighted by current allocation · not brokerage return</div>
               </div>
               <div className="tile">
-                <div className="lbl">S&amp;P 500 · YTD</div>
-                <div className="valHero" style={{ fontSize:26, color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
+                <div className="lbl" style={{ lineHeight:1.4 }}>40/60 Index Proxy<br/>YTD</div>
+                <div className="valHero" style={{ fontSize:26, color: benchmark4060YtdPct == null ? "#fff" : benchmark4060YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub">{spxYtdIsTotalReturn ? "Total return, dividends included" : "Price only — total return series unavailable"}</div>
+                <div className="sub">40% VTI / 60% BND · closer to your actual posture</div>
               </div>
               <div className="tile">
-                <div className="lbl">60/40 Index Proxy · YTD</div>
+                <div className="lbl" style={{ lineHeight:1.4 }}>60/40 Index Proxy<br/>YTD</div>
                 <div className="valHero" style={{ fontSize:26, color: benchmark6040YtdPct == null ? "#fff" : benchmark6040YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                   {benchmark6040YtdPct != null ? `${benchmark6040YtdPct >= 0 ? "+" : ""}${benchmark6040YtdPct.toFixed(1)}%` : "—"}
                 </div>
                 <div className="sub">60% VTI / 40% BND · same indices as VBINX</div>
               </div>
               <div className="tile">
-                <div className="lbl">40/60 Index Proxy · YTD</div>
-                <div className="valHero" style={{ fontSize:26, color: benchmark4060YtdPct == null ? "#fff" : benchmark4060YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
+                <div className="lbl" style={{ lineHeight:1.4 }}>S&amp;P 500<br/>YTD</div>
+                <div className="valHero" style={{ fontSize:26, color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
                 </div>
-                <div className="sub">40% VTI / 60% BND · closer to your actual posture</div>
+                <div className="sub">{spxYtdIsTotalReturn ? "Total return, dividends included" : "Price only — total return series unavailable"}</div>
               </div>
             </div>
 
-            <div className="grid5">
-              {positionCards.map(p => {
+            {(() => {
+              // Shared tile renderer — same trend/defensive branch logic as
+              // before, just extracted so both row groups below can call it
+              // without duplicating the card markup.
+              const renderPositionTile = (p: typeof positionCards[number]) => {
                 const ytdLabel = p.ytdReturnPct != null ? `${p.ytdReturnPct >= 0 ? "+" : ""}${p.ytdReturnPct.toFixed(1)}%` : "—";
                 const todayLabel = p.dailyPct != null ? `${p.dailyPct >= 0 ? "+" : ""}${p.dailyPct.toFixed(1)}%` : "—";
                 const todayColor = p.dailyPct == null ? "#cbd5e1" : p.dailyPct >= 0 ? "#4ade80" : "#ff6b88";
                 const jobStyle: React.CSSProperties = { fontSize:11, color:"#64748b", marginBottom:8, marginTop:-4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" };
 
                 if (p.sleeve === "defensive") {
-                  // No status word, no colored verdict, no bar. This sleeve
-                  // isn't supposed to trend, so judging it against a 200-DMA
-                  // gap is the wrong question. Just the numbers.
                   return (
                     <div key={p.ticker} className="tile" style={{ position:"relative", borderTop:"2px solid rgba(148,163,184,0.35)" }}>
                       <div className="tileTop">
@@ -1353,9 +1359,6 @@ RESPONSE RULES:
                       </div>
                     </div>
 
-                    {/* Trend verdict — demoted to a small caption, no longer
-                        the headline. Border color + corner dot already carry
-                        the signal; this is just the word for it. */}
                     <div style={{ fontSize:10, color:p.color, fontWeight:600, marginTop:8 }}>{p.state}</div>
 
                     <div style={{ position:"relative", height:5, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)", marginTop:6, marginBottom:4 }}>
@@ -1369,8 +1372,34 @@ RESPONSE RULES:
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              };
+
+              // Equity Sleeve — VEA, SCHD, VTI. Fixed Income — VTIP, SGOV,
+              // VGIT, and GLDM. GLDM isn't actually fixed income, it's a
+              // hard-asset hedge pending exit, but it groups here by row
+              // for now rather than sitting alone or padding the equity row.
+              const byTicker = (t: string) => positionCards.find(p => p.ticker === t);
+              const equityCards = ["VEA", "SCHD", "VTI"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              const incomeCards = ["VTIP", "SGOV", "VGIT", "GLDM"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+
+              return (
+                <>
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+                    Equity Sleeve
+                  </div>
+                  <div className="grid5" style={{ marginBottom:16 }}>
+                    {equityCards.map(renderPositionTile)}
+                  </div>
+
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+                    Fixed Income
+                  </div>
+                  <div className="grid5">
+                    {incomeCards.map(renderPositionTile)}
+                  </div>
+                </>
+              );
+            })()}
           </section>
 
           {/* ② STRESS CONFIRMATION */}
