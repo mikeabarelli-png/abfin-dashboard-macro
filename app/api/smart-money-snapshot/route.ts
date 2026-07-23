@@ -123,6 +123,38 @@ async function fetchPE(): Promise<{ value: number | null; error?: string }> {
   }
 }
 
+// Live intraday quote — the chart endpoint's daily closes only update once a
+// session settles, so mid-day they can lag by a full trading day for fast-
+// moving futures symbols. This endpoint carries an actual real-time quote.
+async function fetchLiveQuote(
+  ticker: string
+): Promise<{ price: number | null; changePct: number | null; error?: string }> {
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}&fields=regularMarketPrice,regularMarketChangePercent`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "application/json",
+      },
+    });
+    if (!res.ok) return { price: null, changePct: null, error: `Yahoo v7 quote ${ticker}: HTTP ${res.status}` };
+    const data = await res.json();
+    const result = data?.quoteResponse?.result?.[0];
+    const price = typeof result?.regularMarketPrice === "number" ? result.regularMarketPrice : null;
+    const changePct = typeof result?.regularMarketChangePercent === "number" ? result.regularMarketChangePercent : null;
+    console.log(`${ticker} live quote: $${price} (${changePct?.toFixed(2)}%)`);
+    return { price, changePct };
+  } catch (err: any) {
+    const msg = err?.name === "AbortError" ? `${ticker} live quote: timed out` : `${ticker} live quote: ${err?.message}`;
+    return { price: null, changePct: null, error: msg };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchCape(): Promise<{ value: number | null; error?: string }> {
   const apiKey = process.env.NASDAQ_API_KEY;
   if (!apiKey) return { value: null, error: "NASDAQ_API_KEY not set" };
@@ -344,7 +376,8 @@ export async function GET() {
   const [
     [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthChart],
     positionResults,
-    benchmarkVBINX,
+    benchmarkBND,
+    brentLiveQuote,
   ] = await Promise.all([
     Promise.all([
       fetchChart("^GSPC", 420),
@@ -371,10 +404,15 @@ export async function GET() {
       fetchChart("^SPXA200R", 5),
     ]),
     Promise.all(POSITION_TICKERS.map((t) => fetchPositionMetrics(t))),
-    // Benchmark — Vanguard Balanced Index Fund (60/40), Mike's usual comparison.
-    // Reuses fetchPositionMetrics purely for its YTD-return calc; the DMA/slope
-    // fields it also computes aren't used for a benchmark tile.
-    fetchPositionMetrics("VBINX"),
+    // Benchmark proxy — 60% VTI / 40% BND, tracking the same two indices
+    // (CRSP US Total Market, Bloomberg US Agg Float Adjusted) VBINX itself
+    // is built on. VTI is already fetched above as a portfolio holding, so
+    // BND is the only new call needed. Both reprice intraday, unlike VBINX's
+    // once-daily NAV.
+    fetchPositionMetrics("BND"),
+    // Live Brent quote — primary source for price/change%. The chart fetch
+    // above is kept only as a fallback and for the regime bar's history.
+    fetchLiveQuote("BZ=F"),
   ]);
 
   const positions: Record<string, PositionMetrics> = {};
@@ -382,7 +420,20 @@ export async function GET() {
     positions[p.ticker] = p;
     if (p.error) diagnostics[`position_${p.ticker.toLowerCase()}`] = p.error;
   }
-  if (benchmarkVBINX.error) diagnostics["benchmark_vbinx"] = benchmarkVBINX.error;
+  if (benchmarkBND.error) diagnostics["benchmark_bnd"] = benchmarkBND.error;
+
+  // Two benchmark proxies, both built from the same VTI + BND YTD figures,
+  // just weighted differently. 60/40 is the traditional convention Mike has
+  // compared against historically. 40/60 is closer to his actual posture.
+  const vtiForBenchmark = positions["VTI"];
+  const benchmark6040YtdPct: number | null =
+    vtiForBenchmark?.ytdReturnPct != null && benchmarkBND.ytdReturnPct != null
+      ? vtiForBenchmark.ytdReturnPct * 0.6 + benchmarkBND.ytdReturnPct * 0.4
+      : null;
+  const benchmark4060YtdPct: number | null =
+    vtiForBenchmark?.ytdReturnPct != null && benchmarkBND.ytdReturnPct != null
+      ? vtiForBenchmark.ytdReturnPct * 0.4 + benchmarkBND.ytdReturnPct * 0.6
+      : null;
 
   if (spx.error) diagnostics["spx"] = spx.error;
   if (vix.error) diagnostics["vix"] = vix.error;
@@ -412,10 +463,18 @@ export async function GET() {
     : breadthChart.meta.regularMarketPrice ?? MANUAL_BREADTH_FALLBACK;
   console.log(`Breadth (% above 200-DMA): ${breadthPct}%`);
 
-  const brentPrice: number | null = brent.meta.regularMarketPrice ?? brent.closes[brent.closes.length - 1] ?? null;
+  const brentPrice: number | null =
+    brentLiveQuote.price ?? brent.meta.regularMarketPrice ?? brent.closes[brent.closes.length - 1] ?? null;
   const brentPrev: number | null = brent.closes.length >= 2 ? brent.closes[brent.closes.length - 2] : null;
-  const brentChangePct: number | null = brentPrice != null && brentPrev != null
-    ? ((brentPrice - brentPrev) / brentPrev) * 100 : null;
+  const brentChangePct: number | null =
+    brentLiveQuote.changePct ??
+    (brentPrice != null && brentPrev != null ? ((brentPrice - brentPrev) / brentPrev) * 100 : null);
+  if (brentLiveQuote.error) {
+    diagnostics["brent_live_quote"] = brentLiveQuote.error;
+  }
+  if (brentLiveQuote.price == null) {
+    diagnostics["brent_stale_fallback"] = "Live quote unavailable — using chart close, may lag intraday moves";
+  }
   const brentRegime: "room" | "neutral" | "watch" | "frozen" | null =
     brentPrice == null ? null :
     brentPrice < 80  ? "room" :
@@ -717,9 +776,15 @@ export async function GET() {
         dbc: { price: ivyDBC.price, sma: ivyDBC.sma, variance: ivyDBC.variancePct, signal: ivyDBC.signal },
       },
       positions,
-      benchmark_vbinx: {
-        price: benchmarkVBINX.price,
-        ytd_return_pct: benchmarkVBINX.ytdReturnPct,
+      benchmark_6040: {
+        ytd_return_pct: benchmark6040YtdPct,
+        vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
+        bnd_ytd_pct: benchmarkBND.ytdReturnPct,
+      },
+      benchmark_4060: {
+        ytd_return_pct: benchmark4060YtdPct,
+        vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
+        bnd_ytd_pct: benchmarkBND.ytdReturnPct,
       },
     },
   }, { status: 200 });
