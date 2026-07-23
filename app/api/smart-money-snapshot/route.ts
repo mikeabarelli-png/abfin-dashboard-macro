@@ -344,6 +344,7 @@ export async function GET() {
   const [
     [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthChart],
     positionResults,
+    benchmarkVBINX,
   ] = await Promise.all([
     Promise.all([
       fetchChart("^GSPC", 420),
@@ -370,6 +371,10 @@ export async function GET() {
       fetchChart("^SPXA200R", 5),
     ]),
     Promise.all(POSITION_TICKERS.map((t) => fetchPositionMetrics(t))),
+    // Benchmark — Vanguard Balanced Index Fund (60/40), Mike's usual comparison.
+    // Reuses fetchPositionMetrics purely for its YTD-return calc; the DMA/slope
+    // fields it also computes aren't used for a benchmark tile.
+    fetchPositionMetrics("VBINX"),
   ]);
 
   const positions: Record<string, PositionMetrics> = {};
@@ -377,6 +382,7 @@ export async function GET() {
     positions[p.ticker] = p;
     if (p.error) diagnostics[`position_${p.ticker.toLowerCase()}`] = p.error;
   }
+  if (benchmarkVBINX.error) diagnostics["benchmark_vbinx"] = benchmarkVBINX.error;
 
   if (spx.error) diagnostics["spx"] = spx.error;
   if (vix.error) diagnostics["vix"] = vix.error;
@@ -597,17 +603,35 @@ export async function GET() {
   const fearGreedScore: number = fearGreedData.value ?? MANUAL_FEAR_GREED_FALLBACK;
   const fearGreedRating: string = fearGreedData.rating ?? "Extreme Fear";
 
+  // Total-return YTD, matching the same basis as the portfolio and VBINX
+  // tiles. ^GSPC is a price index with no real dividend adjustment, so total
+  // return needs ^SP500TR (the S&P 500 Total Return Index) instead — its
+  // own series already has dividends reinvested, no adjclose math needed.
   let spxYtdPct: number | null = null;
+  let spxYtdIsTotalReturn = false;
   try {
     const now = new Date();
     const daysIntoYear = Math.ceil(
       (now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24)
     ) + 10;
-    const ytd = await fetchChart("^GSPC", daysIntoYear);
-    if (ytd.closes.length > 0 && spxPrice != null) {
-      spxYtdPct = ((spxPrice - ytd.closes[0]) / ytd.closes[0]) * 100;
+    const trYtd = await fetchChart("^SP500TR", daysIntoYear);
+    if (trYtd.closes.length > 0) {
+      const trStart = trYtd.closes[0];
+      const trLatest = trYtd.meta.regularMarketPrice ?? trYtd.closes[trYtd.closes.length - 1];
+      spxYtdPct = ((trLatest - trStart) / trStart) * 100;
+      spxYtdIsTotalReturn = true;
+    } else if (trYtd.error) {
+      diagnostics["spx_ytd_total_return"] = trYtd.error;
     }
-    if (ytd.error) diagnostics["ytd"] = ytd.error;
+    // Fallback: price-only YTD if the total-return series is unavailable,
+    // so a bad ticker doesn't silently kill the tile.
+    if (spxYtdPct == null) {
+      const ytd = await fetchChart("^GSPC", daysIntoYear);
+      if (ytd.closes.length > 0 && spxPrice != null) {
+        spxYtdPct = ((spxPrice - ytd.closes[0]) / ytd.closes[0]) * 100;
+      }
+      if (ytd.error) diagnostics["ytd"] = ytd.error;
+    }
   } catch (err: any) {
     diagnostics["ytd"] = err?.message ?? "YTD fetch failed";
   }
@@ -631,6 +655,7 @@ export async function GET() {
       spx_price: spxPrice,
       spx_change_pct: spxChangePct,
       spx_ytd_pct: spxYtdPct,
+      spx_ytd_is_total_return: spxYtdIsTotalReturn,
       spx_trend_14d: spxTrend14d,
       spx_history: spxCloses,
       vix: vixPrice,
@@ -692,6 +717,10 @@ export async function GET() {
         dbc: { price: ivyDBC.price, sma: ivyDBC.sma, variance: ivyDBC.variancePct, signal: ivyDBC.signal },
       },
       positions,
+      benchmark_vbinx: {
+        price: benchmarkVBINX.price,
+        ytd_return_pct: benchmarkVBINX.ytdReturnPct,
+      },
     },
   }, { status: 200 });
 }
