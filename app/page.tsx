@@ -1273,21 +1273,21 @@ RESPONSE RULES:
                 <div className="valHero" style={{ fontSize:26, color: portfolioYtdPct == null ? "#fff" : portfolioYtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                   {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub">Weighted by current allocation · not brokerage return</div>
+                <div className="sub">Weighted by current allocation</div>
               </div>
               <div className="tile">
                 <div className="lbl" style={{ lineHeight:1.4 }}>40/60 Index Proxy<br/>YTD</div>
                 <div className="valHero" style={{ fontSize:26, color: benchmark4060YtdPct == null ? "#fff" : benchmark4060YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                   {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub">40% VTI / 60% BND · closer to your actual posture</div>
+                <div className="sub">40% VTI / 60% BND</div>
               </div>
               <div className="tile">
                 <div className="lbl" style={{ lineHeight:1.4 }}>60/40 Index Proxy<br/>YTD</div>
                 <div className="valHero" style={{ fontSize:26, color: benchmark6040YtdPct == null ? "#fff" : benchmark6040YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                   {benchmark6040YtdPct != null ? `${benchmark6040YtdPct >= 0 ? "+" : ""}${benchmark6040YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub">60% VTI / 40% BND · same indices as VBINX</div>
+                <div className="sub">60% VTI / 40% BND</div>
               </div>
               <div className="tile">
                 <div className="lbl" style={{ lineHeight:1.4 }}>S&amp;P 500<br/>YTD</div>
