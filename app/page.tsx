@@ -82,6 +82,7 @@ export default function Page() {
   const regimeEmoji = metrics?.regime_emoji ?? marketData?.regime_emoji ?? "🟡";
   const spxDailyPct = getNum(metrics?.spx_change_pct, marketData?.spx_change_pct);
   const spxYtd = getNum(metrics?.spx_ytd_pct, marketData?.spx_ytd_pct) ?? -2.13;
+  const spxYtdIsTotalReturn: boolean = metrics?.spx_ytd_is_total_return ?? marketData?.spx_ytd_is_total_return ?? false;
   const spxTrend = getArr(metrics?.spx_trend_14d, marketData?.spx_trend_14d) ?? [6946,6908,6878,6881,6816,6869,6830,6740,6795,6781,6775,6672,6632,6699];
   const spxHistory = getArr(metrics?.spx_history, marketData?.spx_history) ?? [];
   const hySpread = getNum(metrics?.hy_spread, marketData?.hy_spread) ?? 3.28;
@@ -261,6 +262,20 @@ export default function Page() {
     const barPos = 50 + (clampedPct / 15) * 50;
     return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, state, tone, color, barPos };
   });
+
+  // Blended portfolio YTD return — weight × each position's own YTD total
+  // return. This is an ESTIMATE: it assumes today's weights were held
+  // constant since Jan 1 with no rebalancing and no cash flows, so it will
+  // drift from the actual brokerage-reported return over time.
+  const portfolioHasAllYtd = positionCards.every(p => p.ytdReturnPct != null);
+  const portfolioYtdPct: number | null = portfolioHasAllYtd
+    ? positionCards.reduce((sum, p) => sum + (p.ytdReturnPct as number) * (p.weight / 100), 0)
+    : null;
+
+  // Benchmarks — SPX already computed elsewhere as spxYtd; VBINX (Vanguard
+  // 60/40 Balanced Index) comes from route.ts using the same YTD method.
+  const vbinxYtdPct = getNum(metrics?.benchmark_vbinx?.ytd_return_pct, marketData?.benchmark_vbinx?.ytd_return_pct);
+  const vbinxPrice = getNum(metrics?.benchmark_vbinx?.price, marketData?.benchmark_vbinx?.price);
 
   const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" }
     : vixValue >= 30 ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" }
@@ -1241,6 +1256,34 @@ RESPONSE RULES:
               </div>
               <div className="pstamp">LIVE · Yahoo Finance</div>
             </div>
+
+            {/* Performance vs benchmarks — portfolio YTD is an ESTIMATE: weight
+                × each position's own YTD return, held constant since Jan 1.
+                Will drift from actual brokerage-reported return if rebalanced. */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:10 }}>
+              <div className="tile">
+                <div className="lbl">Your Portfolio · YTD (est.)</div>
+                <div className="valHero" style={{ fontSize:30, color: portfolioYtdPct == null ? "#fff" : portfolioYtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div className="sub">Weighted by current allocation · not your actual brokerage return</div>
+              </div>
+              <div className="tile">
+                <div className="lbl">S&amp;P 500 · YTD</div>
+                <div className="valHero" style={{ fontSize:30, color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
+                </div>
+                <div className="sub">{spxYtdIsTotalReturn ? "Total return, dividends included" : "Price only — total return series unavailable"}</div>
+              </div>
+              <div className="tile">
+                <div className="lbl">Vanguard 60/40 (VBINX) · YTD</div>
+                <div className="valHero" style={{ fontSize:30, color: vbinxYtdPct == null ? "#fff" : vbinxYtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {vbinxYtdPct != null ? `${vbinxYtdPct >= 0 ? "+" : ""}${vbinxYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div className="sub">Total return, dividend-adjusted</div>
+              </div>
+            </div>
+
             <div className="grid5">
               {positionCards.map(p => {
                 const ytdLabel = p.ytdReturnPct != null ? `${p.ytdReturnPct >= 0 ? "+" : ""}${p.ytdReturnPct.toFixed(1)}%` : "—";
