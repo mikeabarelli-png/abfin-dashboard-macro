@@ -711,6 +711,283 @@ RESPONSE RULES:
 
           {feedError && <div className="errorBar">Feed error: {feedError}</div>}
 
+
+          {/* ① MARKET STRUCTURE */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div><div className="panelTitle">Market Structure</div><div className="panelSub">Price vs Key Moving Averages</div></div>
+              <div className="damage">{damageCount} / 4 short-term trends broken</div>
+            </div>
+
+            {/* ── Regime Banner ── */}
+            <div style={{
+              display:"flex", alignItems:"center", gap:12,
+              background: regime==="bull" ? "rgba(74,222,128,0.07)" : regime==="bear" ? "rgba(239,68,68,0.07)" : "rgba(245,158,11,0.07)",
+              border: `1px solid ${regime==="bull" ? "rgba(74,222,128,0.3)" : regime==="bear" ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.3)"}`,
+              borderRadius:10, padding:"10px 14px", marginBottom:10
+            }}>
+              {/* Regime pill */}
+              <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:16 }}>{regimeEmoji ?? "🟡"}</span>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>Market Regime</div>
+                  <div style={{ fontSize:14, fontWeight:700, color: regimeColor }}>{regimeLabel ?? "Calculating…"}</div>
+                </div>
+              </div>
+              <div style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0 }} />
+              {/* Description */}
+              <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{regimeDesc ?? "Computing 200-DMA slope from price history…"}</div>
+              <div style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0, marginLeft:"auto" }} />
+              {/* 200-DMA slope readout */}
+              <div style={{ flexShrink:0, textAlign:"right" }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>200-DMA Slope</div>
+                <div style={{ fontSize:14, fontWeight:700, color: slope200 == null ? "#475569" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                  {slope200 == null ? "—" : `${slope200 > 0 ? "↗" : slope200 < 0 ? "↘" : "→"} ${slope200 > 0 ? "+" : ""}${slope200.toFixed(1)}%`}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid5" style={{ marginBottom:8 }}>
+              {/* Tile 1: SPX Price — no change */}
+              <div className="tile">
+                <div className="tileTop"><span className="lbl">S&P 500</span><span className="ytd">{spxYtd > 0 ? "+" : ""}{spxYtd.toFixed(2)}% YTD</span></div>
+                <div className="valHero">{spxPrice != null ? fmtWhole(spxPrice) : "—"}</div>
+                <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(spxTrend, spxDailyPct != null && spxDailyPct >= 0 ? "#4ade80" : "#ff6b88") }} />
+                <div className="subSpx">{spxDailyPct != null ? `${spxDailyPct >= 0 ? "▲" : "▼"} ${Math.abs(spxDailyPct).toFixed(1)}% today` : "Waiting for live price"}</div>
+              </div>
+
+              {/* Tile 2: 200-DMA — color reflects actual position: green=bullish, amber=near/testing, red=broken */}
+              {(() => {
+                const isNear = spx200Pct != null && spx200Pct >= 0 && spx200Pct <= 3;
+                const tileClass = is200Broken ? "tile tile200Red" : isNear ? "tile tile200" : "tile";
+                const lblColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
+                const badgeBg = is200Broken ? "#ef4444" : "#f59e0b";
+                const statusColor = is200Broken ? "#ff6b88" : isNear ? "#fbbf24" : "#4ade80";
+                const subColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
+                return (
+                  <div className={tileClass} style={{ cursor:"pointer" }} onClick={() => setModal("dma200")}>
+                    <div className="tileTop">
+                      <span className="lbl" style={{ color: lblColor }}>200-DMA</span>
+                      {(is200Broken || isNear) && <span className="badge" style={{ background: badgeBg, color:"#000" }}>!</span>}
+                    </div>
+                    <div className="valHero">{fmtWhole(spx200)}</div>
+                    <div className="status" style={{ color: statusColor }}>
+                      {dmaState(spx200Pct, slope200, true)}
+                    </div>
+                    <div className="sub" style={{ color: subColor }}>
+                      {spx200Pct != null ? `SPX ${fmtSigned1(spx200Pct)} ${spx200Pct >= 0 ? "above" : "below"}` : "Waiting"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
+                    {slope200 != null && (
+                      <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                        Slope {slope200 > 0 ? "↗ +" : slope200 < 0 ? "↘ " : "→ "}{slope200.toFixed(1)}% · {slope200 > 0.02 ? "Bullish" : slope200 < -0.02 ? "Bearish" : "Neutral"}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Tiles 3-5: 100 / 50 / 20-DMA — descending importance */}
+              {[
+                { label:"100-DMA", level:spx100, slope:null     },
+                { label:"50-DMA",  level:spx50,  slope:slope50  },
+                { label:"20-DMA",  level:spx20,  slope:slope20  },
+              ].map(d => {
+                const pct = spxVs(d.level); const tone = dmaTone(pct, d.slope);
+                const slopeArrow = d.slope == null ? "" : d.slope > 0.02 ? " ↗" : d.slope < -0.02 ? " ↘" : " →";
+                const slopeColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
+                return (
+                  <div key={d.label} className="tile">
+                    <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:toneColor(tone), color:tone==="warning"?"#000":"#fff" }}>!</span></div>
+                    <div className="valMuted">{fmtWhole(d.level)}</div>
+                    <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct, d.slope)}</div>
+                    <div className="sub">{pct != null ? `SPX ${fmtSigned1(pct)} ${pct >= 0 ? "above" : "below"}` : "Waiting"}</div>
+                    {d.slope != null && (
+                      <div style={{ fontSize:10, marginTop:4, fontWeight:600, color:slopeColor }}>Slope{slopeArrow} {d.slope > 0 ? "+" : ""}{d.slope.toFixed(1)}%</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {is200Broken ? (
+              <div className="alertStripCritical">
+                <span className="alertDotRed" />
+                <span className="alertTitleRed">⚠ 200-DMA Breached — Critical</span>
+                <span className="alertBodyRed">
+                  {spxPrice != null
+                    ? `SPX ${fmtSigned1(spx200Pct!)} below 200-DMA (${fmtWhole(spx200)}) · ${Math.abs(spxPrice - spx200).toFixed(0)} pts below · Watch: 2 Friday closes below + VIX >30 or HY >400bps triggers defensive posture`
+                    : "Waiting..."}
+                </span>
+              </div>
+            ) : spx200Pct != null && spx200Pct <= 3 ? (
+              <div className="alertStrip">
+                <span className="alertDot" />
+                <span className="alertTitle">200-DMA Proximity — Immediate Watch</span>
+                <span className="alertBody">
+                  {spxPrice != null
+                    ? `Only ${spx200Pct.toFixed(1)}% above (${fmtWhole(spx200)}) · ${Math.abs(spxPrice-spx200).toFixed(0)} pts gap · Trigger: 2 Friday closes below + VIX >30 or HY >400bps`
+                    : "Waiting..."}
+                </span>
+              </div>
+            ) : null}
+          </section>
+
+          {/* ①-B PORTFOLIO POSITION HEALTH — live per-holding 200-DMA status */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div>
+                <div className="panelTitle">Portfolio Position Health</div>
+                <div className="panelSub">Live pricing · trend sleeve judged vs 200-DMA · fixed income shown by YTD return only</div>
+              </div>
+              <div className="pstamp">LIVE · Yahoo Finance</div>
+            </div>
+
+            {/* Row group label — small, uppercase, matches the style already
+                used elsewhere on the dashboard for row/section labels. */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+              Performance Benchmark
+            </div>
+
+            {/* Portfolio YTD is an ESTIMATE: weight × each position's own YTD
+                return, held constant since Jan 1. Will drift from actual
+                brokerage-reported return if rebalanced. Grid5 matches the
+                tile width of the position cards below. */}
+            <div className="grid5" style={{ marginBottom:16 }}>
+              <div className="tile">
+                <div className="lbl" style={{ lineHeight:1.4 }}>Your Portfolio<br/>YTD</div>
+                <div className="valHero" style={{ fontSize:26, color: portfolioYtdPct == null ? "#fff" : portfolioYtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div className="sub">Weighted by current allocation</div>
+              </div>
+              <div className="tile">
+                <div className="lbl" style={{ lineHeight:1.4 }}>40/60 Index Proxy<br/>YTD</div>
+                <div className="valHero" style={{ fontSize:26, color: benchmark4060YtdPct == null ? "#fff" : benchmark4060YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div className="sub">40% VTI / 60% BND</div>
+              </div>
+              <div className="tile">
+                <div className="lbl" style={{ lineHeight:1.4 }}>60/40 Index Proxy<br/>YTD</div>
+                <div className="valHero" style={{ fontSize:26, color: benchmark6040YtdPct == null ? "#fff" : benchmark6040YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {benchmark6040YtdPct != null ? `${benchmark6040YtdPct >= 0 ? "+" : ""}${benchmark6040YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div className="sub">60% VTI / 40% BND</div>
+              </div>
+              <div className="tile">
+                <div className="lbl" style={{ lineHeight:1.4 }}>S&amp;P 500<br/>YTD</div>
+                <div className="valHero" style={{ fontSize:26, color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
+                </div>
+                <div className="sub">{spxYtdIsTotalReturn ? "Total return, dividends included" : "Price only — total return series unavailable"}</div>
+              </div>
+            </div>
+
+            {(() => {
+              // Shared tile renderer — same trend/defensive branch logic as
+              // before, just extracted so both row groups below can call it
+              // without duplicating the card markup.
+              const renderPositionTile = (p: typeof positionCards[number]) => {
+                const ytdLabel = p.ytdReturnPct != null ? `${p.ytdReturnPct >= 0 ? "+" : ""}${p.ytdReturnPct.toFixed(1)}%` : "—";
+                const todayLabel = p.dailyPct != null ? `${p.dailyPct >= 0 ? "+" : ""}${p.dailyPct.toFixed(1)}%` : "—";
+                const todayColor = p.dailyPct == null ? "#cbd5e1" : p.dailyPct >= 0 ? "#4ade80" : "#ff6b88";
+                const jobStyle: React.CSSProperties = { fontSize:11, color:"#64748b", marginBottom:8, marginTop:-4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" };
+
+                if (p.sleeve === "defensive") {
+                  return (
+                    <div key={p.ticker} className="tile" style={{ position:"relative", borderTop:"2px solid rgba(148,163,184,0.35)" }}>
+                      <div className="tileTop">
+                        <span className="lbl">{p.ticker} · {p.weight}%</span>
+                      </div>
+                      <div style={jobStyle}>{p.job}</div>
+                      <div className="valHero" style={{ fontSize:24 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
+
+                      <div style={{ display:"flex", gap:14, marginTop:8 }}>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                          <div style={{ fontSize:15, fontWeight:700, color:p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{ytdLabel}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                          <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
+                        </div>
+                      </div>
+                      <div className="sub" style={{ marginTop:8 }}>
+                        {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}% vs 200-DMA` : "Loading"}
+                      </div>
+                    </div>
+                  );
+                }
+
+                const barPos = Math.max(2, Math.min(p.barPos, 98));
+                return (
+                  <div
+                    key={p.ticker}
+                    className="tile"
+                    style={{ position:"relative", borderTop:`2px solid ${p.color}` }}
+                  >
+                    <div style={{ position:"absolute", top:11, right:11, width:9, height:9, borderRadius:"50%", background:p.color, boxShadow:`0 0 6px ${p.color}99` }} />
+                    <div className="tileTop" style={{ paddingRight:20 }}>
+                      <span className="lbl">{p.ticker} · {p.weight}%</span>
+                    </div>
+                    <div style={jobStyle}>{p.job}</div>
+                    <div className="valHero" style={{ fontSize:24 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
+
+                    <div style={{ display:"flex", gap:14, marginTop:8 }}>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{ytdLabel}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize:10, color:p.color, fontWeight:600, marginTop:8 }}>{p.state}</div>
+
+                    <div style={{ position:"relative", height:5, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)", marginTop:6, marginBottom:4 }}>
+                      <div style={{ position:"absolute", left:"50%", top:-3, width:2, height:11, background:"#fff" }} />
+                      {p.pctVs200 != null && (
+                        <div style={{ position:"absolute", left:`${barPos}%`, top:-2.5, width:8, height:8, borderRadius:"50%", background:p.color, border:"2px solid #050a35", transform:"translateX(-50%)" }} />
+                      )}
+                    </div>
+                    <div className="sub">
+                      {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}% vs 200-DMA` : "Loading"}
+                    </div>
+                  </div>
+                );
+              };
+
+              // Equity Sleeve — VEA, SCHD, VTI. Fixed Income — VTIP, SGOV,
+              // VGIT, and GLDM. GLDM isn't actually fixed income, it's a
+              // hard-asset hedge pending exit, but it groups here by row
+              // for now rather than sitting alone or padding the equity row.
+              const byTicker = (t: string) => positionCards.find(p => p.ticker === t);
+              const equityCards = ["VEA", "SCHD", "VTI"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              const incomeCards = ["VTIP", "SGOV", "VGIT", "GLDM"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+
+              return (
+                <>
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+                    Equity Sleeve
+                  </div>
+                  <div className="grid5" style={{ marginBottom:16 }}>
+                    {equityCards.map(renderPositionTile)}
+                  </div>
+
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+                    Fixed Income
+                  </div>
+                  <div className="grid5">
+                    {incomeCards.map(renderPositionTile)}
+                  </div>
+                </>
+              );
+            })()}
+          </section>
+
           {/* ⓪-A COMPOSITE SCORE HERO — tile-style, matches Signal Inputs aesthetic */}
           {(() => {
             const pct = compositeScore / 16;
@@ -1126,280 +1403,36 @@ RESPONSE RULES:
             })()}
           </section>
 
-          {/* ① MARKET STRUCTURE */}
+          {/* ③ SPX TECHNICAL CHART */}
           <section className="panel">
-            <div className="panelHeader">
-              <div><div className="panelTitle">Market Structure</div><div className="panelSub">Price vs Key Moving Averages</div></div>
-              <div className="damage">{damageCount} / 4 short-term trends broken</div>
-            </div>
-
-            {/* ── Regime Banner ── */}
-            <div style={{
-              display:"flex", alignItems:"center", gap:12,
-              background: regime==="bull" ? "rgba(74,222,128,0.07)" : regime==="bear" ? "rgba(239,68,68,0.07)" : "rgba(245,158,11,0.07)",
-              border: `1px solid ${regime==="bull" ? "rgba(74,222,128,0.3)" : regime==="bear" ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.3)"}`,
-              borderRadius:10, padding:"10px 14px", marginBottom:10
-            }}>
-              {/* Regime pill */}
-              <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontSize:16 }}>{regimeEmoji ?? "🟡"}</span>
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>Market Regime</div>
-                  <div style={{ fontSize:14, fontWeight:700, color: regimeColor }}>{regimeLabel ?? "Calculating…"}</div>
-                </div>
-              </div>
-              <div style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0 }} />
-              {/* Description */}
-              <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{regimeDesc ?? "Computing 200-DMA slope from price history…"}</div>
-              <div style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0, marginLeft:"auto" }} />
-              {/* 200-DMA slope readout */}
-              <div style={{ flexShrink:0, textAlign:"right" }}>
-                <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>200-DMA Slope</div>
-                <div style={{ fontSize:14, fontWeight:700, color: slope200 == null ? "#475569" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
-                  {slope200 == null ? "—" : `${slope200 > 0 ? "↗" : slope200 < 0 ? "↘" : "→"} ${slope200 > 0 ? "+" : ""}${slope200.toFixed(1)}%`}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid5" style={{ marginBottom:8 }}>
-              {/* Tile 1: SPX Price — no change */}
-              <div className="tile">
-                <div className="tileTop"><span className="lbl">S&P 500</span><span className="ytd">{spxYtd > 0 ? "+" : ""}{spxYtd.toFixed(2)}% YTD</span></div>
-                <div className="valHero">{spxPrice != null ? fmtWhole(spxPrice) : "—"}</div>
-                <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(spxTrend, spxDailyPct != null && spxDailyPct >= 0 ? "#4ade80" : "#ff6b88") }} />
-                <div className="subSpx">{spxDailyPct != null ? `${spxDailyPct >= 0 ? "▲" : "▼"} ${Math.abs(spxDailyPct).toFixed(1)}% today` : "Waiting for live price"}</div>
-              </div>
-
-              {/* Tile 2: 200-DMA — color reflects actual position: green=bullish, amber=near/testing, red=broken */}
-              {(() => {
-                const isNear = spx200Pct != null && spx200Pct >= 0 && spx200Pct <= 3;
-                const tileClass = is200Broken ? "tile tile200Red" : isNear ? "tile tile200" : "tile";
-                const lblColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
-                const badgeBg = is200Broken ? "#ef4444" : "#f59e0b";
-                const statusColor = is200Broken ? "#ff6b88" : isNear ? "#fbbf24" : "#4ade80";
-                const subColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
-                return (
-                  <div className={tileClass} style={{ cursor:"pointer" }} onClick={() => setModal("dma200")}>
-                    <div className="tileTop">
-                      <span className="lbl" style={{ color: lblColor }}>200-DMA</span>
-                      {(is200Broken || isNear) && <span className="badge" style={{ background: badgeBg, color:"#000" }}>!</span>}
-                    </div>
-                    <div className="valHero">{fmtWhole(spx200)}</div>
-                    <div className="status" style={{ color: statusColor }}>
-                      {dmaState(spx200Pct, slope200, true)}
-                    </div>
-                    <div className="sub" style={{ color: subColor }}>
-                      {spx200Pct != null ? `SPX ${fmtSigned1(spx200Pct)} ${spx200Pct >= 0 ? "above" : "below"}` : "Waiting"}
-                    </div>
-                    <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
-                    {slope200 != null && (
-                      <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
-                        Slope {slope200 > 0 ? "↗ +" : slope200 < 0 ? "↘ " : "→ "}{slope200.toFixed(1)}% · {slope200 > 0.02 ? "Bullish" : slope200 < -0.02 ? "Bearish" : "Neutral"}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Tiles 3-5: 100 / 50 / 20-DMA — descending importance */}
-              {[
-                { label:"100-DMA", level:spx100, slope:null     },
-                { label:"50-DMA",  level:spx50,  slope:slope50  },
-                { label:"20-DMA",  level:spx20,  slope:slope20  },
-              ].map(d => {
-                const pct = spxVs(d.level); const tone = dmaTone(pct, d.slope);
-                const slopeArrow = d.slope == null ? "" : d.slope > 0.02 ? " ↗" : d.slope < -0.02 ? " ↘" : " →";
-                const slopeColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
-                return (
-                  <div key={d.label} className="tile">
-                    <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:toneColor(tone), color:tone==="warning"?"#000":"#fff" }}>!</span></div>
-                    <div className="valMuted">{fmtWhole(d.level)}</div>
-                    <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct, d.slope)}</div>
-                    <div className="sub">{pct != null ? `SPX ${fmtSigned1(pct)} ${pct >= 0 ? "above" : "below"}` : "Waiting"}</div>
-                    {d.slope != null && (
-                      <div style={{ fontSize:10, marginTop:4, fontWeight:600, color:slopeColor }}>Slope{slopeArrow} {d.slope > 0 ? "+" : ""}{d.slope.toFixed(1)}%</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {is200Broken ? (
-              <div className="alertStripCritical">
-                <span className="alertDotRed" />
-                <span className="alertTitleRed">⚠ 200-DMA Breached — Critical</span>
-                <span className="alertBodyRed">
-                  {spxPrice != null
-                    ? `SPX ${fmtSigned1(spx200Pct!)} below 200-DMA (${fmtWhole(spx200)}) · ${Math.abs(spxPrice - spx200).toFixed(0)} pts below · Watch: 2 Friday closes below + VIX >30 or HY >400bps triggers defensive posture`
-                    : "Waiting..."}
-                </span>
-              </div>
-            ) : spx200Pct != null && spx200Pct <= 3 ? (
-              <div className="alertStrip">
-                <span className="alertDot" />
-                <span className="alertTitle">200-DMA Proximity — Immediate Watch</span>
-                <span className="alertBody">
-                  {spxPrice != null
-                    ? `Only ${spx200Pct.toFixed(1)}% above (${fmtWhole(spx200)}) · ${Math.abs(spxPrice-spx200).toFixed(0)} pts gap · Trigger: 2 Friday closes below + VIX >30 or HY >400bps`
-                    : "Waiting..."}
-                </span>
-              </div>
-            ) : null}
-          </section>
-
-          {/* ①-B PORTFOLIO POSITION HEALTH — live per-holding 200-DMA status */}
-          <section className="panel">
-            <div className="panelHeader">
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
               <div>
-                <div className="panelTitle">Portfolio Position Health</div>
-                <div className="panelSub">Live pricing · trend sleeve judged vs 200-DMA · fixed income shown by YTD return only</div>
+                <div className="panelTitle">S&P 500 — Technical Chart</div>
+                <div className="panelSub">Price · Moving Averages · Bollinger Bands · RSI · MACD</div>
               </div>
-              <div className="pstamp">LIVE · Yahoo Finance</div>
-            </div>
-
-            {/* Row group label — small, uppercase, matches the style already
-                used elsewhere on the dashboard for row/section labels. */}
-            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
-              Performance Benchmark
-            </div>
-
-            {/* Portfolio YTD is an ESTIMATE: weight × each position's own YTD
-                return, held constant since Jan 1. Will drift from actual
-                brokerage-reported return if rebalanced. Grid5 matches the
-                tile width of the position cards below. */}
-            <div className="grid5" style={{ marginBottom:16 }}>
-              <div className="tile">
-                <div className="lbl" style={{ lineHeight:1.4 }}>Your Portfolio<br/>YTD</div>
-                <div className="valHero" style={{ fontSize:26, color: portfolioYtdPct == null ? "#fff" : portfolioYtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div className="sub">Weighted by current allocation</div>
-              </div>
-              <div className="tile">
-                <div className="lbl" style={{ lineHeight:1.4 }}>40/60 Index Proxy<br/>YTD</div>
-                <div className="valHero" style={{ fontSize:26, color: benchmark4060YtdPct == null ? "#fff" : benchmark4060YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div className="sub">40% VTI / 60% BND</div>
-              </div>
-              <div className="tile">
-                <div className="lbl" style={{ lineHeight:1.4 }}>60/40 Index Proxy<br/>YTD</div>
-                <div className="valHero" style={{ fontSize:26, color: benchmark6040YtdPct == null ? "#fff" : benchmark6040YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  {benchmark6040YtdPct != null ? `${benchmark6040YtdPct >= 0 ? "+" : ""}${benchmark6040YtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div className="sub">60% VTI / 40% BND</div>
-              </div>
-              <div className="tile">
-                <div className="lbl" style={{ lineHeight:1.4 }}>S&amp;P 500<br/>YTD</div>
-                <div className="valHero" style={{ fontSize:26, color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
-                </div>
-                <div className="sub">{spxYtdIsTotalReturn ? "Total return, dividends included" : "Price only — total return series unavailable"}</div>
+              <div style={{ display:"flex", gap:6 }}>
+                {rangeBtn("1M",21)}{rangeBtn("3M",63)}{rangeBtn("6M",126)}{rangeBtn("1Y",252)}
               </div>
             </div>
-
-            {(() => {
-              // Shared tile renderer — same trend/defensive branch logic as
-              // before, just extracted so both row groups below can call it
-              // without duplicating the card markup.
-              const renderPositionTile = (p: typeof positionCards[number]) => {
-                const ytdLabel = p.ytdReturnPct != null ? `${p.ytdReturnPct >= 0 ? "+" : ""}${p.ytdReturnPct.toFixed(1)}%` : "—";
-                const todayLabel = p.dailyPct != null ? `${p.dailyPct >= 0 ? "+" : ""}${p.dailyPct.toFixed(1)}%` : "—";
-                const todayColor = p.dailyPct == null ? "#cbd5e1" : p.dailyPct >= 0 ? "#4ade80" : "#ff6b88";
-                const jobStyle: React.CSSProperties = { fontSize:11, color:"#64748b", marginBottom:8, marginTop:-4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" };
-
-                if (p.sleeve === "defensive") {
-                  return (
-                    <div key={p.ticker} className="tile" style={{ position:"relative", borderTop:"2px solid rgba(148,163,184,0.35)" }}>
-                      <div className="tileTop">
-                        <span className="lbl">{p.ticker} · {p.weight}%</span>
-                      </div>
-                      <div style={jobStyle}>{p.job}</div>
-                      <div className="valHero" style={{ fontSize:24 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
-
-                      <div style={{ display:"flex", gap:14, marginTop:8 }}>
-                        <div>
-                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
-                          <div style={{ fontSize:15, fontWeight:700, color:p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{ytdLabel}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                          <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
-                        </div>
-                      </div>
-                      <div className="sub" style={{ marginTop:8 }}>
-                        {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}% vs 200-DMA` : "Loading"}
-                      </div>
-                    </div>
-                  );
-                }
-
-                const barPos = Math.max(2, Math.min(p.barPos, 98));
-                return (
-                  <div
-                    key={p.ticker}
-                    className="tile"
-                    style={{ position:"relative", borderTop:`2px solid ${p.color}` }}
-                  >
-                    <div style={{ position:"absolute", top:11, right:11, width:9, height:9, borderRadius:"50%", background:p.color, boxShadow:`0 0 6px ${p.color}99` }} />
-                    <div className="tileTop" style={{ paddingRight:20 }}>
-                      <span className="lbl">{p.ticker} · {p.weight}%</span>
-                    </div>
-                    <div style={jobStyle}>{p.job}</div>
-                    <div className="valHero" style={{ fontSize:24 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
-
-                    <div style={{ display:"flex", gap:14, marginTop:8 }}>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
-                        <div style={{ fontSize:15, fontWeight:700, color:p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{ytdLabel}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                        <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
-                      </div>
-                    </div>
-
-                    <div style={{ fontSize:10, color:p.color, fontWeight:600, marginTop:8 }}>{p.state}</div>
-
-                    <div style={{ position:"relative", height:5, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)", marginTop:6, marginBottom:4 }}>
-                      <div style={{ position:"absolute", left:"50%", top:-3, width:2, height:11, background:"#fff" }} />
-                      {p.pctVs200 != null && (
-                        <div style={{ position:"absolute", left:`${barPos}%`, top:-2.5, width:8, height:8, borderRadius:"50%", background:p.color, border:"2px solid #050a35", transform:"translateX(-50%)" }} />
-                      )}
-                    </div>
-                    <div className="sub">
-                      {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}% vs 200-DMA` : "Loading"}
-                    </div>
-                  </div>
-                );
-              };
-
-              // Equity Sleeve — VEA, SCHD, VTI. Fixed Income — VTIP, SGOV,
-              // VGIT, and GLDM. GLDM isn't actually fixed income, it's a
-              // hard-asset hedge pending exit, but it groups here by row
-              // for now rather than sitting alone or padding the equity row.
-              const byTicker = (t: string) => positionCards.find(p => p.ticker === t);
-              const equityCards = ["VEA", "SCHD", "VTI"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
-              const incomeCards = ["VTIP", "SGOV", "VGIT", "GLDM"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
-
-              return (
-                <>
-                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
-                    Equity Sleeve
-                  </div>
-                  <div className="grid5" style={{ marginBottom:16 }}>
-                    {equityCards.map(renderPositionTile)}
-                  </div>
-
-                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
-                    Fixed Income
-                  </div>
-                  <div className="grid5">
-                    {incomeCards.map(renderPositionTile)}
-                  </div>
-                </>
-              );
-            })()}
+            <div style={{ display:"flex", gap:16, marginBottom:10, flexWrap:"wrap" }}>
+              {[["SPX","#60a5fa"],["20-DMA","#fbbf24"],["50-DMA","#a78bfa"],["100-DMA","#f97316"],["200-DMA","#ef4444"]].map(([l,c])=>(
+                <span key={l} style={{ fontSize:11, color:"#94a3b8", display:"flex", alignItems:"center", gap:5 }}>
+                  <span style={{ width:18, height:2, background:c, display:"inline-block" }} />{l}
+                </span>
+              ))}
+              <span style={{ fontSize:11, color:"#94a3b8", display:"flex", alignItems:"center", gap:5 }}>
+                <span style={{ width:18, height:4, background:"rgba(148,163,184,0.2)", display:"inline-block", borderRadius:1 }} />Bollinger
+              </span>
+            </div>
+            <div style={{ position:"relative", width:"100%", height:320 }}><canvas id="spxPriceChart" /></div>
+            <div style={{ marginTop:4 }}>
+              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", margin:"8px 0 3px" }}>RSI (14)</div>
+              <div style={{ position:"relative", width:"100%", height:80 }}><canvas id="spxRsiChart" /></div>
+            </div>
+            <div style={{ marginTop:4 }}>
+              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", margin:"8px 0 3px" }}>MACD (12, 26, 9)</div>
+              <div style={{ position:"relative", width:"100%", height:90 }}><canvas id="spxMacdChart" /></div>
+            </div>
           </section>
 
           {/* ② STRESS CONFIRMATION */}
@@ -1852,38 +1885,6 @@ RESPONSE RULES:
               })()}
             </div>
 
-          </section>
-
-          {/* ③ SPX TECHNICAL CHART */}
-          <section className="panel">
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <div>
-                <div className="panelTitle">S&P 500 — Technical Chart</div>
-                <div className="panelSub">Price · Moving Averages · Bollinger Bands · RSI · MACD</div>
-              </div>
-              <div style={{ display:"flex", gap:6 }}>
-                {rangeBtn("1M",21)}{rangeBtn("3M",63)}{rangeBtn("6M",126)}{rangeBtn("1Y",252)}
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:16, marginBottom:10, flexWrap:"wrap" }}>
-              {[["SPX","#60a5fa"],["20-DMA","#fbbf24"],["50-DMA","#a78bfa"],["100-DMA","#f97316"],["200-DMA","#ef4444"]].map(([l,c])=>(
-                <span key={l} style={{ fontSize:11, color:"#94a3b8", display:"flex", alignItems:"center", gap:5 }}>
-                  <span style={{ width:18, height:2, background:c, display:"inline-block" }} />{l}
-                </span>
-              ))}
-              <span style={{ fontSize:11, color:"#94a3b8", display:"flex", alignItems:"center", gap:5 }}>
-                <span style={{ width:18, height:4, background:"rgba(148,163,184,0.2)", display:"inline-block", borderRadius:1 }} />Bollinger
-              </span>
-            </div>
-            <div style={{ position:"relative", width:"100%", height:320 }}><canvas id="spxPriceChart" /></div>
-            <div style={{ marginTop:4 }}>
-              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", margin:"8px 0 3px" }}>RSI (14)</div>
-              <div style={{ position:"relative", width:"100%", height:80 }}><canvas id="spxRsiChart" /></div>
-            </div>
-            <div style={{ marginTop:4 }}>
-              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", margin:"8px 0 3px" }}>MACD (12, 26, 9)</div>
-              <div style={{ position:"relative", width:"100%", height:90 }}><canvas id="spxMacdChart" /></div>
-            </div>
           </section>
 
           {/* ④ MARKET STRESS — CONTEXT */}
