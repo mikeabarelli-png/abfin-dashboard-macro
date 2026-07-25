@@ -289,6 +289,11 @@ export default function Page() {
   // Clean Slate — hypothetical from-scratch panel build (SCHD/SGOV/VEA/VTIP/VTI/VGIT/DBMF/PDBC)
   const cleanSlateYtdPct = getNum(metrics?.clean_slate?.ytd_return_pct, marketData?.clean_slate?.ytd_return_pct);
   const cleanSlateTodayPct = getNum(metrics?.clean_slate?.today_change_pct, marketData?.clean_slate?.today_change_pct);
+  // LPL "Income with Moderate Growth" proxy — 39% equity model, mapped to ETFs
+  const lpl4060YtdPct = getNum(metrics?.lpl_4060?.ytd_return_pct, marketData?.lpl_4060?.ytd_return_pct);
+  const lpl4060TodayPct = getNum(metrics?.lpl_4060?.today_change_pct, marketData?.lpl_4060?.today_change_pct);
+  const lpl5050YtdPct = getNum(metrics?.lpl_5050?.ytd_return_pct, marketData?.lpl_5050?.ytd_return_pct);
+  const lpl5050TodayPct = getNum(metrics?.lpl_5050?.today_change_pct, marketData?.lpl_5050?.today_change_pct);
 
   const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" }
     : vixValue >= 30 ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" }
@@ -941,6 +946,14 @@ RESPONSE RULES:
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Second row — hypothetical allocations under consideration,
+                kept visually separate from the real benchmark row above. */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+              Under Consideration
+            </div>
+            <div className="grid5" style={{ marginBottom:16 }}>
               <div className="tile">
                 <div className="lbl">Clean Slate YTD</div>
                 <div className="valHero">
@@ -950,6 +963,30 @@ RESPONSE RULES:
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
                   <div style={{ fontSize:15, fontWeight:700, color: cleanSlateTodayPct == null ? "#cbd5e1" : cleanSlateTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                     {cleanSlateTodayPct != null ? `${cleanSlateTodayPct >= 0 ? "+" : ""}${cleanSlateTodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+              <div className="tile">
+                <div className="lbl">LPL 40/60 YTD</div>
+                <div className="valHero">
+                  {lpl4060YtdPct != null ? `${lpl4060YtdPct >= 0 ? "+" : ""}${lpl4060YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, color: lpl4060TodayPct == null ? "#cbd5e1" : lpl4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {lpl4060TodayPct != null ? `${lpl4060TodayPct >= 0 ? "+" : ""}${lpl4060TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+              <div className="tile">
+                <div className="lbl">LPL 50/50 YTD</div>
+                <div className="valHero">
+                  {lpl5050YtdPct != null ? `${lpl5050YtdPct >= 0 ? "+" : ""}${lpl5050YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, color: lpl5050TodayPct == null ? "#cbd5e1" : lpl5050TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {lpl5050TodayPct != null ? `${lpl5050TodayPct >= 0 ? "+" : ""}${lpl5050TodayPct.toFixed(1)}%` : "—"}
                   </div>
                 </div>
               </div>
