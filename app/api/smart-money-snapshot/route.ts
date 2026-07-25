@@ -378,6 +378,7 @@ export async function GET() {
     positionResults,
     benchmarkBND,
     brentLiveQuote,
+    cleanSlateExtras,
   ] = await Promise.all([
     Promise.all([
       fetchChart("^GSPC", 420),
@@ -413,7 +414,13 @@ export async function GET() {
     // Live Brent quote — primary source for price/change%. The chart fetch
     // above is kept only as a fallback and for the regime bar's history.
     fetchLiveQuote("BZ=F"),
+    // "Clean Slate" hypothetical portfolio — the panel's from-scratch build
+    // (SCHD 20 / SGOV 20 / VEA 15 / VTIP 10 / VTI 10 / VGIT 10 / DBMF 10 /
+    // PDBC 5). Six of those eight are already fetched as real holdings; only
+    // PDBC and DBMF are new tickers.
+    Promise.all([fetchPositionMetrics("PDBC"), fetchPositionMetrics("DBMF")]),
   ]);
+  const [cleanSlatePDBC, cleanSlateDBMF] = cleanSlateExtras;
 
   const positions: Record<string, PositionMetrics> = {};
   for (const p of positionResults) {
@@ -444,6 +451,32 @@ export async function GET() {
     vtiForBenchmark?.dailyChangePct != null && benchmarkBND.dailyChangePct != null
       ? vtiForBenchmark.dailyChangePct * 0.4 + benchmarkBND.dailyChangePct * 0.6
       : null;
+
+  // "Clean Slate" hypothetical portfolio blend — SCHD 20 / SGOV 20 / VEA 15 /
+  // VTIP 10 / VTI 10 / VGIT 10 / DBMF 10 / PDBC 5. Six weights pull from real
+  // holdings already in `positions`; PDBC and DBMF come from the extra fetch.
+  const cleanSlateWeights: Record<string, number> = {
+    SCHD: 0.20, SGOV: 0.20, VEA: 0.15, VTIP: 0.10, VTI: 0.10, VGIT: 0.10,
+  };
+  const cleanSlateComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] = [
+    ...Object.entries(cleanSlateWeights).map(([ticker, weight]) => ({
+      ticker, weight,
+      ytd: positions[ticker]?.ytdReturnPct ?? null,
+      today: positions[ticker]?.dailyChangePct ?? null,
+    })),
+    { ticker: "DBMF", weight: 0.10, ytd: cleanSlateDBMF.ytdReturnPct, today: cleanSlateDBMF.dailyChangePct },
+    { ticker: "PDBC", weight: 0.05, ytd: cleanSlatePDBC.ytdReturnPct, today: cleanSlatePDBC.dailyChangePct },
+  ];
+  const cleanSlateHasAllYtd = cleanSlateComponents.every((c) => c.ytd != null);
+  const cleanSlateYtdPct: number | null = cleanSlateHasAllYtd
+    ? cleanSlateComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const cleanSlateHasAllToday = cleanSlateComponents.every((c) => c.today != null);
+  const cleanSlateTodayPct: number | null = cleanSlateHasAllToday
+    ? cleanSlateComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+  if (cleanSlatePDBC.error) diagnostics["clean_slate_pdbc"] = cleanSlatePDBC.error;
+  if (cleanSlateDBMF.error) diagnostics["clean_slate_dbmf"] = cleanSlateDBMF.error;
 
   if (spx.error) diagnostics["spx"] = spx.error;
   if (vix.error) diagnostics["vix"] = vix.error;
@@ -797,6 +830,10 @@ export async function GET() {
         today_change_pct: benchmark4060TodayPct,
         vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
         bnd_ytd_pct: benchmarkBND.ytdReturnPct,
+      },
+      clean_slate: {
+        ytd_return_pct: cleanSlateYtdPct,
+        today_change_pct: cleanSlateTodayPct,
       },
     },
   }, { status: 200 });
