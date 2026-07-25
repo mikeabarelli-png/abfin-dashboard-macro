@@ -955,7 +955,7 @@ RESPONSE RULES:
             </div>
             <div className="grid5" style={{ marginBottom:16 }}>
               <div className="tile">
-                <div className="lbl">Clean Slate YTD</div>
+                <div className="lbl">ALT 45/55 YTD</div>
                 <div className="valHero">
                   {cleanSlateYtdPct != null ? `${cleanSlateYtdPct >= 0 ? "+" : ""}${cleanSlateYtdPct.toFixed(1)}%` : "—"}
                 </div>
