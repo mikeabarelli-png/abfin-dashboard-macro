@@ -272,10 +272,20 @@ export default function Page() {
     ? positionCards.reduce((sum, p) => sum + (p.ytdReturnPct as number) * (p.weight / 100), 0)
     : null;
 
-  // Benchmarks — SPX already computed elsewhere as spxYtd; VBINX (Vanguard
-  // 60/40 Balanced Index) comes from route.ts using the same YTD method.
+  // Same blend, but for today's change — mirrors the "Today" column already
+  // shown on each position tile, so the benchmark row speaks the same
+  // language as the cards below it.
+  const portfolioHasAllToday = positionCards.every(p => p.dailyPct != null);
+  const portfolioTodayPct: number | null = portfolioHasAllToday
+    ? positionCards.reduce((sum, p) => sum + (p.dailyPct as number) * (p.weight / 100), 0)
+    : null;
+
+  // Benchmarks — SPX already computed elsewhere as spxYtd/spxDailyPct;
+  // the two index proxies come from route.ts using the same VTI/BND blend.
   const benchmark6040YtdPct = getNum(metrics?.benchmark_6040?.ytd_return_pct, marketData?.benchmark_6040?.ytd_return_pct);
   const benchmark4060YtdPct = getNum(metrics?.benchmark_4060?.ytd_return_pct, marketData?.benchmark_4060?.ytd_return_pct);
+  const benchmark6040TodayPct = getNum(metrics?.benchmark_6040?.today_change_pct, marketData?.benchmark_6040?.today_change_pct);
+  const benchmark4060TodayPct = getNum(metrics?.benchmark_4060?.today_change_pct, marketData?.benchmark_4060?.today_change_pct);
 
   const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" }
     : vixValue >= 30 ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" }
@@ -838,7 +848,6 @@ RESPONSE RULES:
             <div className="panelHeader">
               <div>
                 <div className="panelTitle">Portfolio Position Health</div>
-                <div className="panelSub">Live pricing · trend sleeve judged vs 200-DMA · fixed income shown by YTD return only</div>
               </div>
               <div className="pstamp">LIVE · Yahoo Finance</div>
             </div>
@@ -852,35 +861,45 @@ RESPONSE RULES:
             {/* Portfolio YTD is an ESTIMATE: weight × each position's own YTD
                 return, held constant since Jan 1. Will drift from actual
                 brokerage-reported return if rebalanced. Grid5 matches the
-                tile width of the position cards below. */}
+                tile width of the position cards below. Today's change below
+                the hero number uses the same red/green convention as the
+                position tiles' Today column. */}
             <div className="grid5" style={{ marginBottom:16 }}>
               <div className="tile">
-                <div className="lbl" style={{ lineHeight:1.4 }}>Your Portfolio<br/>YTD</div>
-                <div className="valHero" style={{ fontSize:26, color: portfolioYtdPct == null ? "#fff" : portfolioYtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                <div className="lbl">Portfolio YTD</div>
+                <div className="valHero" style={{ fontSize:26, color:"#fff" }}>
                   {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub">Weighted by current allocation</div>
+                <div className="sub" style={{ color: portfolioTodayPct == null ? "#64748b" : portfolioTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  Today {portfolioTodayPct != null ? `${portfolioTodayPct >= 0 ? "+" : ""}${portfolioTodayPct.toFixed(1)}%` : "—"}
+                </div>
               </div>
               <div className="tile">
-                <div className="lbl" style={{ lineHeight:1.4 }}>40/60 Index Proxy<br/>YTD</div>
-                <div className="valHero" style={{ fontSize:26, color: benchmark4060YtdPct == null ? "#fff" : benchmark4060YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                <div className="lbl">40/60 Index YTD</div>
+                <div className="valHero" style={{ fontSize:26, color:"#fff" }}>
                   {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub">40% VTI / 60% BND</div>
+                <div className="sub" style={{ color: benchmark4060TodayPct == null ? "#64748b" : benchmark4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  Today {benchmark4060TodayPct != null ? `${benchmark4060TodayPct >= 0 ? "+" : ""}${benchmark4060TodayPct.toFixed(1)}%` : "—"}
+                </div>
               </div>
               <div className="tile">
-                <div className="lbl" style={{ lineHeight:1.4 }}>60/40 Index Proxy<br/>YTD</div>
-                <div className="valHero" style={{ fontSize:26, color: benchmark6040YtdPct == null ? "#fff" : benchmark6040YtdPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                <div className="lbl">60/40 Index YTD</div>
+                <div className="valHero" style={{ fontSize:26, color:"#fff" }}>
                   {benchmark6040YtdPct != null ? `${benchmark6040YtdPct >= 0 ? "+" : ""}${benchmark6040YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub">60% VTI / 40% BND</div>
+                <div className="sub" style={{ color: benchmark6040TodayPct == null ? "#64748b" : benchmark6040TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  Today {benchmark6040TodayPct != null ? `${benchmark6040TodayPct >= 0 ? "+" : ""}${benchmark6040TodayPct.toFixed(1)}%` : "—"}
+                </div>
               </div>
               <div className="tile">
-                <div className="lbl" style={{ lineHeight:1.4 }}>S&amp;P 500<br/>YTD</div>
-                <div className="valHero" style={{ fontSize:26, color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                <div className="lbl">S&amp;P 500 YTD</div>
+                <div className="valHero" style={{ fontSize:26, color:"#fff" }}>
                   {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
                 </div>
-                <div className="sub">{spxYtdIsTotalReturn ? "Total return, dividends included" : "Price only — total return series unavailable"}</div>
+                <div className="sub" style={{ color: spxDailyPct == null ? "#64748b" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  Today {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
+                </div>
               </div>
             </div>
 
