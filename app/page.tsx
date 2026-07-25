@@ -3,10 +3,11 @@
 import { useEffect, useState, useRef } from "react";
 
 type AnyObj = Record<string, any>;
-type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | "dxy" | "ad" | "roberts40w" | null;
+type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | "dxy" | "ad" | "roberts40w" | "portfolioDetail" | null;
 
 export default function Page() {
   const [modal, setModal] = useState<Modal>(null);
+  const [detailKey, setDetailKey] = useState<string | null>(null);
   const [marketData, setMarketData] = useState<AnyObj | null>(null);
   const [lastUpdated, setLastUpdated] = useState("");
   const [feedError, setFeedError] = useState("");
@@ -296,6 +297,65 @@ export default function Page() {
   const lpl5050TodayPct = getNum(metrics?.lpl_5050?.today_change_pct, marketData?.lpl_5050?.today_change_pct);
   const vg4060YtdPct = getNum(metrics?.vg_4060?.ytd_return_pct, marketData?.vg_4060?.ytd_return_pct);
   const vg4060TodayPct = getNum(metrics?.vg_4060?.today_change_pct, marketData?.vg_4060?.today_change_pct);
+
+  // Raw component breakdowns for the drill-down modal — ticker/weight/YTD/today
+  // for each hypothetical portfolio, sourced straight from route.ts.
+  type DetailComponent = { ticker: string; weight: number; ytd: number | null; today: number | null };
+  const apiComponents = (obj: any): DetailComponent[] =>
+    (obj?.components ?? []).map((c: any) => ({
+      ticker: c.ticker, weight: c.weight_pct, ytd: c.ytd_pct, today: c.today_pct,
+    }));
+
+  const portfolioDetailData: Record<string, { title: string; subtitle: string; ytd: number | null; today: number | null; components: DetailComponent[] }> = {
+    cur: {
+      title: "Your Current Portfolio",
+      subtitle: "Weighted by actual allocation · estimate, not brokerage-reported return",
+      ytd: portfolioYtdPct, today: portfolioTodayPct,
+      components: positionCards.map(p => ({ ticker: p.ticker, weight: p.weight, ytd: p.ytdReturnPct, today: p.dailyPct })),
+    },
+    idx4060: {
+      title: "40/60 Index Proxy",
+      subtitle: "40% VTI / 60% BND",
+      ytd: benchmark4060YtdPct, today: benchmark4060TodayPct,
+      components: apiComponents(metrics?.benchmark_4060 ?? marketData?.benchmark_4060),
+    },
+    idx6040: {
+      title: "60/40 Index Proxy",
+      subtitle: "60% VTI / 40% BND · same indices as VBINX",
+      ytd: benchmark6040YtdPct, today: benchmark6040TodayPct,
+      components: apiComponents(metrics?.benchmark_6040 ?? marketData?.benchmark_6040),
+    },
+    spx: {
+      title: "S&P 500",
+      subtitle: "Total return, dividends included",
+      ytd: spxYtd, today: spxDailyPct,
+      components: [{ ticker: "SPX", weight: 100, ytd: spxYtd, today: spxDailyPct }],
+    },
+    alt: {
+      title: "ALT 45/40/15",
+      subtitle: "Panel's from-scratch build — 45% equity / 40% fixed income / 15% alternatives",
+      ytd: cleanSlateYtdPct, today: cleanSlateTodayPct,
+      components: apiComponents(metrics?.clean_slate ?? marketData?.clean_slate),
+    },
+    lpl4060: {
+      title: "LPL 40/60",
+      subtitle: "LPL STAAC \"Income with Moderate Growth\" proxy, mapped to ETFs",
+      ytd: lpl4060YtdPct, today: lpl4060TodayPct,
+      components: apiComponents(metrics?.lpl_4060 ?? marketData?.lpl_4060),
+    },
+    lpl5050: {
+      title: "LPL 50/50",
+      subtitle: "Interpolated between LPL's IMG and Growth-with-Income models",
+      ytd: lpl5050YtdPct, today: lpl5050TodayPct,
+      components: apiComponents(metrics?.lpl_5050 ?? marketData?.lpl_5050),
+    },
+    vg4060: {
+      title: "VG 40/60",
+      subtitle: "Vanguard's unconstrained VAAM/VCMM model, mapped to ETFs",
+      ytd: vg4060YtdPct, today: vg4060TodayPct,
+      components: apiComponents(metrics?.vg_4060 ?? marketData?.vg_4060),
+    },
+  };
 
   const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" }
     : vixValue >= 30 ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" }
@@ -900,7 +960,7 @@ RESPONSE RULES:
                 the hero number uses the same red/green convention as the
                 position tiles' Today column. */}
             <div className="grid5" style={{ marginBottom:16 }}>
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("cur"); }}>
                 <div className="lbl">CUR 40/55/5 YTD</div>
                 <div className="valHero">
                   {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
@@ -912,7 +972,7 @@ RESPONSE RULES:
                   </div>
                 </div>
               </div>
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx4060"); }}>
                 <div className="lbl">40/60 Index YTD</div>
                 <div className="valHero">
                   {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
@@ -924,7 +984,7 @@ RESPONSE RULES:
                   </div>
                 </div>
               </div>
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx6040"); }}>
                 <div className="lbl">60/40 Index YTD</div>
                 <div className="valHero">
                   {benchmark6040YtdPct != null ? `${benchmark6040YtdPct >= 0 ? "+" : ""}${benchmark6040YtdPct.toFixed(1)}%` : "—"}
@@ -936,7 +996,7 @@ RESPONSE RULES:
                   </div>
                 </div>
               </div>
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("spx"); }}>
                 <div className="lbl">SPX 100/0 YTD</div>
                 <div className="valHero">
                   {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
@@ -956,7 +1016,7 @@ RESPONSE RULES:
               Under Consideration
             </div>
             <div className="grid5" style={{ marginBottom:16 }}>
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("alt"); }}>
                 <div className="lbl">ALT 45/40/15 YTD</div>
                 <div className="valHero">
                   {cleanSlateYtdPct != null ? `${cleanSlateYtdPct >= 0 ? "+" : ""}${cleanSlateYtdPct.toFixed(1)}%` : "—"}
@@ -968,7 +1028,7 @@ RESPONSE RULES:
                   </div>
                 </div>
               </div>
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("lpl4060"); }}>
                 <div className="lbl">LPL 40/60 YTD</div>
                 <div className="valHero">
                   {lpl4060YtdPct != null ? `${lpl4060YtdPct >= 0 ? "+" : ""}${lpl4060YtdPct.toFixed(1)}%` : "—"}
@@ -980,7 +1040,7 @@ RESPONSE RULES:
                   </div>
                 </div>
               </div>
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("lpl5050"); }}>
                 <div className="lbl">LPL 50/50 YTD</div>
                 <div className="valHero">
                   {lpl5050YtdPct != null ? `${lpl5050YtdPct >= 0 ? "+" : ""}${lpl5050YtdPct.toFixed(1)}%` : "—"}
@@ -992,7 +1052,7 @@ RESPONSE RULES:
                   </div>
                 </div>
               </div>
-              <div className="tile">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("vg4060"); }}>
                 <div className="lbl">VG 40/60 YTD</div>
                 <div className="valHero">
                   {vg4060YtdPct != null ? `${vg4060YtdPct >= 0 ? "+" : ""}${vg4060YtdPct.toFixed(1)}%` : "—"}
@@ -2638,6 +2698,65 @@ RESPONSE RULES:
       </div>
 
       {/* MODALS */}
+      {modal==="portfolioDetail" && detailKey && portfolioDetailData[detailKey] && (() => {
+        const d = portfolioDetailData[detailKey];
+        const hasAllYtd = d.components.every(c => c.ytd != null);
+        return (
+          <ModalWrapper onClose={()=>{ setModal(null); setDetailKey(null); }} title={d.title} sub={d.subtitle}>
+            <div style={{ display:"flex", gap:24, marginBottom:16 }}>
+              <div>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>YTD</div>
+                <div style={{ fontSize:26, fontWeight:700, color: d.ytd == null ? "#fff" : d.ytd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {d.ytd != null ? `${d.ytd >= 0 ? "+" : ""}${d.ytd.toFixed(1)}%` : "—"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>Today</div>
+                <div style={{ fontSize:26, fontWeight:700, color: d.today == null ? "#fff" : d.today >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {d.today != null ? `${d.today >= 0 ? "+" : ""}${d.today.toFixed(1)}%` : "—"}
+                </div>
+              </div>
+            </div>
+            <table className="valTable">
+              <thead>
+                <tr>
+                  <th style={{ textAlign:"left" }}>Ticker</th>
+                  <th style={{ textAlign:"right" }}>Weight</th>
+                  <th style={{ textAlign:"right" }}>YTD</th>
+                  <th style={{ textAlign:"right" }}>Contribution</th>
+                  <th style={{ textAlign:"right" }}>Today</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.components.map(c => {
+                  const contribution = c.ytd != null ? (c.ytd * c.weight) / 100 : null;
+                  return (
+                    <tr key={c.ticker}>
+                      <td style={{ fontWeight:700, color:"#cbd5e1" }}>{c.ticker}</td>
+                      <td style={{ textAlign:"right", color:"#94a3b8" }}>{c.weight}%</td>
+                      <td style={{ textAlign:"right", fontWeight:600, color: c.ytd == null ? "#64748b" : c.ytd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {c.ytd != null ? `${c.ytd >= 0 ? "+" : ""}${c.ytd.toFixed(1)}%` : "—"}
+                      </td>
+                      <td style={{ textAlign:"right", color:"#94a3b8" }}>
+                        {contribution != null ? `${contribution >= 0 ? "+" : ""}${contribution.toFixed(2)}` : "—"}
+                      </td>
+                      <td style={{ textAlign:"right", fontWeight:600, color: c.today == null ? "#64748b" : c.today >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {c.today != null ? `${c.today >= 0 ? "+" : ""}${c.today.toFixed(1)}%` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {!hasAllYtd && (
+              <div style={{ fontSize:11, color:"#64748b", marginTop:10 }}>
+                One or more components are still loading — the total above will resolve once all figures are in.
+              </div>
+            )}
+          </ModalWrapper>
+        );
+      })()}
+
       {modal==="roberts40w" && (
         <ModalWrapper onClose={()=>setModal(null)} title="Roberts 40-Week Signal" sub="Lance Roberts · RIA Advisors · The primary trend gate for all allocation decisions">
           <ModalGrid
