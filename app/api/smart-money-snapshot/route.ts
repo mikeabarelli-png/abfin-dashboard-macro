@@ -13,6 +13,20 @@ function avg(arr: number[]): number {
   return clean.reduce((s, n) => s + n, 0) / clean.length;
 }
 
+// Converts an internal { ticker, weight (decimal), ytd, today } component
+// list into the clean shape the drill-down modal on the dashboard reads,
+// weight expressed as a whole percentage instead of a 0-1 decimal.
+function serializeComponents(
+  comps: { ticker: string; weight: number; ytd: number | null; today: number | null }[]
+) {
+  return comps.map((c) => ({
+    ticker: c.ticker,
+    weight_pct: Math.round(c.weight * 1000) / 10,
+    ytd_pct: c.ytd,
+    today_pct: c.today,
+  }));
+}
+
 async function fetchChart(
   ticker: string,
   days: number
@@ -929,28 +943,40 @@ export async function GET() {
         today_change_pct: benchmark6040TodayPct,
         vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
         bnd_ytd_pct: benchmarkBND.ytdReturnPct,
+        components: [
+          { ticker: "VTI", weight_pct: 60, ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null, today_pct: vtiForBenchmark?.dailyChangePct ?? null },
+          { ticker: "BND", weight_pct: 40, ytd_pct: benchmarkBND.ytdReturnPct, today_pct: benchmarkBND.dailyChangePct },
+        ],
       },
       benchmark_4060: {
         ytd_return_pct: benchmark4060YtdPct,
         today_change_pct: benchmark4060TodayPct,
         vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
         bnd_ytd_pct: benchmarkBND.ytdReturnPct,
+        components: [
+          { ticker: "VTI", weight_pct: 40, ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null, today_pct: vtiForBenchmark?.dailyChangePct ?? null },
+          { ticker: "BND", weight_pct: 60, ytd_pct: benchmarkBND.ytdReturnPct, today_pct: benchmarkBND.dailyChangePct },
+        ],
       },
       clean_slate: {
         ytd_return_pct: cleanSlateYtdPct,
         today_change_pct: cleanSlateTodayPct,
+        components: serializeComponents(cleanSlateComponents),
       },
       lpl_4060: {
         ytd_return_pct: lpl4060YtdPct,
         today_change_pct: lpl4060TodayPct,
+        components: serializeComponents(lpl4060Components),
       },
       lpl_5050: {
         ytd_return_pct: lpl5050YtdPct,
         today_change_pct: lpl5050TodayPct,
+        components: serializeComponents(lpl5050Components),
       },
       vg_4060: {
         ytd_return_pct: vg4060YtdPct,
         today_change_pct: vg4060TodayPct,
+        components: serializeComponents(vg4060Components),
       },
     },
   }, { status: 200 });
