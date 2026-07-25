@@ -434,6 +434,16 @@ export async function GET() {
     vtiForBenchmark?.ytdReturnPct != null && benchmarkBND.ytdReturnPct != null
       ? vtiForBenchmark.ytdReturnPct * 0.4 + benchmarkBND.ytdReturnPct * 0.6
       : null;
+  // Same-day change for each proxy, same weights, so the benchmark tiles can
+  // show a "Today" figure alongside the position tiles below.
+  const benchmark6040TodayPct: number | null =
+    vtiForBenchmark?.dailyChangePct != null && benchmarkBND.dailyChangePct != null
+      ? vtiForBenchmark.dailyChangePct * 0.6 + benchmarkBND.dailyChangePct * 0.4
+      : null;
+  const benchmark4060TodayPct: number | null =
+    vtiForBenchmark?.dailyChangePct != null && benchmarkBND.dailyChangePct != null
+      ? vtiForBenchmark.dailyChangePct * 0.4 + benchmarkBND.dailyChangePct * 0.6
+      : null;
 
   if (spx.error) diagnostics["spx"] = spx.error;
   if (vix.error) diagnostics["vix"] = vix.error;
@@ -778,11 +788,13 @@ export async function GET() {
       positions,
       benchmark_6040: {
         ytd_return_pct: benchmark6040YtdPct,
+        today_change_pct: benchmark6040TodayPct,
         vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
         bnd_ytd_pct: benchmarkBND.ytdReturnPct,
       },
       benchmark_4060: {
         ytd_return_pct: benchmark4060YtdPct,
+        today_change_pct: benchmark4060TodayPct,
         vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
         bnd_ytd_pct: benchmarkBND.ytdReturnPct,
       },
