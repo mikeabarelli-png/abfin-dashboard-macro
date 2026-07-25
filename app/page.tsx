@@ -758,63 +758,88 @@ RESPONSE RULES:
             </div>
 
             <div className="grid5" style={{ marginBottom:8 }}>
-              {/* Tile 1: SPX Price — no change */}
+              {/* Tile 1: SPX Price — YTD/Today now stacked the same way as
+                  the equity sleeve tiles' YTD/Today pair. */}
               <div className="tile">
-                <div className="tileTop"><span className="lbl">S&P 500</span><span className="ytd">{spxYtd > 0 ? "+" : ""}{spxYtd.toFixed(2)}% YTD</span></div>
+                <div className="tileTop"><span className="lbl">S&P 500</span></div>
                 <div className="valHero">{spxPrice != null ? fmtWhole(spxPrice) : "—"}</div>
                 <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(spxTrend, spxDailyPct != null && spxDailyPct >= 0 ? "#4ade80" : "#ff6b88") }} />
-                <div className="subSpx">{spxDailyPct != null ? `${spxDailyPct >= 0 ? "▲" : "▼"} ${Math.abs(spxDailyPct).toFixed(1)}% today` : "Waiting for live price"}</div>
+                <div style={{ display:"flex", gap:14, marginTop:8 }}>
+                  <div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                    <div style={{ fontSize:15, fontWeight:700, color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>{spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                    <div style={{ fontSize:15, fontWeight:700, color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                      {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Tile 2: 200-DMA — color reflects actual position: green=bullish, amber=near/testing, red=broken */}
+              {/* Tile 2: 200-DMA — Gap/Slope now a stat pair matching the
+                  same layout, instead of two separate sentence lines. */}
               {(() => {
                 const isNear = spx200Pct != null && spx200Pct >= 0 && spx200Pct <= 3;
                 const tileClass = is200Broken ? "tile tile200Red" : isNear ? "tile tile200" : "tile";
-                const lblColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
                 const badgeBg = is200Broken ? "#ef4444" : "#f59e0b";
                 const statusColor = is200Broken ? "#ff6b88" : isNear ? "#fbbf24" : "#4ade80";
                 const subColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
+                const slopeColor = slope200 == null ? "#cbd5e1" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24";
                 return (
                   <div className={tileClass} style={{ cursor:"pointer" }} onClick={() => setModal("dma200")}>
                     <div className="tileTop">
-                      <span className="lbl" style={{ color: lblColor }}>200-DMA</span>
+                      <span className="lbl">200-DMA</span>
                       {(is200Broken || isNear) && <span className="badge" style={{ background: badgeBg, color:"#000" }}>!</span>}
                     </div>
                     <div className="valHero">{fmtWhole(spx200)}</div>
                     <div className="status" style={{ color: statusColor }}>
                       {dmaState(spx200Pct, slope200, true)}
                     </div>
-                    <div className="sub" style={{ color: subColor }}>
-                      {spx200Pct != null ? `SPX ${fmtSigned1(spx200Pct)} ${spx200Pct >= 0 ? "above" : "below"}` : "Waiting"}
-                    </div>
-                    <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Click for detail</div>
-                    {slope200 != null && (
-                      <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
-                        Slope {slope200 > 0 ? "↗ +" : slope200 < 0 ? "↘ " : "→ "}{slope200.toFixed(1)}% · {slope200 > 0.02 ? "Bullish" : slope200 < -0.02 ? "Bearish" : "Neutral"}
+                    <div style={{ display:"flex", gap:14, marginTop:8 }}>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
+                        <div style={{ fontSize:15, fontWeight:700, color: subColor }}>{spx200Pct != null ? fmtSigned1(spx200Pct) : "—"}</div>
                       </div>
-                    )}
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Slope</div>
+                        <div style={{ fontSize:15, fontWeight:700, color: slopeColor }}>
+                          {slope200 != null ? `${slope200 > 0 ? "+" : ""}${slope200.toFixed(1)}%` : "—"}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize:10, color:"#64748b", marginTop:8 }}>Click for detail</div>
                   </div>
                 );
               })()}
 
-              {/* Tiles 3-5: 100 / 50 / 20-DMA — descending importance */}
+              {/* Tiles 3-5: 100 / 50 / 20-DMA — same Gap/Slope stat pair as
+                  tile 2, so all five tiles share one consistent layout. */}
               {[
                 { label:"100-DMA", level:spx100, slope:null     },
                 { label:"50-DMA",  level:spx50,  slope:slope50  },
                 { label:"20-DMA",  level:spx20,  slope:slope20  },
               ].map(d => {
                 const pct = spxVs(d.level); const tone = dmaTone(pct, d.slope);
-                const slopeArrow = d.slope == null ? "" : d.slope > 0.02 ? " ↗" : d.slope < -0.02 ? " ↘" : " →";
-                const slopeColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
+                const slopeColor = d.slope == null ? "#cbd5e1" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
                 return (
                   <div key={d.label} className="tile">
                     <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:toneColor(tone), color:tone==="warning"?"#000":"#fff" }}>!</span></div>
-                    <div className="valMuted">{fmtWhole(d.level)}</div>
+                    <div className="valHero">{fmtWhole(d.level)}</div>
                     <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct, d.slope)}</div>
-                    <div className="sub">{pct != null ? `SPX ${fmtSigned1(pct)} ${pct >= 0 ? "above" : "below"}` : "Waiting"}</div>
-                    {d.slope != null && (
-                      <div style={{ fontSize:10, marginTop:4, fontWeight:600, color:slopeColor }}>Slope{slopeArrow} {d.slope > 0 ? "+" : ""}{d.slope.toFixed(1)}%</div>
-                    )}
+                    <div style={{ display:"flex", gap:14, marginTop:8 }}>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
+                        <div style={{ fontSize:15, fontWeight:700, color: toneColor(tone) }}>{pct != null ? fmtSigned1(pct) : "—"}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Slope</div>
+                        <div style={{ fontSize:15, fontWeight:700, color: slopeColor }}>
+                          {d.slope != null ? `${d.slope > 0 ? "+" : ""}${d.slope.toFixed(1)}%` : "—"}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -867,38 +892,50 @@ RESPONSE RULES:
             <div className="grid5" style={{ marginBottom:16 }}>
               <div className="tile">
                 <div className="lbl">Portfolio YTD</div>
-                <div className="valHero" style={{ fontSize:26, color:"#fff" }}>
+                <div className="valHero">
                   {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub" style={{ color: portfolioTodayPct == null ? "#64748b" : portfolioTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  Today {portfolioTodayPct != null ? `${portfolioTodayPct >= 0 ? "+" : ""}${portfolioTodayPct.toFixed(1)}%` : "—"}
+                <div style={{ marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, color: portfolioTodayPct == null ? "#cbd5e1" : portfolioTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {portfolioTodayPct != null ? `${portfolioTodayPct >= 0 ? "+" : ""}${portfolioTodayPct.toFixed(1)}%` : "—"}
+                  </div>
                 </div>
               </div>
               <div className="tile">
                 <div className="lbl">40/60 Index YTD</div>
-                <div className="valHero" style={{ fontSize:26, color:"#fff" }}>
+                <div className="valHero">
                   {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub" style={{ color: benchmark4060TodayPct == null ? "#64748b" : benchmark4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  Today {benchmark4060TodayPct != null ? `${benchmark4060TodayPct >= 0 ? "+" : ""}${benchmark4060TodayPct.toFixed(1)}%` : "—"}
+                <div style={{ marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, color: benchmark4060TodayPct == null ? "#cbd5e1" : benchmark4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark4060TodayPct != null ? `${benchmark4060TodayPct >= 0 ? "+" : ""}${benchmark4060TodayPct.toFixed(1)}%` : "—"}
+                  </div>
                 </div>
               </div>
               <div className="tile">
                 <div className="lbl">60/40 Index YTD</div>
-                <div className="valHero" style={{ fontSize:26, color:"#fff" }}>
+                <div className="valHero">
                   {benchmark6040YtdPct != null ? `${benchmark6040YtdPct >= 0 ? "+" : ""}${benchmark6040YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="sub" style={{ color: benchmark6040TodayPct == null ? "#64748b" : benchmark6040TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  Today {benchmark6040TodayPct != null ? `${benchmark6040TodayPct >= 0 ? "+" : ""}${benchmark6040TodayPct.toFixed(1)}%` : "—"}
+                <div style={{ marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, color: benchmark6040TodayPct == null ? "#cbd5e1" : benchmark6040TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark6040TodayPct != null ? `${benchmark6040TodayPct >= 0 ? "+" : ""}${benchmark6040TodayPct.toFixed(1)}%` : "—"}
+                  </div>
                 </div>
               </div>
               <div className="tile">
                 <div className="lbl">S&amp;P 500 YTD</div>
-                <div className="valHero" style={{ fontSize:26, color:"#fff" }}>
+                <div className="valHero">
                   {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
                 </div>
-                <div className="sub" style={{ color: spxDailyPct == null ? "#64748b" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  Today {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
+                <div style={{ marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
+                  </div>
                 </div>
               </div>
             </div>
