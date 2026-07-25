@@ -379,6 +379,7 @@ export async function GET() {
     benchmarkBND,
     brentLiveQuote,
     cleanSlateExtras,
+    lplImgExtras,
   ] = await Promise.all([
     Promise.all([
       fetchChart("^GSPC", 420),
@@ -419,8 +420,21 @@ export async function GET() {
     // PDBC 5). Six of those eight are already fetched as real holdings; only
     // PDBC and DBMF are new tickers.
     Promise.all([fetchPositionMetrics("PDBC"), fetchPositionMetrics("DBMF")]),
+    // LPL "Income with Moderate Growth" (IMG) proxy — LPL STAAC's 39% equity
+    // model, mapped to tradable ETFs. VEA/VGIT/VTIP/SGOV already fetched as
+    // real holdings, PDBC/DBMF already fetched above for Clean Slate. Only
+    // VUG/VTV/VWO/VCIT/VMBS/IGF are new here.
+    Promise.all([
+      fetchPositionMetrics("VUG"),
+      fetchPositionMetrics("VTV"),
+      fetchPositionMetrics("VWO"),
+      fetchPositionMetrics("VCIT"),
+      fetchPositionMetrics("VMBS"),
+      fetchPositionMetrics("IGF"),
+    ]),
   ]);
   const [cleanSlatePDBC, cleanSlateDBMF] = cleanSlateExtras;
+  const [lplVUG, lplVTV, lplVWO, lplVCIT, lplVMBS, lplIGF] = lplImgExtras;
 
   const positions: Record<string, PositionMetrics> = {};
   for (const p of positionResults) {
@@ -477,6 +491,66 @@ export async function GET() {
     : null;
   if (cleanSlatePDBC.error) diagnostics["clean_slate_pdbc"] = cleanSlatePDBC.error;
   if (cleanSlateDBMF.error) diagnostics["clean_slate_dbmf"] = cleanSlateDBMF.error;
+
+  // LPL "40/60" proxy blend — essentially LPL's own "Income with Moderate
+  // Growth" model (39% equity), close enough to 40% that no reweighting is
+  // needed. Ticker mapping in the fetch block above: VEA/VGIT/VTIP/SGOV pull
+  // from real holdings, PDBC/DBMF reuse the Clean Slate fetch.
+  const lpl4060Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] = [
+    { ticker: "VUG",  weight: 0.12, ytd: lplVUG.ytdReturnPct,  today: lplVUG.dailyChangePct },
+    { ticker: "VTV",  weight: 0.16, ytd: lplVTV.ytdReturnPct,  today: lplVTV.dailyChangePct },
+    { ticker: "VEA",  weight: 0.07, ytd: positions["VEA"]?.ytdReturnPct ?? null,  today: positions["VEA"]?.dailyChangePct ?? null },
+    { ticker: "VWO",  weight: 0.04, ytd: lplVWO.ytdReturnPct,  today: lplVWO.dailyChangePct },
+    { ticker: "VGIT", weight: 0.18, ytd: positions["VGIT"]?.ytdReturnPct ?? null, today: positions["VGIT"]?.dailyChangePct ?? null },
+    { ticker: "VCIT", weight: 0.15, ytd: lplVCIT.ytdReturnPct, today: lplVCIT.dailyChangePct },
+    { ticker: "VMBS", weight: 0.10, ytd: lplVMBS.ytdReturnPct, today: lplVMBS.dailyChangePct },
+    { ticker: "VTIP", weight: 0.05, ytd: positions["VTIP"]?.ytdReturnPct ?? null, today: positions["VTIP"]?.dailyChangePct ?? null },
+    { ticker: "PDBC", weight: 0.01, ytd: cleanSlatePDBC.ytdReturnPct, today: cleanSlatePDBC.dailyChangePct },
+    { ticker: "IGF",  weight: 0.02, ytd: lplIGF.ytdReturnPct,  today: lplIGF.dailyChangePct },
+    { ticker: "DBMF", weight: 0.08, ytd: cleanSlateDBMF.ytdReturnPct, today: cleanSlateDBMF.dailyChangePct },
+    { ticker: "SGOV", weight: 0.02, ytd: positions["SGOV"]?.ytdReturnPct ?? null, today: positions["SGOV"]?.dailyChangePct ?? null },
+  ];
+  const lpl4060HasAllYtd = lpl4060Components.every((c) => c.ytd != null);
+  const lpl4060YtdPct: number | null = lpl4060HasAllYtd
+    ? lpl4060Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const lpl4060HasAllToday = lpl4060Components.every((c) => c.today != null);
+  const lpl4060TodayPct: number | null = lpl4060HasAllToday
+    ? lpl4060Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+
+  // LPL "50/50" proxy blend — interpolated roughly two-thirds of the way from
+  // LPL's IMG model (39% equity) toward its Growth-with-Income model (56%
+  // equity), landing at 50% equity / 50% fixed income+diversifying+cash.
+  // Same twelve tickers as the 40/60 blend above, just reweighted, so no new
+  // fetches are needed for this one either.
+  const lpl5050Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] = [
+    { ticker: "VUG",  weight: 0.16, ytd: lplVUG.ytdReturnPct,  today: lplVUG.dailyChangePct },
+    { ticker: "VTV",  weight: 0.20, ytd: lplVTV.ytdReturnPct,  today: lplVTV.dailyChangePct },
+    { ticker: "VEA",  weight: 0.09, ytd: positions["VEA"]?.ytdReturnPct ?? null,  today: positions["VEA"]?.dailyChangePct ?? null },
+    { ticker: "VWO",  weight: 0.05, ytd: lplVWO.ytdReturnPct,  today: lplVWO.dailyChangePct },
+    { ticker: "VGIT", weight: 0.12, ytd: positions["VGIT"]?.ytdReturnPct ?? null, today: positions["VGIT"]?.dailyChangePct ?? null },
+    { ticker: "VCIT", weight: 0.11, ytd: lplVCIT.ytdReturnPct, today: lplVCIT.dailyChangePct },
+    { ticker: "VMBS", weight: 0.10, ytd: lplVMBS.ytdReturnPct, today: lplVMBS.dailyChangePct },
+    { ticker: "VTIP", weight: 0.04, ytd: positions["VTIP"]?.ytdReturnPct ?? null, today: positions["VTIP"]?.dailyChangePct ?? null },
+    { ticker: "PDBC", weight: 0.02, ytd: cleanSlatePDBC.ytdReturnPct, today: cleanSlatePDBC.dailyChangePct },
+    { ticker: "IGF",  weight: 0.02, ytd: lplIGF.ytdReturnPct,  today: lplIGF.dailyChangePct },
+    { ticker: "DBMF", weight: 0.07, ytd: cleanSlateDBMF.ytdReturnPct, today: cleanSlateDBMF.dailyChangePct },
+    { ticker: "SGOV", weight: 0.02, ytd: positions["SGOV"]?.ytdReturnPct ?? null, today: positions["SGOV"]?.dailyChangePct ?? null },
+  ];
+  const lpl5050HasAllYtd = lpl5050Components.every((c) => c.ytd != null);
+  const lpl5050YtdPct: number | null = lpl5050HasAllYtd
+    ? lpl5050Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const lpl5050HasAllToday = lpl5050Components.every((c) => c.today != null);
+  const lpl5050TodayPct: number | null = lpl5050HasAllToday
+    ? lpl5050Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+
+  [
+    ["vug", lplVUG], ["vtv", lplVTV], ["vwo", lplVWO],
+    ["vcit", lplVCIT], ["vmbs", lplVMBS], ["igf", lplIGF],
+  ].forEach(([key, r]: any) => { if (r.error) diagnostics[`lpl_${key}`] = r.error; });
 
   if (spx.error) diagnostics["spx"] = spx.error;
   if (vix.error) diagnostics["vix"] = vix.error;
@@ -834,6 +908,14 @@ export async function GET() {
       clean_slate: {
         ytd_return_pct: cleanSlateYtdPct,
         today_change_pct: cleanSlateTodayPct,
+      },
+      lpl_4060: {
+        ytd_return_pct: lpl4060YtdPct,
+        today_change_pct: lpl4060TodayPct,
+      },
+      lpl_5050: {
+        ytd_return_pct: lpl5050YtdPct,
+        today_change_pct: lpl5050TodayPct,
       },
     },
   }, { status: 200 });
