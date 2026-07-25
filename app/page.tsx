@@ -899,7 +899,7 @@ RESPONSE RULES:
                 position tiles' Today column. */}
             <div className="grid5" style={{ marginBottom:16 }}>
               <div className="tile">
-                <div className="lbl">Portfolio YTD</div>
+                <div className="lbl">CUR 40/55/5 YTD</div>
                 <div className="valHero">
                   {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
                 </div>
@@ -935,7 +935,7 @@ RESPONSE RULES:
                 </div>
               </div>
               <div className="tile">
-                <div className="lbl">S&amp;P 500 YTD</div>
+                <div className="lbl">SPX 100/0 YTD</div>
                 <div className="valHero">
                   {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
                 </div>
@@ -955,7 +955,7 @@ RESPONSE RULES:
             </div>
             <div className="grid5" style={{ marginBottom:16 }}>
               <div className="tile">
-                <div className="lbl">ALT 45/55 YTD</div>
+                <div className="lbl">ALT 45/40/15 YTD</div>
                 <div className="valHero">
                   {cleanSlateYtdPct != null ? `${cleanSlateYtdPct >= 0 ? "+" : ""}${cleanSlateYtdPct.toFixed(1)}%` : "—"}
                 </div>
