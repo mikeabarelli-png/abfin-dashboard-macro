@@ -380,6 +380,7 @@ export async function GET() {
     brentLiveQuote,
     cleanSlateExtras,
     lplImgExtras,
+    vgBNDX,
   ] = await Promise.all([
     Promise.all([
       fetchChart("^GSPC", 420),
@@ -432,6 +433,11 @@ export async function GET() {
       fetchPositionMetrics("VMBS"),
       fetchPositionMetrics("IGF"),
     ]),
+    // Vanguard "unconstrained" 40/60 model — VAAM/VCMM output. Reuses VTV,
+    // VUG, VWO, VCIT (all already fetched above for the LPL model), VEA,
+    // SGOV, VGIT (real holdings), and BND (already fetched for the 60/40
+    // proxy). BNDX (international bonds) is the only new ticker needed.
+    fetchPositionMetrics("BNDX"),
   ]);
   const [cleanSlatePDBC, cleanSlateDBMF] = cleanSlateExtras;
   const [lplVUG, lplVTV, lplVWO, lplVCIT, lplVMBS, lplIGF] = lplImgExtras;
@@ -551,6 +557,31 @@ export async function GET() {
     ["vug", lplVUG], ["vtv", lplVTV], ["vwo", lplVWO],
     ["vcit", lplVCIT], ["vmbs", lplVMBS], ["igf", lplIGF],
   ].forEach(([key, r]: any) => { if (r.error) diagnostics[`lpl_${key}`] = r.error; });
+
+  // Vanguard "unconstrained" 40/60 model (VAAM/VCMM, per the client's shared
+  // charts) — mapped to tradable ETFs. VGIT stands in for their "long-term
+  // Treasury" line since no dedicated long-duration Treasury ticker is
+  // fetched elsewhere; that's a real duration mismatch, not an exact match.
+  const vg4060Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] = [
+    { ticker: "VTV",  weight: 0.16, ytd: lplVTV.ytdReturnPct,  today: lplVTV.dailyChangePct },
+    { ticker: "VUG",  weight: 0.06, ytd: lplVUG.ytdReturnPct,  today: lplVUG.dailyChangePct },
+    { ticker: "VWO",  weight: 0.02, ytd: lplVWO.ytdReturnPct,  today: lplVWO.dailyChangePct },
+    { ticker: "VEA",  weight: 0.16, ytd: positions["VEA"]?.ytdReturnPct ?? null,  today: positions["VEA"]?.dailyChangePct ?? null },
+    { ticker: "BND",  weight: 0.34, ytd: benchmarkBND.ytdReturnPct, today: benchmarkBND.dailyChangePct },
+    { ticker: "SGOV", weight: 0.02, ytd: positions["SGOV"]?.ytdReturnPct ?? null, today: positions["SGOV"]?.dailyChangePct ?? null },
+    { ticker: "VGIT", weight: 0.07, ytd: positions["VGIT"]?.ytdReturnPct ?? null, today: positions["VGIT"]?.dailyChangePct ?? null },
+    { ticker: "VCIT", weight: 0.02, ytd: lplVCIT.ytdReturnPct, today: lplVCIT.dailyChangePct },
+    { ticker: "BNDX", weight: 0.15, ytd: vgBNDX.ytdReturnPct, today: vgBNDX.dailyChangePct },
+  ];
+  const vg4060HasAllYtd = vg4060Components.every((c) => c.ytd != null);
+  const vg4060YtdPct: number | null = vg4060HasAllYtd
+    ? vg4060Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const vg4060HasAllToday = vg4060Components.every((c) => c.today != null);
+  const vg4060TodayPct: number | null = vg4060HasAllToday
+    ? vg4060Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+  if (vgBNDX.error) diagnostics["vg_bndx"] = vgBNDX.error;
 
   if (spx.error) diagnostics["spx"] = spx.error;
   if (vix.error) diagnostics["vix"] = vix.error;
@@ -916,6 +947,10 @@ export async function GET() {
       lpl_5050: {
         ytd_return_pct: lpl5050YtdPct,
         today_change_pct: lpl5050TodayPct,
+      },
+      vg_4060: {
+        ytd_return_pct: vg4060YtdPct,
+        today_change_pct: vg4060TodayPct,
       },
     },
   }, { status: 200 });
