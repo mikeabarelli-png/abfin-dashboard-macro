@@ -294,6 +294,8 @@ export default function Page() {
   const lpl4060TodayPct = getNum(metrics?.lpl_4060?.today_change_pct, marketData?.lpl_4060?.today_change_pct);
   const lpl5050YtdPct = getNum(metrics?.lpl_5050?.ytd_return_pct, marketData?.lpl_5050?.ytd_return_pct);
   const lpl5050TodayPct = getNum(metrics?.lpl_5050?.today_change_pct, marketData?.lpl_5050?.today_change_pct);
+  const vg4060YtdPct = getNum(metrics?.vg_4060?.ytd_return_pct, marketData?.vg_4060?.ytd_return_pct);
+  const vg4060TodayPct = getNum(metrics?.vg_4060?.today_change_pct, marketData?.vg_4060?.today_change_pct);
 
   const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" }
     : vixValue >= 30 ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" }
@@ -987,6 +989,18 @@ RESPONSE RULES:
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
                   <div style={{ fontSize:15, fontWeight:700, color: lpl5050TodayPct == null ? "#cbd5e1" : lpl5050TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                     {lpl5050TodayPct != null ? `${lpl5050TodayPct >= 0 ? "+" : ""}${lpl5050TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+              <div className="tile">
+                <div className="lbl">VG 40/60 YTD</div>
+                <div className="valHero">
+                  {vg4060YtdPct != null ? `${vg4060YtdPct >= 0 ? "+" : ""}${vg4060YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, color: vg4060TodayPct == null ? "#cbd5e1" : vg4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {vg4060TodayPct != null ? `${vg4060TodayPct >= 0 ? "+" : ""}${vg4060TodayPct.toFixed(1)}%` : "—"}
                   </div>
                 </div>
               </div>
