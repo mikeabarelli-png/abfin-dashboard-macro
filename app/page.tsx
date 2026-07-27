@@ -780,10 +780,12 @@ RESPONSE RULES:
             <div className="topRight">
               <div className="liveDot">
                 <span className={feedError ? "dot dotError" : "dot dotLive"} />
-                <span className="dotLabel">{feedError ? "Feed error" : "Live · 60s refresh"}</span>
+                <span className="dotLabel">
+                  {feedError ? "Feed error" : <>Live<span className="hideMobile"> · 60s refresh</span></>}
+                </span>
               </div>
               <div className="meta">
-                <div>LIVE_YAHOO_FRED</div>
+                <div className="sourceLabel">LIVE_YAHOO_FRED</div>
                 <div>{feedError ? "Feed error" : lastUpdated ? `Refreshed ${lastUpdated}` : "Loading..."}</div>
               </div>
             </div>
@@ -1065,6 +1067,18 @@ RESPONSE RULES:
                 </div>
               </div>
             </div>
+          </section>
+
+          {/* ①-C YOUR HOLDINGS — the actual position tiles, split into their
+              own section since the combined panel had grown to ~15 tiles. */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div>
+                <div className="panelTitle">Your Holdings</div>
+                <div className="panelSub">Trend sleeve judged vs 200-DMA · fixed income shown by YTD return only</div>
+              </div>
+              <div className="pstamp">LIVE · Yahoo Finance</div>
+            </div>
 
             {(() => {
               // Shared tile renderer — same trend/defensive branch logic as
@@ -1083,6 +1097,7 @@ RESPONSE RULES:
                         <span className="lbl">{p.ticker} · {p.weight}%</span>
                       </div>
                       <div style={jobStyle}>{p.job}</div>
+
                       <div className="valHero" style={{ fontSize:24 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
 
                       <div style={{ display:"flex", gap:14, marginTop:8 }}>
@@ -3447,7 +3462,17 @@ RESPONSE RULES:
         .spinner{display:inline-block;width:11px;height:11px;border:2px solid rgba(255,255,255,0.15);border-top-color:#93c5fd;border-radius:50%;animation:spin .7s linear infinite;margin-right:5px;vertical-align:middle;}
         @keyframes spin{to{transform:rotate(360deg)}}
         @media(max-width:900px){.title{font-size:22px;}.valHero{font-size:28px;}}
-        @media(max-width:700px){.topBar,.panelHeader{flex-direction:column;align-items:flex-start;}.grid5,.grid4{grid-template-columns:repeat(2,minmax(0,1fr));}.grid3{grid-template-columns:1fr;}.alertStrip,.alertStripCritical{flex-direction:column;align-items:flex-start;gap:4px;}}
+        @media(max-width:700px){
+          .topBar,.panelHeader{flex-direction:column;align-items:flex-start;}
+          .grid5,.grid4{grid-template-columns:repeat(2,minmax(0,1fr));}
+          .grid3{grid-template-columns:1fr;}
+          .alertStrip,.alertStripCritical{flex-direction:column;align-items:flex-start;gap:4px;}
+          .title{font-size:20px;}
+          .hideMobile{display:none;}
+          .sourceLabel{display:none;}
+          .topRight{display:flex;flex-direction:row;align-items:center;gap:8px;margin-top:4px;}
+          .meta{text-align:left;line-height:1.35;}
+        }
       `}} />
     </>
   );
