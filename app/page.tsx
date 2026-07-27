@@ -6,6 +6,30 @@ type AnyObj = Record<string, any>;
 type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | "dxy" | "ad" | "roberts40w" | "portfolioDetail" | null;
 
 export default function Page() {
+  // Compact 1-2 word asset-class label per ticker, for the portfolio
+  // drill-down modal — a quick "what is this fund" reference, since not
+  // every hypothetical portfolio's holdings are as familiar as the real one.
+  const TICKER_LABELS: Record<string, string> = {
+    VTIP: "US TIPS",
+    SGOV: "T-Bills",
+    VEA:  "Intl Equity",
+    VGIT: "US Treasuries",
+    SCHD: "US Value",
+    VTI:  "US Broad",
+    GLDM: "Gold",
+    BND:  "US Bonds",
+    PDBC: "Commodities",
+    DBMF: "Managed Futures",
+    VUG:  "US Growth",
+    VTV:  "US Value",
+    VWO:  "Emerging Mkts",
+    VCIT: "US Credit",
+    VMBS: "US MBS",
+    IGF:  "Infrastructure",
+    BNDX: "Intl Bonds",
+    SPX:  "US Index",
+  };
+
   const [modal, setModal] = useState<Modal>(null);
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [marketData, setMarketData] = useState<AnyObj | null>(null);
@@ -816,12 +840,13 @@ RESPONSE RULES:
                   <div style={{ fontSize:14, fontWeight:700, color: regimeColor }}>{regimeLabel ?? "Calculating…"}</div>
                 </div>
               </div>
-              <div style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0 }} />
-              {/* Description */}
-              <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{regimeDesc ?? "Computing 200-DMA slope from price history…"}</div>
-              <div style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0, marginLeft:"auto" }} />
+              <div className="hideMobile" style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0 }} />
+              {/* Description — hidden on mobile, the Gap/Slope numbers below
+                  already cover the same ground more concisely there. */}
+              <div className="hideMobile" style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{regimeDesc ?? "Computing 200-DMA slope from price history…"}</div>
+              <div className="hideMobile" style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0, marginLeft:"auto" }} />
               {/* 200-DMA slope readout */}
-              <div style={{ flexShrink:0, textAlign:"right" }}>
+              <div style={{ flexShrink:0, textAlign:"right", marginLeft:"auto" }}>
                 <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>200-DMA Slope</div>
                 <div style={{ fontSize:14, fontWeight:700, color: slope200 == null ? "#475569" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
                   {slope200 == null ? "—" : `${slope200 > 0 ? "↗" : slope200 < 0 ? "↘" : "→"} ${slope200 > 0 ? "+" : ""}${slope200.toFixed(1)}%`}
@@ -2718,45 +2743,30 @@ RESPONSE RULES:
         const hasAllYtd = d.components.every(c => c.ytd != null);
         return (
           <ModalWrapper onClose={()=>{ setModal(null); setDetailKey(null); }} title={d.title} sub={d.subtitle}>
-            <div style={{ display:"flex", gap:24, marginBottom:16 }}>
-              <div>
-                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>YTD</div>
-                <div style={{ fontSize:26, fontWeight:700, color: d.ytd == null ? "#fff" : d.ytd >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  {d.ytd != null ? `${d.ytd >= 0 ? "+" : ""}${d.ytd.toFixed(1)}%` : "—"}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>Today</div>
-                <div style={{ fontSize:26, fontWeight:700, color: d.today == null ? "#fff" : d.today >= 0 ? "#4ade80" : "#ff6b88" }}>
-                  {d.today != null ? `${d.today >= 0 ? "+" : ""}${d.today.toFixed(1)}%` : "—"}
-                </div>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>YTD</div>
+              <div style={{ fontSize:26, fontWeight:700, color: d.ytd == null ? "#fff" : d.ytd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                {d.ytd != null ? `${d.ytd >= 0 ? "+" : ""}${d.ytd.toFixed(1)}%` : "—"}
               </div>
             </div>
             <table className="valTable">
               <thead>
                 <tr>
                   <th style={{ textAlign:"left" }}>Ticker</th>
+                  <th style={{ textAlign:"left" }}>Description</th>
                   <th style={{ textAlign:"right" }}>Weight</th>
                   <th style={{ textAlign:"right" }}>YTD</th>
-                  <th style={{ textAlign:"right" }}>Contribution</th>
-                  <th style={{ textAlign:"right" }}>Today</th>
                 </tr>
               </thead>
               <tbody>
                 {d.components.map(c => {
-                  const contribution = c.ytd != null ? (c.ytd * c.weight) / 100 : null;
                   return (
                     <tr key={c.ticker}>
                       <td style={{ fontWeight:700, color:"#cbd5e1" }}>{c.ticker}</td>
+                      <td style={{ color:"#94a3b8" }}>{TICKER_LABELS[c.ticker] ?? "—"}</td>
                       <td style={{ textAlign:"right", color:"#94a3b8" }}>{c.weight}%</td>
                       <td style={{ textAlign:"right", fontWeight:600, color: c.ytd == null ? "#64748b" : c.ytd >= 0 ? "#4ade80" : "#ff6b88" }}>
                         {c.ytd != null ? `${c.ytd >= 0 ? "+" : ""}${c.ytd.toFixed(1)}%` : "—"}
-                      </td>
-                      <td style={{ textAlign:"right", color:"#94a3b8" }}>
-                        {contribution != null ? `${contribution >= 0 ? "+" : ""}${contribution.toFixed(2)}` : "—"}
-                      </td>
-                      <td style={{ textAlign:"right", fontWeight:600, color: c.today == null ? "#64748b" : c.today >= 0 ? "#4ade80" : "#ff6b88" }}>
-                        {c.today != null ? `${c.today >= 0 ? "+" : ""}${c.today.toFixed(1)}%` : "—"}
                       </td>
                     </tr>
                   );
