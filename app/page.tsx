@@ -2759,7 +2759,7 @@ RESPONSE RULES:
                 </tr>
               </thead>
               <tbody>
-                {d.components.map(c => {
+                {[...d.components].sort((a, b) => b.weight - a.weight).map(c => {
                   return (
                     <tr key={c.ticker}>
                       <td style={{ fontWeight:700, color:"#cbd5e1" }}>{c.ticker}</td>
