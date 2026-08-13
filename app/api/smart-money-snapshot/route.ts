@@ -388,7 +388,7 @@ export async function GET() {
   // ═══════════════════════════════════════════════════════════════════
 
   const [
-    [spx, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthChart],
+    [spx, qqq, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthChart],
     positionResults,
     benchmarkBND,
     brentLiveQuote,
@@ -398,6 +398,7 @@ export async function GET() {
   ] = await Promise.all([
     Promise.all([
       fetchChart("^GSPC", 420),
+      fetchChart("QQQ", 420),
       fetchChart("^VIX", 5),
       fetchChart("DX-Y.NYB", 5),
       fetchChart("^CPCE", 5),
@@ -598,6 +599,7 @@ export async function GET() {
   if (vgBNDX.error) diagnostics["vg_bndx"] = vgBNDX.error;
 
   if (spx.error) diagnostics["spx"] = spx.error;
+  if (qqq.error) diagnostics["qqq"] = qqq.error;
   if (vix.error) diagnostics["vix"] = vix.error;
   if (dxy.error) diagnostics["dxy"] = dxy.error;
   if (putCall.error) diagnostics["putcall"] = putCall.error;
@@ -751,6 +753,67 @@ export async function GET() {
     bull: "🟢", transition_above: "🟡", transition_below: "🟡", bear: "🔴"
   };
 
+  // ── QQQ (Nasdaq-100) — same DMA/slope/regime math as SPX above, just run
+  // against ^QQQ. Added specifically because SPX can hold up fine while
+  // tech/momentum leadership breaks underneath it, exactly what happened
+  // the week of the momentum crash.
+  const qqqCloses = qqq.closes;
+  const qqqPrice: number | null = qqq.meta.regularMarketPrice ?? qqqCloses[qqqCloses.length - 1] ?? null;
+  const qqqPrevClose: number | null =
+    qqqCloses.length >= 2 ? qqqCloses[qqqCloses.length - 2] : qqq.meta.chartPreviousClose ?? null;
+  const qqqChangePct: number | null =
+    qqqPrice != null && qqqPrevClose != null
+      ? ((qqqPrice - qqqPrevClose) / qqqPrevClose) * 100
+      : null;
+
+  const qqq20dma = qqqCloses.length >= 20 ? avg(qqqCloses.slice(-20)) : null;
+  const qqq50dma = qqqCloses.length >= 50 ? avg(qqqCloses.slice(-50)) : null;
+  const qqq100dma = qqqCloses.length >= 100 ? avg(qqqCloses.slice(-100)) : null;
+  const qqq200dma = qqqCloses.length >= 200 ? avg(qqqCloses.slice(-200)) : null;
+  const qqqTrend14d = qqqCloses.slice(-14);
+
+  const qqq20dma_prev = qqqCloses.length >= 30 ? avg(qqqCloses.slice(-30, -10)) : null;
+  const qqq20slope = qqq20dma != null && qqq20dma_prev != null
+    ? ((qqq20dma - qqq20dma_prev) / qqq20dma_prev) * 100 : null;
+
+  const qqq50dma_prev = qqqCloses.length >= 70 ? avg(qqqCloses.slice(-70, -20)) : null;
+  const qqq50slope = qqq50dma != null && qqq50dma_prev != null
+    ? ((qqq50dma - qqq50dma_prev) / qqq50dma_prev) * 100 : null;
+
+  const qqq200dma_prev = qqqCloses.length >= 220 ? avg(qqqCloses.slice(-220, -20)) : null;
+  const qqq200slope = qqq200dma != null && qqq200dma_prev != null
+    ? ((qqq200dma - qqq200dma_prev) / qqq200dma_prev) * 100 : null;
+
+  const qqqAboveDma200 = qqqPrice != null && qqq200dma != null && qqqPrice > qqq200dma;
+  const qqqDma200Rising = qqq200slope != null && qqq200slope > 0.02;
+
+  const qqqRegime: Regime =
+    qqqAboveDma200 && qqqDma200Rising  ? "bull"
+    : qqqAboveDma200 && !qqqDma200Rising ? "transition_above"
+    : !qqqAboveDma200 && qqqDma200Rising ? "transition_below"
+    : "bear";
+
+  const qqqRegimeDesc: Record<Regime, string> = {
+    bull:             "QQQ above rising 200-DMA. Trend intact.",
+    transition_above: "QQQ above 200-DMA but slope flattening or falling. Momentum losing steam — watch closely.",
+    transition_below: "QQQ below 200-DMA but DMA still rising. Pullback, not yet a structural break.",
+    bear:             "QQQ below a falling 200-DMA. Structural downtrend confirmed.",
+  };
+
+  // QQQ YTD — total return, using the same adjusted-close method already
+  // proven for the seven real positions. QQQ is an ETF with real dividend
+  // data, unlike a raw index, so no price-only fallback is needed here.
+  // Reuses the 420-day fetch already pulled above — no second network call.
+  const qqqCurrentYear = new Date().getUTCFullYear();
+  const qqqYtdStartIdx = qqq.timestamps.findIndex(
+    (t) => new Date(t * 1000).getUTCFullYear() === qqqCurrentYear
+  );
+  const qqqStartAdjClose = qqqYtdStartIdx >= 0 ? qqq.adjcloses[qqqYtdStartIdx] : null;
+  const qqqYtdPct: number | null =
+    qqqStartAdjClose != null && qqqPrice != null && qqqStartAdjClose !== 0
+      ? ((qqqPrice - qqqStartAdjClose) / qqqStartAdjClose) * 100
+      : null;
+
   const vixPrice: number | null = vix.meta.regularMarketPrice ?? vix.closes[vix.closes.length - 1] ?? null;
 
   const real10y: number = fredReal10y.value ?? 1.92;
@@ -884,6 +947,21 @@ export async function GET() {
       spx_50dma: { level: spx50dma, slope: spx50slope },
       spx_100dma: { level: spx100dma },
       spx_200dma: { level: spx200dma, slope: spx200slope },
+      qqq: {
+        price: qqqPrice,
+        change_pct: qqqChangePct,
+        ytd_pct: qqqYtdPct,
+        trend_14d: qqqTrend14d,
+        dma_20: { level: qqq20dma, slope: qqq20slope },
+        dma_50: { level: qqq50dma, slope: qqq50slope },
+        dma_100: { level: qqq100dma },
+        dma_200: { level: qqq200dma, slope: qqq200slope },
+        regime: qqqRegime,
+        regime_label: regimeLabel[qqqRegime],
+        regime_desc: qqqRegimeDesc[qqqRegime],
+        regime_color: regimeColor[qqqRegime],
+        regime_emoji: regimeEmoji[qqqRegime],
+      },
       regime,
       regime_label: regimeLabel[regime],
       regime_desc: regimeDesc[regime],
