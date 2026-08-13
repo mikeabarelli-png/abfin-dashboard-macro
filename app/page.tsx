@@ -94,6 +94,27 @@ export default function Page() {
   const spx100 = getNum(metrics?.spx_100dma?.level, marketData?.spx_100dma?.level) ?? 6841.88;
   const spx200 = getNum(metrics?.spx_200dma?.level, marketData?.spx_200dma?.level) ?? 6608.12;
 
+  // QQQ (Nasdaq-100) — mirrors the SPX extraction, added specifically to
+  // watch tech/momentum leadership separately from the broad index, per
+  // Roberts' own instrument choice in the momentum-crash report.
+  const qqqPrice = getNum(metrics?.qqq?.price, marketData?.qqq?.price);
+  const qqqChangePct = getNum(metrics?.qqq?.change_pct, marketData?.qqq?.change_pct);
+  const qqqYtd = getNum(metrics?.qqq?.ytd_pct, marketData?.qqq?.ytd_pct);
+  const qqqTrend = getArr(metrics?.qqq?.trend_14d, marketData?.qqq?.trend_14d) ?? [];
+  const qqq20 = getNum(metrics?.qqq?.dma_20?.level, marketData?.qqq?.dma_20?.level);
+  const qqq50 = getNum(metrics?.qqq?.dma_50?.level, marketData?.qqq?.dma_50?.level);
+  const qqq100 = getNum(metrics?.qqq?.dma_100?.level, marketData?.qqq?.dma_100?.level);
+  const qqq200 = getNum(metrics?.qqq?.dma_200?.level, marketData?.qqq?.dma_200?.level);
+  const qqqSlope20 = getNum(metrics?.qqq?.dma_20?.slope, marketData?.qqq?.dma_20?.slope);
+  const qqqSlope50 = getNum(metrics?.qqq?.dma_50?.slope, marketData?.qqq?.dma_50?.slope);
+  const qqqSlope200 = getNum(metrics?.qqq?.dma_200?.slope, marketData?.qqq?.dma_200?.slope);
+  const qqqRegimeLabel = metrics?.qqq?.regime_label ?? marketData?.qqq?.regime_label ?? null;
+  const qqqRegimeDesc = metrics?.qqq?.regime_desc ?? marketData?.qqq?.regime_desc ?? null;
+  const qqqRegimeColor = metrics?.qqq?.regime_color ?? marketData?.qqq?.regime_color ?? "#fbbf24";
+  const qqqRegimeEmoji = metrics?.qqq?.regime_emoji ?? marketData?.qqq?.regime_emoji ?? "🟡";
+  const qqqVs = (level: number | null) => qqqPrice == null || level == null ? null : ((qqqPrice - level) / level) * 100;
+  const qqq200Pct = qqqVs(qqq200);
+
   // DMA slopes (% change over last 20 trading days)
   const slope20 = getNum(metrics?.spx_20dma?.slope, marketData?.spx_20dma?.slope);
   const slope50 = getNum(metrics?.spx_50dma?.slope, marketData?.spx_50dma?.slope);
@@ -963,6 +984,95 @@ RESPONSE RULES:
                 </span>
               </div>
             ) : null}
+          </section>
+
+          {/* ①-Q MARKET STRUCTURE — QQQ (NASDAQ-100) — same layout as the SPX
+              section above, added to watch tech/momentum leadership
+              separately from the broad index, matching the instrument
+              Roberts himself used in the momentum-crash report. */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div><div className="panelTitle">Market Structure — QQQ</div><div className="panelSub">Price vs Key Moving Averages · Nasdaq-100</div></div>
+            </div>
+
+            <div style={{
+              display:"flex", alignItems:"center", gap:12,
+              background: "rgba(255,255,255,0.02)",
+              border: `1px solid ${qqqRegimeColor}33`,
+              borderRadius:10, padding:"10px 14px", marginBottom:10
+            }}>
+              <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:16 }}>{qqqRegimeEmoji}</span>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>Market Regime</div>
+                  <div style={{ fontSize:14, fontWeight:700, color: qqqRegimeColor }}>{qqqRegimeLabel ?? "Calculating…"}</div>
+                </div>
+              </div>
+              <div className="hideMobile" style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0 }} />
+              <div className="hideMobile" style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{qqqRegimeDesc ?? "Computing 200-DMA slope from price history…"}</div>
+              <div className="hideMobile" style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0, marginLeft:"auto" }} />
+              <div style={{ flexShrink:0, textAlign:"right", marginLeft:"auto" }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>200-DMA Slope</div>
+                <div style={{ fontSize:14, fontWeight:700, color: qqqSlope200 == null ? "#475569" : qqqSlope200 > 0.02 ? "#4ade80" : qqqSlope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                  {qqqSlope200 == null ? "—" : `${qqqSlope200 > 0 ? "↗" : qqqSlope200 < 0 ? "↘" : "→"} ${qqqSlope200 > 0 ? "+" : ""}${qqqSlope200.toFixed(1)}%`}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid5">
+              <div className="tile">
+                <div className="tileTop"><span className="lbl">QQQ</span></div>
+                <div className="valHero">{qqqPrice != null ? `$${qqqPrice.toFixed(2)}` : "—"}</div>
+                {qqqTrend.length > 0 && (
+                  <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(qqqTrend, qqqChangePct != null && qqqChangePct >= 0 ? "#4ade80" : "#ff6b88") }} />
+                )}
+                <div style={{ display:"flex", gap:14, marginTop:8 }}>
+                  <div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                    <div style={{ fontSize:15, fontWeight:700, color: qqqYtd == null ? "#cbd5e1" : qqqYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                      {qqqYtd != null ? `${qqqYtd >= 0 ? "+" : ""}${qqqYtd.toFixed(1)}%` : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                    <div style={{ fontSize:15, fontWeight:700, color: qqqChangePct == null ? "#cbd5e1" : qqqChangePct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                      {qqqChangePct != null ? `${qqqChangePct >= 0 ? "+" : ""}${qqqChangePct.toFixed(1)}%` : "—"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {[
+                { label:"200-DMA", level:qqq200, slope:qqqSlope200, pct:qqq200Pct, isLong:true },
+                { label:"100-DMA", level:qqq100, slope:null,         pct:qqqVs(qqq100), isLong:false },
+                { label:"50-DMA",  level:qqq50,  slope:qqqSlope50,   pct:qqqVs(qqq50),  isLong:false },
+                { label:"20-DMA",  level:qqq20,  slope:qqqSlope20,   pct:qqqVs(qqq20),  isLong:false },
+              ].map(d => {
+                const state = positionDmaState(d.pct, d.slope, qqqChangePct, d.isLong);
+                const tone = positionDmaTone(d.pct, d.slope, qqqChangePct, d.isLong);
+                const color = toneColor(tone);
+                const slopeColor = d.slope == null ? "#cbd5e1" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
+                return (
+                  <div key={d.label} className="tile">
+                    <div className="tileTop"><span className="lbl">{d.label}</span></div>
+                    <div className="valHero">{d.level != null ? `$${d.level.toFixed(2)}` : "—"}</div>
+                    <div className="status" style={{ color }}>{state}</div>
+                    <div style={{ display:"flex", gap:14, marginTop:8 }}>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
+                        <div style={{ fontSize:15, fontWeight:700, color }}>{d.pct != null ? fmtSigned1(d.pct) : "—"}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Slope</div>
+                        <div style={{ fontSize:15, fontWeight:700, color: slopeColor }}>
+                          {d.slope != null ? `${d.slope > 0 ? "+" : ""}${d.slope.toFixed(1)}%` : "—"}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </section>
 
           {/* ①-B PORTFOLIO POSITION HEALTH — live per-holding 200-DMA status */}
