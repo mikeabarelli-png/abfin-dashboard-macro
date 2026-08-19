@@ -143,7 +143,7 @@ export default function Page() {
   const adLine = metrics?.ad_line ?? marketData?.ad_line ?? null;
   const erpBps = getNum(metrics?.erp_bps, marketData?.erp_bps);
   const trailingPE = getNum(metrics?.trailing_pe, marketData?.trailing_pe);
-  const capeRatio = getNum(metrics?.cape_ratio, marketData?.cape_ratio) ?? 40.2;
+  const capeRatio = getNum(metrics?.cape_ratio, marketData?.cape_ratio) ?? 42.06;
   const fearGreedScore = getNum(metrics?.fear_greed_score, marketData?.fear_greed_score) ?? 15;
   const fearGreedRating: string = metrics?.fear_greed_rating ?? marketData?.fear_greed_rating ?? "Extreme Fear";
 
@@ -165,7 +165,7 @@ export default function Page() {
   const compositeSignal: string = metrics?.composite_signal ?? marketData?.composite_signal ?? "SLIGHT TILT";
   const compositeColor: string = metrics?.composite_color ?? marketData?.composite_color ?? "#fbbf24";
   const regimeGate: string = metrics?.regime_gate ?? marketData?.regime_gate ?? "hold";
-  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.08;
+  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.59;
   const fedStance: string = metrics?.fed_stance ?? marketData?.fed_stance ?? "holding";
   const djtPrice      = getNum(metrics?.djt_price,      marketData?.djt_price);
   const djtChangePct  = getNum(metrics?.djt_change_pct, marketData?.djt_change_pct);
@@ -185,13 +185,13 @@ export default function Page() {
   const positionsData: AnyObj = metrics?.positions ?? marketData?.positions ?? {};
 
   // Official last month-end signals — update each month when Advisor Perspectives publishes
-  // Source: advisorperspectives.com/dshort · Last updated: Jun 30, 2026
-  // VTI: Invested (+8.5%) · VEU: Invested (+9.5%) · IEF: Cash (-0.1%, closed below 10-mo SMA) · VNQ: Invested (+6.4%) · DBC: Invested (+5.1%)
+  // Source: advisorperspectives.com/dshort · Last updated: Jul 31, 2026 · Valid until Aug 31, 2026
+  // VTI: Invested (+6.6%) · VEU: Invested (+6.5%) · IEF: Cash (-1.5%, closed below 10-mo SMA) · VNQ: Invested (+7.9%) · DBC: Invested (+12.7%)
   const ivyOfficialSignals: Record<string, "Invest" | "Cash"> = {
     vti: "Invest", veu: "Invest", ief: "Cash", vnq: "Invest", dbc: "Invest"
   };
-  const ivyOfficialDate = "Jun 30";
-  const ivyEOMDate = "Jul 31";
+  const ivyOfficialDate = "Jul 31";
+  const ivyEOMDate = "Aug 31";
 
   const ivyPositions = [
     { ticker:"VTI", name:"US Stocks",     key:"vti" },
@@ -2542,7 +2542,7 @@ RESPONSE RULES:
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Valuation, Recession &amp; Sentiment Models</div><div className="panelSub">Sigma scores vs historical norm · Standard deviation from mean</div></div>
-              <div style={{ textAlign:"right" }}><div className="pstamp">Updated May 31 · Next: Jun 8</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
+              <div style={{ textAlign:"right" }}><div className="pstamp">Updated Aug 14 · Next: Aug 22</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
             </div>
 
             {/* Valuation Models */}
@@ -2551,12 +2551,12 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.48", color:"#ff6b88" },
-                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.20", color:"#ff6b88" },
-                  { name:"Price/Sales",            rating:"Strongly Overvalued", score:"2.00", color:"#ff6b88" },
-                  { name:"Interest Rate Model",    rating:"Overvalued",          score:"1.96", color:"#fbbf24" },
-                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.38", color:"#ff6b88" },
-                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.29", color:"#94a3b8", muted:true },
+                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.59", color:"#ff6b88" },
+                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.34", color:"#ff6b88" },
+                  { name:"Price/Sales",            rating:"Overvalued",          score:"1.90", color:"#fbbf24" },
+                  { name:"Interest Rate Model",    rating:"Strongly Overvalued", score:"2.18", color:"#ff6b88" },
+                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.57", color:"#ff6b88" },
+                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.27", color:"#94a3b8", muted:true },
                 ].map(r => (
                   <tr key={r.name} style={{ opacity:(r as any).muted?0.4:1 }}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:(r as any).muted?"italic":"normal" }}>{r.name}</td>
@@ -2568,9 +2568,9 @@ RESPONSE RULES:
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Valuation Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>4 of 5 Strongly Overvalued · Jul 17 · Historically stretched</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>4 of 5 Strongly Overvalued · Aug 14 · Historically stretched</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Interest Rate Model eased to Overvalued from Strongly Overvalued, ending the run of all 5 models at the top tier. Buffett 2.48σ and CAPE 40.94x remain deep in Strongly Overvalued territory, below but still near the 2000 dot-com extremes.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Interest Rate Model moved back to Strongly Overvalued while Price/Sales eased to Overvalued, so the top tier is still 4 of 5 models with a different member. Buffett 2.59σ and CAPE 42.06x remain deep in Strongly Overvalued territory, still below but closing on the 2000 dot-com extremes.</span>
             </div>
 
             {/* Recession Models */}
@@ -2579,9 +2579,9 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Yield Curve",       rating:"Very High Risk", score:"2.56",  color:"#ff6b88", updated:"Jul 17" },
-                  { name:"Sahm Rule",         rating:"Normal",         score:"N/A",   color:"#4ade80", updated:"Jun 30" },
-                  { name:"State Coincidence", rating:"Normal",         score:"-0.24", color:"#4ade80", updated:"May 31" },
+                  { name:"Yield Curve",       rating:"Very High Risk", score:"2.38",  color:"#ff6b88", updated:"Aug 14" },
+                  { name:"Sahm Rule",         rating:"Normal",         score:"N/A",   color:"#4ade80", updated:"Jul 31" },
+                  { name:"State Coincidence", rating:"Normal",         score:"-0.24", color:"#4ade80", updated:"Jun 30" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -2598,7 +2598,7 @@ RESPONSE RULES:
               <span className="sumBarLabel">Recession Signal</span>
               <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Mixed — Yield Curve elevated</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Yield Curve at 2.56σ — re-steepening after inversion historically precedes recession 12–18 months out. Sahm Rule and State Coincidence not yet confirming.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Yield Curve eased slightly to 2.38σ but remains at Very High Risk — re-steepening after inversion historically precedes recession 12–18 months out. Sahm Rule and State Coincidence not yet confirming.</span>
             </div>
 
             {/* Sentiment Models */}
@@ -2640,11 +2640,11 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Economic Uncertainty Index", rating:"Pessimistic",      score:"1.55",  color:"#fbbf24", updated:"Jul 17", note:"elevated uncertainty" },
-                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.40", color:"#4ade80", updated:"Jul 17", note:"contrarian bullish" },
-                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.57",  color:"#fbbf24", updated:"May 31", note:"still elevated" },
-                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.99",  color:"#94a3b8", updated:"Jul 17", note:"tightening" },
-                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.34", color:"#94a3b8", updated:"Jul 17", note:"below 20 — calm" },
+                  { name:"Economic Uncertainty Index", rating:"Neutral",          score:"0.53",  color:"#94a3b8", updated:"Aug 14", note:"eased from pessimistic" },
+                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.60", color:"#4ade80", updated:"Aug 14", note:"contrarian bullish" },
+                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.21",  color:"#fbbf24", updated:"Jun 30", note:"still elevated" },
+                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.99",  color:"#94a3b8", updated:"Aug 14", note:"tightening" },
+                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.61", color:"#94a3b8", updated:"Aug 14", note:"below 20 — calm" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -2662,9 +2662,9 @@ RESPONSE RULES:
             </table>
             <div className="sumBar">
               <span className="sumBarLabel">Sentiment Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism — Contrarian Bullish · May 31</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism — Contrarian Bullish · Aug 14</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Consumer Confidence improved slightly to -2.40σ from -3.20σ, still historically pessimistic. Economic Uncertainty eased to 1.55σ, still Pessimistic. VIX ticked up to -0.34σ, less complacent than last month but still calm. Contrarian signal remains intact.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Consumer Confidence deepened to -2.60σ from -2.40σ, still historically pessimistic. Economic Uncertainty eased all the way to Neutral at 0.53σ from 1.55σ. VIX drifted to -0.61σ, still calm. Contrarian signal remains intact.</span>
             </div>
           </section>
 
