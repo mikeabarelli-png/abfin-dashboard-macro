@@ -5,6 +5,30 @@ import { useEffect, useState, useRef } from "react";
 type AnyObj = Record<string, any>;
 type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | "dxy" | "ad" | "roberts40w" | "portfolioDetail" | null;
 
+// Single source of truth for Equity Risk Premium thresholds. Every ERP
+// tile/modal on the dashboard should read from this instead of carrying
+// its own inline cutoffs — that drift is what caused the composite-grid
+// tile and the secondary tile to disagree at the same erpBps value.
+// Thresholds: <200bps Danger, 200-499bps Watch, 500bps+ Healthy.
+function erpStatus(bps: number | null): {
+  label: string;
+  shortLabel: string;
+  color: string;
+  bg: string;
+  tier: "loading" | "danger" | "watch" | "healthy";
+} {
+  if (bps == null) {
+    return { label: "Loading", shortLabel: "Loading", color: "#475569", bg: "rgba(148,163,184,0.12)", tier: "loading" };
+  }
+  if (bps < 200) {
+    return { label: "Danger — Near Zero", shortLabel: "Danger", color: "#ff6b88", bg: "rgba(255,79,114,0.15)", tier: "danger" };
+  }
+  if (bps < 500) {
+    return { label: "Watch — Below 5%", shortLabel: "Watch", color: "#fbbf24", bg: "rgba(245,158,11,0.15)", tier: "watch" };
+  }
+  return { label: "Healthy Premium", shortLabel: "Healthy", color: "#4ade80", bg: "rgba(74,222,128,0.15)", tier: "healthy" };
+}
+
 export default function Page() {
   // Compact 1-2 word asset-class label per ticker, for the portfolio
   // drill-down modal — a quick "what is this fund" reference, since not
@@ -1566,13 +1590,13 @@ RESPONSE RULES:
                     <div className="valHero" style={{ color:"#fff" }}>
                       {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
                     </div>
-                    <div className="status" style={{ color:erpBps==null?"#475569":erpBps<100?"#ff6b88":erpBps<300?"#fbbf24":"#4ade80", marginBottom:2 }}>
-                      {erpBps==null?"Loading":erpBps<100?"Thin compensation":erpBps<300?"Moderate compensation":"Healthy compensation"}
+                    <div className="status" style={{ color:erpStatus(erpBps).color, marginBottom:2 }}>
+                      {erpStatus(erpBps).shortLabel}
                     </div>
                     <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
-                      {erpBps!=null&&erpBps<100?"Stocks barely beating T-bills":erpBps!=null&&erpBps<300?`${((erpBps)/100).toFixed(2)}% equity premium — modest`:"Above 3% healthy threshold"}
+                      {erpBps!=null&&erpBps<200?"Stocks barely beating T-bills":erpBps!=null&&erpBps<500?`${((erpBps)/100).toFixed(2)}% equity premium — modest`:"Above 5% healthy threshold"}
                     </div>
-                    <GradBar posPct={erpBps!=null?Math.max(0,Math.min((erpBps/1000)*100,100)):25} markerColor={erpBps==null?"#475569":erpBps<100?"#ff6b88":erpBps<300?"#fbbf24":"#4ade80"} reverse />
+                    <GradBar posPct={erpBps!=null?Math.max(0,Math.min((erpBps/1000)*100,100)):25} markerColor={erpStatus(erpBps).color} reverse />
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Thin</span><span>Fair</span><span>Rich</span></div>
                   </div>
 
@@ -1860,8 +1884,8 @@ RESPONSE RULES:
                 <div className="valHero" style={{ color:"#fff" }}>
                   {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
                 </div>
-                <div className="status" style={{ color:erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80" }}>
-                  {erpBps==null?"Loading":erpBps<200?"Danger":erpBps<500?"Watch":"Healthy"}
+                <div className="status" style={{ color:erpStatus(erpBps).color }}>
+                  {erpStatus(erpBps).shortLabel}
                 </div>
                 <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
                   <div style={{ position:"absolute", left:0, top:0, height:6, width:"25%", background:"#ef4444", borderRadius:"9999px 0 0 9999px" }} />
@@ -1871,7 +1895,7 @@ RESPONSE RULES:
                   <div style={{ position:"absolute", top:-6, left:"25%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
                   <div style={{ position:"absolute", top:-4, left:"62.5%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
                 </div>
-                <div style={{ fontSize:11, marginTop:8, fontWeight:600, color:erpBps!=null&&erpBps<200?"#ff6b88":erpBps!=null&&erpBps<230?"#fbbf24":"#64748b" }}>
+                <div style={{ fontSize:11, marginTop:8, fontWeight:600, color:erpStatus(erpBps).tier==="danger"?"#ff6b88":erpStatus(erpBps).tier==="watch"?"#fbbf24":"#64748b" }}>
                   {erpBps!=null&&erpBps<200?"▼ In danger zone":erpBps!=null&&erpBps<500?`▼ ${((erpBps-200)/100).toFixed(2)}% from danger`:"Above healthy threshold"}
                 </div>
               </div>
@@ -3281,7 +3305,7 @@ RESPONSE RULES:
               <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>
                 {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:22 }}>%</span>
               </div>
-              <Tag label={erpBps==null?"Loading":erpBps<200?"Danger — Near Zero":erpBps<500?"Watch — Below 5%":"Healthy Premium"} color={erpBps==null?"#475569":erpBps<200?"#ff6b88":erpBps<500?"#fbbf24":"#4ade80"} bg={erpBps==null?"rgba(148,163,184,0.12)":erpBps<200?"rgba(255,79,114,0.15)":erpBps<500?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
+              <Tag label={erpStatus(erpBps).label} color={erpStatus(erpBps).color} bg={erpStatus(erpBps).bg} />
               <BC>Stocks currently offer {erpBps!=null?(erpBps/100).toFixed(2):"—"}% extra return over risk-free bonds. Below 5% means equities are not compensating adequately for the risk of owning them.</BC>
               <div style={{ marginTop:14 }}>
                 <SH>How it&apos;s calculated</SH>
