@@ -167,7 +167,7 @@ export default function Page() {
   const adLine = metrics?.ad_line ?? marketData?.ad_line ?? null;
   const erpBps = getNum(metrics?.erp_bps, marketData?.erp_bps);
   const trailingPE = getNum(metrics?.trailing_pe, marketData?.trailing_pe);
-  const capeRatio = getNum(metrics?.cape_ratio, marketData?.cape_ratio) ?? 42.06;
+  const capeRatio = getNum(metrics?.cape_ratio, marketData?.cape_ratio) ?? 41.74;
   const fearGreedScore = getNum(metrics?.fear_greed_score, marketData?.fear_greed_score) ?? 15;
   const fearGreedRating: string = metrics?.fear_greed_rating ?? marketData?.fear_greed_rating ?? "Extreme Fear";
 
@@ -189,7 +189,7 @@ export default function Page() {
   const compositeSignal: string = metrics?.composite_signal ?? marketData?.composite_signal ?? "SLIGHT TILT";
   const compositeColor: string = metrics?.composite_color ?? marketData?.composite_color ?? "#fbbf24";
   const regimeGate: string = metrics?.regime_gate ?? marketData?.regime_gate ?? "hold";
-  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.59;
+  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.52;
   const fedStance: string = metrics?.fed_stance ?? marketData?.fed_stance ?? "holding";
   const djtPrice      = getNum(metrics?.djt_price,      marketData?.djt_price);
   const djtChangePct  = getNum(metrics?.djt_change_pct, marketData?.djt_change_pct);
@@ -209,13 +209,13 @@ export default function Page() {
   const positionsData: AnyObj = metrics?.positions ?? marketData?.positions ?? {};
 
   // Official last month-end signals — update each month when Advisor Perspectives publishes
-  // Source: advisorperspectives.com/dshort · Last updated: Jul 31, 2026 · Valid until Aug 31, 2026
-  // VTI: Invested (+6.6%) · VEU: Invested (+6.5%) · IEF: Cash (-1.5%, closed below 10-mo SMA) · VNQ: Invested (+7.9%) · DBC: Invested (+12.7%)
+  // Source: advisorperspectives.com/dshort · Last updated: Aug 31, 2026 · Valid until Sep 30, 2026
+  // VTI: Invested (+8.0%) · VEU: Invested (+7.6%) · IEF: Cash (-1.7%, closed below 10-mo SMA) · VNQ: Invested (+4.1%) · DBC: Invested (+15.8%)
   const ivyOfficialSignals: Record<string, "Invest" | "Cash"> = {
     vti: "Invest", veu: "Invest", ief: "Cash", vnq: "Invest", dbc: "Invest"
   };
-  const ivyOfficialDate = "Jul 31";
-  const ivyEOMDate = "Aug 31";
+  const ivyOfficialDate = "Aug 31";
+  const ivyEOMDate = "Sep 30";
 
   const ivyPositions = [
     { ticker:"VTI", name:"US Stocks",     key:"vti" },
