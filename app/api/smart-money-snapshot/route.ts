@@ -456,12 +456,12 @@ export async function GET() {
     fetchPositionMetrics("BNDX"),
     // "Noelle Mockup" hypothetical — Mike's what-if for Noelle's Rollover
     // IRA per Chris's rough draft (VEA/SCHD/VGIT/SGOV/VTIP/VTI real holdings,
-    // DBMF already fetched above for Clean Slate). VTWO/VIGI/QLS are the new
-    // tickers here. QLS (IQ Hedge Long/Short Tracker) is an explicit
+    // DBMF already fetched above for Clean Slate). VTWO/VIGI/BTAL are the new
+    // tickers here. BTAL (AGF US Market Neutral Anti-Beta) is an explicit
     // placeholder for the 5% Long/Short sleeve — Chris hasn't named a real
     // fund yet and has said he won't use ETFs for this category, so treat
     // this tile's return as illustrative, not predictive of his final pick.
-    Promise.all([fetchPositionMetrics("VTWO"), fetchPositionMetrics("VIGI"), fetchPositionMetrics("QLS")]),
+    Promise.all([fetchPositionMetrics("VTWO"), fetchPositionMetrics("VIGI"), fetchPositionMetrics("BTAL")]),
   ]);
   const [cleanSlatePDBC, cleanSlateDBMF] = cleanSlateExtras;
   const [lplVUG, lplVTV, lplVWO, lplVCIT, lplVMBS, lplIGF] = lplImgExtras;
@@ -522,16 +522,16 @@ export async function GET() {
   if (cleanSlatePDBC.error) diagnostics["clean_slate_pdbc"] = cleanSlatePDBC.error;
   if (cleanSlateDBMF.error) diagnostics["clean_slate_dbmf"] = cleanSlateDBMF.error;
 
-  // "Noelle Mockup" — Mike's what-if replacing GLDM with DBMF + QLS (a
+  // "Noelle Mockup" — Mike's what-if replacing GLDM with DBMF + BTAL (a
   // placeholder for the still-unnamed Long/Short fund Chris is researching)
   // per his conversation with Chris. Equity sleeve held at Chris's original
   // 55% weights; VGIT/SGOV/VTIP trimmed from 41% to 35% to fund the alts
-  // sleeve growing from 4% (GLDM only) to 10% (DBMF 5% + QLS 5%). QLS is an
+  // sleeve growing from 4% (GLDM only) to 10% (DBMF 5% + BTAL 5%). BTAL is an
   // explicit stand-in — Chris has said he won't use ETFs for Long/Short and
   // is screening real managers via Nitrogen, so swap this out the moment he
   // names an actual fund. This tile tracks Noelle's Rollover IRA only, not
   // the household — label accordingly in the UI.
-  const [noelleVTWO, noelleVIGI, noelleQLS] = noelleExtras;
+  const [noelleVTWO, noelleVIGI, noelleBTAL] = noelleExtras;
   const noelleMockupWeights: Record<string, number> = {
     VEA: 0.15, SCHD: 0.15, VTI: 0.10, VGIT: 0.13, SGOV: 0.12, VTIP: 0.10,
   };
@@ -544,7 +544,7 @@ export async function GET() {
     { ticker: "VTWO", weight: 0.10, ytd: noelleVTWO.ytdReturnPct, today: noelleVTWO.dailyChangePct },
     { ticker: "VIGI", weight: 0.05, ytd: noelleVIGI.ytdReturnPct, today: noelleVIGI.dailyChangePct },
     { ticker: "DBMF", weight: 0.05, ytd: cleanSlateDBMF.ytdReturnPct, today: cleanSlateDBMF.dailyChangePct },
-    { ticker: "QLS", weight: 0.05, ytd: noelleQLS.ytdReturnPct, today: noelleQLS.dailyChangePct },
+    { ticker: "BTAL", weight: 0.05, ytd: noelleBTAL.ytdReturnPct, today: noelleBTAL.dailyChangePct },
   ];
   const noelleMockupHasAllYtd = noelleMockupComponents.every((c) => c.ytd != null);
   const noelleMockupYtdPct: number | null = noelleMockupHasAllYtd
@@ -556,9 +556,9 @@ export async function GET() {
     : null;
   if (noelleVTWO.error) diagnostics["noelle_vtwo"] = noelleVTWO.error;
   if (noelleVIGI.error) diagnostics["noelle_vigi"] = noelleVIGI.error;
-  if (noelleQLS.error) diagnostics["noelle_qls"] = noelleQLS.error;
+  if (noelleBTAL.error) diagnostics["noelle_btal"] = noelleBTAL.error;
 
-  // Expose VTWO/VIGI/QLS/DBMF through the same `positions` dict real
+  // Expose VTWO/VIGI/BTAL/DBMF through the same `positions` dict real
   // holdings use, so the "Your Holdings" UI can render full tiles (price,
   // 200-DMA, trend state) for these candidate positions with zero new
   // frontend fetch logic. They're candidates under consideration, not real
@@ -566,7 +566,7 @@ export async function GET() {
   // ride the same `positions.<TICKER>` lookup a new UI section will use.
   positions["VTWO"] = noelleVTWO;
   positions["VIGI"] = noelleVIGI;
-  positions["QLS"] = noelleQLS;
+  positions["BTAL"] = noelleBTAL;
   positions["DBMF"] = cleanSlateDBMF;
 
   // LPL "40/60" proxy blend — essentially LPL's own "Income with Moderate
