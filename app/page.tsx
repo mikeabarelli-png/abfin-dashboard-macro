@@ -333,6 +333,35 @@ export default function Page() {
     return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, state, tone, color, barPos };
   });
 
+  // Candidate positions Mike is watching alongside real holdings — the four
+  // new tickers Chris's rough-draft Noelle IRA mockup introduced (VTWO/VIGI
+  // are straightforward equity beta, so "trend" sleeve fits; DBMF/QLS are
+  // diversifying strategies explicitly designed to zig when equities zag,
+  // so a bullish/bearish-vs-200-DMA equity framing would be misleading —
+  // "defensive" sleeve just shows the numbers, same treatment VTIP/SGOV/VGIT
+  // get). Not part of PORTFOLIO_POSITIONS — nothing here is a real holding.
+  const CANDIDATE_POSITIONS = [
+    { ticker: "VTWO", weight: 10, job: "Small cap, Russell 2000",              sleeve: "trend" as const },
+    { ticker: "VIGI", weight: 5,  job: "Int'l dividend growth",                sleeve: "trend" as const },
+    { ticker: "DBMF", weight: 5,  job: "Managed futures, trend-following",     sleeve: "defensive" as const },
+    { ticker: "QLS",  weight: 5,  job: "Long/Short placeholder — TBD manager", sleeve: "defensive" as const },
+  ];
+  const candidateCards = CANDIDATE_POSITIONS.map(p => {
+    const d = positionsData?.[p.ticker] ?? null;
+    const price: number | null = d?.price ?? null;
+    const dailyPct: number | null = d?.dailyChangePct ?? null;
+    const dma200: number | null = d?.dma200 ?? null;
+    const slope200: number | null = d?.slope200 ?? null;
+    const pctVs200: number | null = d?.pctVs200 ?? null;
+    const ytdReturnPct: number | null = d?.ytdReturnPct ?? null;
+    const state = positionDmaState(pctVs200, slope200, dailyPct, true);
+    const tone = positionDmaTone(pctVs200, slope200, dailyPct, true);
+    const color = toneColor(tone);
+    const clampedPct = pctVs200 == null ? 0 : Math.max(-15, Math.min(15, pctVs200));
+    const barPos = 50 + (clampedPct / 15) * 50;
+    return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, state, tone, color, barPos };
+  });
+
   // Blended portfolio YTD return — weight × each position's own YTD total
   // return. This is an ESTIMATE: it assumes today's weights were held
   // constant since Jan 1 with no rebalancing and no cash flows, so it will
@@ -366,6 +395,13 @@ export default function Page() {
   const lpl5050TodayPct = getNum(metrics?.lpl_5050?.today_change_pct, marketData?.lpl_5050?.today_change_pct);
   const vg4060YtdPct = getNum(metrics?.vg_4060?.ytd_return_pct, marketData?.vg_4060?.ytd_return_pct);
   const vg4060TodayPct = getNum(metrics?.vg_4060?.today_change_pct, marketData?.vg_4060?.today_change_pct);
+  // Noelle Mockup — Mike's what-if replacing GLDM with DBMF + QLS (a
+  // placeholder for the still-unnamed Long/Short fund Chris is researching),
+  // equity held at Chris's original 55%. Tracks Noelle's Rollover IRA only,
+  // not the household. QLS is illustrative — swap once Chris names a real
+  // long/short fund from his Nitrogen screen.
+  const noelleMockupYtdPct = getNum(metrics?.noelle_mockup?.ytd_return_pct, marketData?.noelle_mockup?.ytd_return_pct);
+  const noelleMockupTodayPct = getNum(metrics?.noelle_mockup?.today_change_pct, marketData?.noelle_mockup?.today_change_pct);
 
   // Raw component breakdowns for the drill-down modal — ticker/weight/YTD/today
   // for each hypothetical portfolio, sourced straight from route.ts.
@@ -423,6 +459,12 @@ export default function Page() {
       subtitle: "Vanguard's unconstrained VAAM/VCMM model, mapped to ETFs",
       ytd: vg4060YtdPct, today: vg4060TodayPct,
       components: apiComponents(metrics?.vg_4060 ?? marketData?.vg_4060),
+    },
+    noelleMockup: {
+      title: "Noelle IRA Mockup",
+      subtitle: "Chris's rough draft for Noelle's Rollover IRA — 55% equity / 35% fixed income / 10% alts (DBMF + QLS placeholder for TBD Long/Short). IRA-level, not household.",
+      ytd: noelleMockupYtdPct, today: noelleMockupTodayPct,
+      components: apiComponents(metrics?.noelle_mockup ?? marketData?.noelle_mockup),
     },
   };
 
@@ -1226,6 +1268,31 @@ RESPONSE RULES:
                 </div>
               </div>
             </div>
+
+            {/* Third row — Chris's rough-draft proposal. Modeled on Noelle's
+                Rollover IRA dollar figures, but Mike confirmed the same
+                55/35/10 model is intended across all retirement accounts,
+                so it's treated as directly comparable to CUR 40/55/5 above,
+                not IRA-only. Swap QLS for Chris's real Long/Short pick once
+                his weekend proposal lands. */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+              Proposed Retirement Allocation — Chris's Draft
+            </div>
+            <div className="grid5" style={{ marginBottom:16 }}>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("noelleMockup"); }}>
+                <div className="lbl">Proposed 55/35/10 YTD</div>
+                <div className="valHero">
+                  {noelleMockupYtdPct != null ? `${noelleMockupYtdPct >= 0 ? "+" : ""}${noelleMockupYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>DBMF + QLS placeholder for TBD Long/Short</div>
+                <div style={{ marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, color: noelleMockupTodayPct == null ? "#cbd5e1" : noelleMockupTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {noelleMockupTodayPct != null ? `${noelleMockupTodayPct >= 0 ? "+" : ""}${noelleMockupTodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+            </div>
           </section>
 
           {/* ①-C YOUR HOLDINGS — the actual position tiles, split into their
@@ -1336,8 +1403,15 @@ RESPONSE RULES:
                   <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
                     Fixed Income
                   </div>
-                  <div className="grid5">
+                  <div className="grid5" style={{ marginBottom:16 }}>
                     {incomeCards.map(renderPositionTile)}
+                  </div>
+
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+                    Under Consideration — Not Real Holdings
+                  </div>
+                  <div className="grid5">
+                    {candidateCards.map(renderPositionTile)}
                   </div>
                 </>
               );
