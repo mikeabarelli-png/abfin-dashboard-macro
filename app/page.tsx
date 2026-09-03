@@ -335,7 +335,7 @@ export default function Page() {
 
   // Candidate positions Mike is watching alongside real holdings — the four
   // new tickers Chris's rough-draft Noelle IRA mockup introduced (VTWO/VIGI
-  // are straightforward equity beta, so "trend" sleeve fits; DBMF/QLS are
+  // are straightforward equity beta, so "trend" sleeve fits; DBMF/BTAL are
   // diversifying strategies explicitly designed to zig when equities zag,
   // so a bullish/bearish-vs-200-DMA equity framing would be misleading —
   // "defensive" sleeve just shows the numbers, same treatment VTIP/SGOV/VGIT
@@ -344,7 +344,7 @@ export default function Page() {
     { ticker: "VTWO", weight: 10, job: "Small cap, Russell 2000",              sleeve: "trend" as const },
     { ticker: "VIGI", weight: 5,  job: "Int'l dividend growth",                sleeve: "trend" as const },
     { ticker: "DBMF", weight: 5,  job: "Managed futures, trend-following",     sleeve: "defensive" as const },
-    { ticker: "QLS",  weight: 5,  job: "Long/Short placeholder — TBD manager", sleeve: "defensive" as const },
+    { ticker: "BTAL", weight: 5,  job: "Mkt-neutral anti-beta — TBD L/S manager", sleeve: "defensive" as const },
   ];
   const candidateCards = CANDIDATE_POSITIONS.map(p => {
     const d = positionsData?.[p.ticker] ?? null;
@@ -395,10 +395,10 @@ export default function Page() {
   const lpl5050TodayPct = getNum(metrics?.lpl_5050?.today_change_pct, marketData?.lpl_5050?.today_change_pct);
   const vg4060YtdPct = getNum(metrics?.vg_4060?.ytd_return_pct, marketData?.vg_4060?.ytd_return_pct);
   const vg4060TodayPct = getNum(metrics?.vg_4060?.today_change_pct, marketData?.vg_4060?.today_change_pct);
-  // Noelle Mockup — Mike's what-if replacing GLDM with DBMF + QLS (a
+  // Noelle Mockup — Mike's what-if replacing GLDM with DBMF + BTAL (a
   // placeholder for the still-unnamed Long/Short fund Chris is researching),
   // equity held at Chris's original 55%. Tracks Noelle's Rollover IRA only,
-  // not the household. QLS is illustrative — swap once Chris names a real
+  // not the household. BTAL is illustrative — swap once Chris names a real
   // long/short fund from his Nitrogen screen.
   const noelleMockupYtdPct = getNum(metrics?.noelle_mockup?.ytd_return_pct, marketData?.noelle_mockup?.ytd_return_pct);
   const noelleMockupTodayPct = getNum(metrics?.noelle_mockup?.today_change_pct, marketData?.noelle_mockup?.today_change_pct);
@@ -462,7 +462,7 @@ export default function Page() {
     },
     noelleMockup: {
       title: "Noelle IRA Mockup",
-      subtitle: "Chris's rough draft for Noelle's Rollover IRA — 55% equity / 35% fixed income / 10% alts (DBMF + QLS placeholder for TBD Long/Short). IRA-level, not household.",
+      subtitle: "Chris's rough draft for Noelle's Rollover IRA — 55% equity / 35% fixed income / 10% alts (DBMF + BTAL placeholder for TBD Long/Short). IRA-level, not household.",
       ytd: noelleMockupYtdPct, today: noelleMockupTodayPct,
       components: apiComponents(metrics?.noelle_mockup ?? marketData?.noelle_mockup),
     },
@@ -1273,7 +1273,7 @@ RESPONSE RULES:
                 Rollover IRA dollar figures, but Mike confirmed the same
                 55/35/10 model is intended across all retirement accounts,
                 so it's treated as directly comparable to CUR 40/55/5 above,
-                not IRA-only. Swap QLS for Chris's real Long/Short pick once
+                not IRA-only. Swap BTAL for Chris's real Long/Short pick once
                 his weekend proposal lands. */}
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
               Proposed Retirement Allocation — Chris's Draft
@@ -1284,7 +1284,7 @@ RESPONSE RULES:
                 <div className="valHero">
                   {noelleMockupYtdPct != null ? `${noelleMockupYtdPct >= 0 ? "+" : ""}${noelleMockupYtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>DBMF + QLS placeholder for TBD Long/Short</div>
+                <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>DBMF + BTAL placeholder for TBD Long/Short</div>
                 <div style={{ marginTop:8 }}>
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
                   <div style={{ fontSize:15, fontWeight:700, color: noelleMockupTodayPct == null ? "#cbd5e1" : noelleMockupTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
