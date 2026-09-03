@@ -395,6 +395,7 @@ export async function GET() {
     cleanSlateExtras,
     lplImgExtras,
     vgBNDX,
+    noelleExtras,
   ] = await Promise.all([
     Promise.all([
       fetchChart("^GSPC", 420),
@@ -453,6 +454,14 @@ export async function GET() {
     // SGOV, VGIT (real holdings), and BND (already fetched for the 60/40
     // proxy). BNDX (international bonds) is the only new ticker needed.
     fetchPositionMetrics("BNDX"),
+    // "Noelle Mockup" hypothetical — Mike's what-if for Noelle's Rollover
+    // IRA per Chris's rough draft (VEA/SCHD/VGIT/SGOV/VTIP/VTI real holdings,
+    // DBMF already fetched above for Clean Slate). VTWO/VIGI/QLS are the new
+    // tickers here. QLS (IQ Hedge Long/Short Tracker) is an explicit
+    // placeholder for the 5% Long/Short sleeve — Chris hasn't named a real
+    // fund yet and has said he won't use ETFs for this category, so treat
+    // this tile's return as illustrative, not predictive of his final pick.
+    Promise.all([fetchPositionMetrics("VTWO"), fetchPositionMetrics("VIGI"), fetchPositionMetrics("QLS")]),
   ]);
   const [cleanSlatePDBC, cleanSlateDBMF] = cleanSlateExtras;
   const [lplVUG, lplVTV, lplVWO, lplVCIT, lplVMBS, lplIGF] = lplImgExtras;
@@ -512,6 +521,53 @@ export async function GET() {
     : null;
   if (cleanSlatePDBC.error) diagnostics["clean_slate_pdbc"] = cleanSlatePDBC.error;
   if (cleanSlateDBMF.error) diagnostics["clean_slate_dbmf"] = cleanSlateDBMF.error;
+
+  // "Noelle Mockup" — Mike's what-if replacing GLDM with DBMF + QLS (a
+  // placeholder for the still-unnamed Long/Short fund Chris is researching)
+  // per his conversation with Chris. Equity sleeve held at Chris's original
+  // 55% weights; VGIT/SGOV/VTIP trimmed from 41% to 35% to fund the alts
+  // sleeve growing from 4% (GLDM only) to 10% (DBMF 5% + QLS 5%). QLS is an
+  // explicit stand-in — Chris has said he won't use ETFs for Long/Short and
+  // is screening real managers via Nitrogen, so swap this out the moment he
+  // names an actual fund. This tile tracks Noelle's Rollover IRA only, not
+  // the household — label accordingly in the UI.
+  const [noelleVTWO, noelleVIGI, noelleQLS] = noelleExtras;
+  const noelleMockupWeights: Record<string, number> = {
+    VEA: 0.15, SCHD: 0.15, VTI: 0.10, VGIT: 0.13, SGOV: 0.12, VTIP: 0.10,
+  };
+  const noelleMockupComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] = [
+    ...Object.entries(noelleMockupWeights).map(([ticker, weight]) => ({
+      ticker, weight,
+      ytd: positions[ticker]?.ytdReturnPct ?? null,
+      today: positions[ticker]?.dailyChangePct ?? null,
+    })),
+    { ticker: "VTWO", weight: 0.10, ytd: noelleVTWO.ytdReturnPct, today: noelleVTWO.dailyChangePct },
+    { ticker: "VIGI", weight: 0.05, ytd: noelleVIGI.ytdReturnPct, today: noelleVIGI.dailyChangePct },
+    { ticker: "DBMF", weight: 0.05, ytd: cleanSlateDBMF.ytdReturnPct, today: cleanSlateDBMF.dailyChangePct },
+    { ticker: "QLS", weight: 0.05, ytd: noelleQLS.ytdReturnPct, today: noelleQLS.dailyChangePct },
+  ];
+  const noelleMockupHasAllYtd = noelleMockupComponents.every((c) => c.ytd != null);
+  const noelleMockupYtdPct: number | null = noelleMockupHasAllYtd
+    ? noelleMockupComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const noelleMockupHasAllToday = noelleMockupComponents.every((c) => c.today != null);
+  const noelleMockupTodayPct: number | null = noelleMockupHasAllToday
+    ? noelleMockupComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+  if (noelleVTWO.error) diagnostics["noelle_vtwo"] = noelleVTWO.error;
+  if (noelleVIGI.error) diagnostics["noelle_vigi"] = noelleVIGI.error;
+  if (noelleQLS.error) diagnostics["noelle_qls"] = noelleQLS.error;
+
+  // Expose VTWO/VIGI/QLS/DBMF through the same `positions` dict real
+  // holdings use, so the "Your Holdings" UI can render full tiles (price,
+  // 200-DMA, trend state) for these candidate positions with zero new
+  // frontend fetch logic. They're candidates under consideration, not real
+  // holdings — PORTFOLIO_POSITIONS in page.tsx stays untouched; these just
+  // ride the same `positions.<TICKER>` lookup a new UI section will use.
+  positions["VTWO"] = noelleVTWO;
+  positions["VIGI"] = noelleVIGI;
+  positions["QLS"] = noelleQLS;
+  positions["DBMF"] = cleanSlateDBMF;
 
   // LPL "40/60" proxy blend — essentially LPL's own "Income with Moderate
   // Growth" model (39% equity), close enough to 40% that no reweighting is
@@ -1055,6 +1111,11 @@ export async function GET() {
         ytd_return_pct: vg4060YtdPct,
         today_change_pct: vg4060TodayPct,
         components: serializeComponents(vg4060Components),
+      },
+      noelle_mockup: {
+        ytd_return_pct: noelleMockupYtdPct,
+        today_change_pct: noelleMockupTodayPct,
+        components: serializeComponents(noelleMockupComponents),
       },
     },
   }, { status: 200 });
