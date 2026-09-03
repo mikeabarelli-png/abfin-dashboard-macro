@@ -1383,19 +1383,27 @@ RESPONSE RULES:
                 );
               };
 
-              // Equity Sleeve — VEA, SCHD, VTI. Fixed Income — VTIP, SGOV,
-              // VGIT, and GLDM. GLDM isn't actually fixed income, it's a
-              // hard-asset hedge pending exit, but it groups here by row
-              // for now rather than sitting alone or padding the equity row.
-              const byTicker = (t: string) => positionCards.find(p => p.ticker === t);
-              const equityCards = ["VEA", "SCHD", "VTI"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
-              const incomeCards = ["VTIP", "SGOV", "VGIT", "GLDM"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              // Three sleeves, mixing real holdings with candidates under
+              // consideration within the same row now (Mike's call — pure
+              // sequencing, not a change to what's actually held). Equity:
+              // VEA/SCHD/VTI are real; VTWO/VIGI are candidates. Fixed
+              // Income: VTIP/SGOV/VGIT, all real. Alternatives: GLDM is
+              // real (hard-asset hedge, exit pending); DBMF/BTAL are
+              // candidates. Real-vs-candidate status is called out in each
+              // row's subtitle rather than a separate section, so nothing
+              // reads as an actual holding that isn't one.
+              const byTicker = (t: string) =>
+                positionCards.find(p => p.ticker === t) ?? candidateCards.find(p => p.ticker === t);
+              const equityCards = ["VEA", "SCHD", "VTI", "VTWO", "VIGI"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              const incomeCards = ["VTIP", "SGOV", "VGIT"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              const altCards = ["GLDM", "DBMF", "BTAL"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
 
               return (
                 <>
-                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
                     Equity Sleeve
                   </div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>VEA / SCHD / VTI real holdings · VTWO / VIGI under consideration</div>
                   <div className="grid5" style={{ marginBottom:16 }}>
                     {equityCards.map(renderPositionTile)}
                   </div>
@@ -1407,11 +1415,12 @@ RESPONSE RULES:
                     {incomeCards.map(renderPositionTile)}
                   </div>
 
-                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
-                    Under Consideration — Not Real Holdings
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
+                    Alternatives Sleeve
                   </div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>GLDM real holding, exit pending · DBMF / BTAL under consideration</div>
                   <div className="grid5">
-                    {candidateCards.map(renderPositionTile)}
+                    {altCards.map(renderPositionTile)}
                   </div>
                 </>
               );
