@@ -578,6 +578,7 @@ export async function GET() {
   positions["VTWO"] = noelleVTWO;
   positions["VIGI"] = noelleVIGI;
   positions["BTAL"] = noelleBTAL;
+  positions["DBMF"] = cleanSlateDBMF;
 
   // "Hybrid 8" — Mike's curated blend of ALT 45/40/15 and the Noelle
   // Mockup, not a straight average of the two. SCHD stays the largest
@@ -586,7 +587,10 @@ export async function GET() {
   // overlapping VEA and DBMF respectively; BTAL is cut too, consolidating
   // to a single alts line (DBMF) to hit 8 total holdings rather than 10-11.
   // Every ticker here is already live in `positions` from real holdings or
-  // the Noelle/ALT scaffolding above — no new fetches needed.
+  // the Noelle/ALT scaffolding above — no new fetches needed. IMPORTANT:
+  // this block must come after all four positions[...] assignments above,
+  // since DBMF/VTWO aren't real holdings and only exist in `positions`
+  // once those lines run — reading them earlier silently nulls the tile.
   const hybrid8Weights: Record<string, number> = {
     SCHD: 0.20, VEA: 0.15, SGOV: 0.15, DBMF: 0.15, VTI: 0.10, VGIT: 0.10, VTIP: 0.10, VTWO: 0.05,
   };
@@ -604,7 +608,6 @@ export async function GET() {
   const hybrid8TodayPct: number | null = hybrid8HasAllToday
     ? hybrid8Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
     : null;
-  positions["DBMF"] = cleanSlateDBMF;
 
   // LPL "40/60" proxy blend — essentially LPL's own "Income with Moderate
   // Growth" model (39% equity), close enough to 40% that no reweighting is
