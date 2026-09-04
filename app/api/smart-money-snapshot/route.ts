@@ -473,9 +473,11 @@ export async function GET() {
   }
   if (benchmarkBND.error) diagnostics["benchmark_bnd"] = benchmarkBND.error;
 
-  // Two benchmark proxies, both built from the same VTI + BND YTD figures,
+  // Three benchmark proxies, all built from the same VTI + BND YTD figures,
   // just weighted differently. 60/40 is the traditional convention Mike has
   // compared against historically. 40/60 is closer to his actual posture.
+  // 50/50 was added later — Mike's rough read on where the household is
+  // likely to land once Chris's proposal settles.
   const vtiForBenchmark = positions["VTI"];
   const benchmark6040YtdPct: number | null =
     vtiForBenchmark?.ytdReturnPct != null && benchmarkBND.ytdReturnPct != null
@@ -484,6 +486,10 @@ export async function GET() {
   const benchmark4060YtdPct: number | null =
     vtiForBenchmark?.ytdReturnPct != null && benchmarkBND.ytdReturnPct != null
       ? vtiForBenchmark.ytdReturnPct * 0.4 + benchmarkBND.ytdReturnPct * 0.6
+      : null;
+  const benchmark5050YtdPct: number | null =
+    vtiForBenchmark?.ytdReturnPct != null && benchmarkBND.ytdReturnPct != null
+      ? vtiForBenchmark.ytdReturnPct * 0.5 + benchmarkBND.ytdReturnPct * 0.5
       : null;
   // Same-day change for each proxy, same weights, so the benchmark tiles can
   // show a "Today" figure alongside the position tiles below.
@@ -495,6 +501,11 @@ export async function GET() {
     vtiForBenchmark?.dailyChangePct != null && benchmarkBND.dailyChangePct != null
       ? vtiForBenchmark.dailyChangePct * 0.4 + benchmarkBND.dailyChangePct * 0.6
       : null;
+  const benchmark5050TodayPct: number | null =
+    vtiForBenchmark?.dailyChangePct != null && benchmarkBND.dailyChangePct != null
+      ? vtiForBenchmark.dailyChangePct * 0.5 + benchmarkBND.dailyChangePct * 0.5
+      : null;
+
 
   // "Clean Slate" hypothetical portfolio blend — SCHD 20 / SGOV 20 / VEA 15 /
   // VTIP 10 / VTI 10 / VGIT 10 / DBMF 10 / PDBC 5. Six weights pull from real
@@ -567,6 +578,32 @@ export async function GET() {
   positions["VTWO"] = noelleVTWO;
   positions["VIGI"] = noelleVIGI;
   positions["BTAL"] = noelleBTAL;
+
+  // "Hybrid 8" — Mike's curated blend of ALT 45/40/15 and the Noelle
+  // Mockup, not a straight average of the two. SCHD stays the largest
+  // single line as the foundational quality/value holding. VTWO carries
+  // over to honor Chris's small-cap input. VIGI and PDBC are cut for
+  // overlapping VEA and DBMF respectively; BTAL is cut too, consolidating
+  // to a single alts line (DBMF) to hit 8 total holdings rather than 10-11.
+  // Every ticker here is already live in `positions` from real holdings or
+  // the Noelle/ALT scaffolding above — no new fetches needed.
+  const hybrid8Weights: Record<string, number> = {
+    SCHD: 0.20, VEA: 0.15, SGOV: 0.15, DBMF: 0.15, VTI: 0.10, VGIT: 0.10, VTIP: 0.10, VTWO: 0.05,
+  };
+  const hybrid8Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
+    Object.entries(hybrid8Weights).map(([ticker, weight]) => ({
+      ticker, weight,
+      ytd: positions[ticker]?.ytdReturnPct ?? null,
+      today: positions[ticker]?.dailyChangePct ?? null,
+    }));
+  const hybrid8HasAllYtd = hybrid8Components.every((c) => c.ytd != null);
+  const hybrid8YtdPct: number | null = hybrid8HasAllYtd
+    ? hybrid8Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const hybrid8HasAllToday = hybrid8Components.every((c) => c.today != null);
+  const hybrid8TodayPct: number | null = hybrid8HasAllToday
+    ? hybrid8Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
   positions["DBMF"] = cleanSlateDBMF;
 
   // LPL "40/60" proxy blend — essentially LPL's own "Income with Moderate
@@ -1092,6 +1129,16 @@ export async function GET() {
           { ticker: "BND", weight_pct: 60, ytd_pct: benchmarkBND.ytdReturnPct, today_pct: benchmarkBND.dailyChangePct },
         ],
       },
+      benchmark_5050: {
+        ytd_return_pct: benchmark5050YtdPct,
+        today_change_pct: benchmark5050TodayPct,
+        vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
+        bnd_ytd_pct: benchmarkBND.ytdReturnPct,
+        components: [
+          { ticker: "VTI", weight_pct: 50, ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null, today_pct: vtiForBenchmark?.dailyChangePct ?? null },
+          { ticker: "BND", weight_pct: 50, ytd_pct: benchmarkBND.ytdReturnPct, today_pct: benchmarkBND.dailyChangePct },
+        ],
+      },
       clean_slate: {
         ytd_return_pct: cleanSlateYtdPct,
         today_change_pct: cleanSlateTodayPct,
@@ -1116,6 +1163,11 @@ export async function GET() {
         ytd_return_pct: noelleMockupYtdPct,
         today_change_pct: noelleMockupTodayPct,
         components: serializeComponents(noelleMockupComponents),
+      },
+      hybrid_8: {
+        ytd_return_pct: hybrid8YtdPct,
+        today_change_pct: hybrid8TodayPct,
+        components: serializeComponents(hybrid8Components),
       },
     },
   }, { status: 200 });
