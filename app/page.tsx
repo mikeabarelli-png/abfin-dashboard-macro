@@ -385,6 +385,10 @@ export default function Page() {
   const benchmark4060YtdPct = getNum(metrics?.benchmark_4060?.ytd_return_pct, marketData?.benchmark_4060?.ytd_return_pct);
   const benchmark6040TodayPct = getNum(metrics?.benchmark_6040?.today_change_pct, marketData?.benchmark_6040?.today_change_pct);
   const benchmark4060TodayPct = getNum(metrics?.benchmark_4060?.today_change_pct, marketData?.benchmark_4060?.today_change_pct);
+  // Simple 50/50 VTI/BND — added as a plainer benchmark closer to where Mike
+  // expects the household to actually land once Chris's proposal settles.
+  const benchmark5050YtdPct = getNum(metrics?.benchmark_5050?.ytd_return_pct, marketData?.benchmark_5050?.ytd_return_pct);
+  const benchmark5050TodayPct = getNum(metrics?.benchmark_5050?.today_change_pct, marketData?.benchmark_5050?.today_change_pct);
   // Clean Slate — hypothetical from-scratch panel build (SCHD/SGOV/VEA/VTIP/VTI/VGIT/DBMF/PDBC)
   const cleanSlateYtdPct = getNum(metrics?.clean_slate?.ytd_return_pct, marketData?.clean_slate?.ytd_return_pct);
   const cleanSlateTodayPct = getNum(metrics?.clean_slate?.today_change_pct, marketData?.clean_slate?.today_change_pct);
@@ -402,6 +406,12 @@ export default function Page() {
   // long/short fund from his Nitrogen screen.
   const noelleMockupYtdPct = getNum(metrics?.noelle_mockup?.ytd_return_pct, marketData?.noelle_mockup?.ytd_return_pct);
   const noelleMockupTodayPct = getNum(metrics?.noelle_mockup?.today_change_pct, marketData?.noelle_mockup?.today_change_pct);
+  // Hybrid 8 — Mike's curated blend of ALT 45/40/15 and the Noelle Mockup.
+  // SCHD foundational, VTWO carried over for Chris's small-cap input, VIGI
+  // and PDBC cut for overlap with VEA/DBMF, BTAL cut to consolidate alts
+  // into a single DBMF line. 8 holdings by design, not a straight average.
+  const hybrid8YtdPct = getNum(metrics?.hybrid_8?.ytd_return_pct, marketData?.hybrid_8?.ytd_return_pct);
+  const hybrid8TodayPct = getNum(metrics?.hybrid_8?.today_change_pct, marketData?.hybrid_8?.today_change_pct);
 
   // Raw component breakdowns for the drill-down modal — ticker/weight/YTD/today
   // for each hypothetical portfolio, sourced straight from route.ts.
@@ -423,6 +433,12 @@ export default function Page() {
       subtitle: "40% VTI / 60% BND",
       ytd: benchmark4060YtdPct, today: benchmark4060TodayPct,
       components: apiComponents(metrics?.benchmark_4060 ?? marketData?.benchmark_4060),
+    },
+    idx5050: {
+      title: "50/50 Index Proxy",
+      subtitle: "50% VTI / 50% BND · Mike's rough read on where the household lands",
+      ytd: benchmark5050YtdPct, today: benchmark5050TodayPct,
+      components: apiComponents(metrics?.benchmark_5050 ?? marketData?.benchmark_5050),
     },
     idx6040: {
       title: "60/40 Index Proxy",
@@ -465,6 +481,12 @@ export default function Page() {
       subtitle: "Chris's rough draft for Noelle's Rollover IRA — 55% equity / 35% fixed income / 10% alts (DBMF + BTAL placeholder for TBD Long/Short). IRA-level, not household.",
       ytd: noelleMockupYtdPct, today: noelleMockupTodayPct,
       components: apiComponents(metrics?.noelle_mockup ?? marketData?.noelle_mockup),
+    },
+    hybrid8: {
+      title: "Hybrid 8",
+      subtitle: "Mike's curated blend of ALT 45/40/15 and the Noelle Mockup — SCHD foundational, VTWO for Chris's small-cap input, VIGI/PDBC/BTAL cut for overlap. 50% equity / 35% fixed income / 15% alts, 8 holdings.",
+      ytd: hybrid8YtdPct, today: hybrid8TodayPct,
+      components: apiComponents(metrics?.hybrid_8 ?? marketData?.hybrid_8),
     },
   };
 
@@ -1187,6 +1209,18 @@ RESPONSE RULES:
                   </div>
                 </div>
               </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx5050"); }}>
+                <div className="lbl">50/50 Index YTD</div>
+                <div className="valHero">
+                  {benchmark5050YtdPct != null ? `${benchmark5050YtdPct >= 0 ? "+" : ""}${benchmark5050YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, color: benchmark5050TodayPct == null ? "#cbd5e1" : benchmark5050TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark5050TodayPct != null ? `${benchmark5050TodayPct >= 0 ? "+" : ""}${benchmark5050TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx6040"); }}>
                 <div className="lbl">60/40 Index YTD</div>
                 <div className="valHero">
@@ -1276,19 +1310,32 @@ RESPONSE RULES:
                 not IRA-only. Swap BTAL for Chris's real Long/Short pick once
                 his weekend proposal lands. */}
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
-              Proposed Retirement Allocation — Chris's Draft
+              Retirement Allocation — Portfolios to Watch
             </div>
-            <div className="grid5" style={{ marginBottom:16 }}>
+            <div className="grid5">
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("noelleMockup"); }}>
                 <div className="lbl">Proposed 55/35/10 YTD</div>
                 <div className="valHero">
                   {noelleMockupYtdPct != null ? `${noelleMockupYtdPct >= 0 ? "+" : ""}${noelleMockupYtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>DBMF + BTAL placeholder for TBD Long/Short</div>
+                <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>Chris's draft · DBMF + BTAL placeholder for TBD Long/Short</div>
                 <div style={{ marginTop:8 }}>
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
                   <div style={{ fontSize:15, fontWeight:700, color: noelleMockupTodayPct == null ? "#cbd5e1" : noelleMockupTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                     {noelleMockupTodayPct != null ? `${noelleMockupTodayPct >= 0 ? "+" : ""}${noelleMockupTodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("hybrid8"); }}>
+                <div className="lbl">Hybrid 8 YTD</div>
+                <div className="valHero">
+                  {hybrid8YtdPct != null ? `${hybrid8YtdPct >= 0 ? "+" : ""}${hybrid8YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>Mike's curated blend of ALT + Mockup · 50/35/15, 8 holdings</div>
+                <div style={{ marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, color: hybrid8TodayPct == null ? "#cbd5e1" : hybrid8TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {hybrid8TodayPct != null ? `${hybrid8TodayPct >= 0 ? "+" : ""}${hybrid8TodayPct.toFixed(1)}%` : "—"}
                   </div>
                 </div>
               </div>
@@ -1317,6 +1364,7 @@ RESPONSE RULES:
                 const jobStyle: React.CSSProperties = { fontSize:11, color:"#64748b", marginBottom:8, marginTop:-4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" };
 
                 if (p.sleeve === "defensive") {
+                  const neutralBarPos = Math.max(2, Math.min(p.barPos, 98));
                   return (
                     <div key={p.ticker} className="tile" style={{ position:"relative", borderTop:"2px solid rgba(148,163,184,0.35)" }}>
                       <div className="tileTop">
@@ -1336,7 +1384,21 @@ RESPONSE RULES:
                           <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
                         </div>
                       </div>
-                      <div className="sub" style={{ marginTop:8 }}>
+
+                      {/* Position-only gauge, deliberately flat gray rather
+                          than the equity tiles' red-yellow-green gradient.
+                          Strategies like DBMF/BTAL are built to move opposite
+                          equities on purpose, so a green "bullish" bar here
+                          would misread the strategy doing its job as a
+                          warning sign. This shows where price sits vs its
+                          200-DMA with no directional verdict attached. */}
+                      <div style={{ position:"relative", height:5, borderRadius:9999, background:"#26315f", marginTop:10, marginBottom:4 }}>
+                        <div style={{ position:"absolute", left:"50%", top:-3, width:2, height:11, background:"#fff" }} />
+                        {p.pctVs200 != null && (
+                          <div style={{ position:"absolute", left:`${neutralBarPos}%`, top:-2.5, width:8, height:8, borderRadius:"50%", background:"#94a3b8", border:"2px solid #050a35", transform:"translateX(-50%)" }} />
+                        )}
+                      </div>
+                      <div className="sub" style={{ marginTop:4 }}>
                         {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}% vs 200-DMA` : "Loading"}
                       </div>
                     </div>
