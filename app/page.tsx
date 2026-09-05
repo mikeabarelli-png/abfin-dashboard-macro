@@ -1485,7 +1485,6 @@ RESPONSE RULES:
                 <div className="valHero">
                   {noelleMockupYtdPct != null ? `${noelleMockupYtdPct >= 0 ? "+" : ""}${noelleMockupYtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>Chris's draft · DBMF + BTAL placeholder for TBD Long/Short</div>
                 <div style={{ display:"flex", gap:10, marginTop:8 }}>
 
                   <div>
@@ -1531,7 +1530,6 @@ RESPONSE RULES:
                 <div className="valHero">
                   {hybrid8YtdPct != null ? `${hybrid8YtdPct >= 0 ? "+" : ""}${hybrid8YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>Mike's curated blend of ALT + Mockup · 50/35/15, 8 holdings</div>
                 <div style={{ display:"flex", gap:10, marginTop:8 }}>
 
                   <div>
