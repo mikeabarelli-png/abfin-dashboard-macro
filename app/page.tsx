@@ -1207,7 +1207,7 @@ RESPONSE RULES:
             {/* Row group label — small, uppercase, matches the style already
                 used elsewhere on the dashboard for row/section labels. */}
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
-              Performance Benchmark
+              My Current Allocation
             </div>
 
             {/* Portfolio YTD is an ESTIMATE: weight × each position's own YTD
@@ -1215,7 +1215,10 @@ RESPONSE RULES:
                 brokerage-reported return if rebalanced. Grid5 matches the
                 tile width of the position cards below. Today's change below
                 the hero number uses the same red/green convention as the
-                position tiles' Today column. */}
+                position tiles' Today column. CUR now sits alone in its own
+                row — index benchmarks and candidate portfolios moved to
+                their own rows below, so the read is "my current alloc,
+                then the index comparisons, then what I'm considering". */}
             <div className="grid5" style={{ marginBottom:16 }}>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("cur"); }}>
                 <div className="lbl">CUR 40/55/5 YTD</div>
@@ -1262,6 +1265,14 @@ RESPONSE RULES:
 
                 </div>
               </div>
+            </div>
+
+            {/* Row 2 — the four passive index benchmarks, on their own row
+                now that CUR has row 1 to itself. */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+              Index Benchmarks
+            </div>
+            <div className="grid5" style={{ marginBottom:16 }}>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx4060"); }}>
                 <div className="lbl">40/60 Index YTD</div>
                 <div className="valHero">
@@ -1425,204 +1436,50 @@ RESPONSE RULES:
               </div>
             </div>
 
-            {/* Second row — hypothetical allocations under consideration,
-                kept visually separate from the real benchmark row above. */}
+            {/* Row 3 — Chris's rough-draft proposal, Mike's own curated
+                blend, and ALT, all grouped as "portfolios I'm considering".
+                ALT used to sit alone in its own row with two stray extra
+                closing divs left over from an earlier edit that removed
+                the LPL/VG tiles — confirmed via a clean bounded div-count
+                across the whole <section>...</section> boundary (116 opens
+                vs 118 closes) that those two tags were genuinely orphaned,
+                not matched to anything. Removed here rather than carried
+                forward. Modeled on Noelle's Rollover IRA dollar figures for
+                the Proposed tile, but Mike confirmed the same 55/35/10
+                model is intended across all retirement accounts, so it's
+                directly comparable to CUR 40/55/5 above, not IRA-only. Swap
+                BTAL for Chris's real Long/Short pick once his weekend
+                proposal lands. */}
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
-              Under Consideration
+              Portfolios I'm Considering
             </div>
-            <div className="grid5" style={{ marginBottom:16 }}>
+            <div className="grid5">
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("alt"); }}>
                 <div className="lbl">ALT 45/40/15 YTD</div>
                 <div className="valHero">
                   {cleanSlateYtdPct != null ? `${cleanSlateYtdPct >= 0 ? "+" : ""}${cleanSlateYtdPct.toFixed(1)}%` : "—"}
                 </div>
                 <div style={{ display:"flex", gap:10, marginTop:8 }}>
-
                   <div>
-
                     <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-
                     <div style={{ fontSize:15, fontWeight:700, color: cleanSlateTodayPct == null ? "#cbd5e1" : cleanSlateTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
                       {cleanSlateTodayPct != null ? `${cleanSlateTodayPct >= 0 ? "+" : ""}${cleanSlateTodayPct.toFixed(1)}%` : "—"}
-
                     </div>
-
                   </div>
-
                   <div>
-
                     <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-
                     <div style={{ fontSize:15, fontWeight:700, color: cleanSlateOneYearPct == null ? "#cbd5e1" : cleanSlateOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
                       {cleanSlateOneYearPct != null ? `${cleanSlateOneYearPct >= 0 ? "+" : ""}${cleanSlateOneYearPct.toFixed(1)}%` : "—"}
-
                     </div>
-
                   </div>
-
                   <div>
-
                     <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-
                     <div style={{ fontSize:15, fontWeight:700, color: cleanSlateFiveYearPct == null ? "#cbd5e1" : cleanSlateFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
                       {cleanSlateFiveYearPct != null ? `${cleanSlateFiveYearPct >= 0 ? "+" : ""}${cleanSlateFiveYearPct.toFixed(1)}%` : "—"}
-
                     </div>
-
                   </div>
-
                 </div>
               </div>
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("lpl4060"); }}>
-                <div className="lbl">LPL 40/60 YTD</div>
-                <div className="valHero">
-                  {lpl4060YtdPct != null ? `${lpl4060YtdPct >= 0 ? "+" : ""}${lpl4060YtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div style={{ display:"flex", gap:10, marginTop:8 }}>
-
-                  <div>
-
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-
-                    <div style={{ fontSize:15, fontWeight:700, color: lpl4060TodayPct == null ? "#cbd5e1" : lpl4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
-                      {lpl4060TodayPct != null ? `${lpl4060TodayPct >= 0 ? "+" : ""}${lpl4060TodayPct.toFixed(1)}%` : "—"}
-
-                    </div>
-
-                  </div>
-
-                  <div>
-
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-
-                    <div style={{ fontSize:15, fontWeight:700, color: lpl4060OneYearPct == null ? "#cbd5e1" : lpl4060OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
-                      {lpl4060OneYearPct != null ? `${lpl4060OneYearPct >= 0 ? "+" : ""}${lpl4060OneYearPct.toFixed(1)}%` : "—"}
-
-                    </div>
-
-                  </div>
-
-                  <div>
-
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-
-                    <div style={{ fontSize:15, fontWeight:700, color: lpl4060FiveYearPct == null ? "#cbd5e1" : lpl4060FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
-                      {lpl4060FiveYearPct != null ? `${lpl4060FiveYearPct >= 0 ? "+" : ""}${lpl4060FiveYearPct.toFixed(1)}%` : "—"}
-
-                    </div>
-
-                  </div>
-
-                </div>
-              </div>
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("lpl5050"); }}>
-                <div className="lbl">LPL 50/50 YTD</div>
-                <div className="valHero">
-                  {lpl5050YtdPct != null ? `${lpl5050YtdPct >= 0 ? "+" : ""}${lpl5050YtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div style={{ display:"flex", gap:10, marginTop:8 }}>
-
-                  <div>
-
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-
-                    <div style={{ fontSize:15, fontWeight:700, color: lpl5050TodayPct == null ? "#cbd5e1" : lpl5050TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
-                      {lpl5050TodayPct != null ? `${lpl5050TodayPct >= 0 ? "+" : ""}${lpl5050TodayPct.toFixed(1)}%` : "—"}
-
-                    </div>
-
-                  </div>
-
-                  <div>
-
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-
-                    <div style={{ fontSize:15, fontWeight:700, color: lpl5050OneYearPct == null ? "#cbd5e1" : lpl5050OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
-                      {lpl5050OneYearPct != null ? `${lpl5050OneYearPct >= 0 ? "+" : ""}${lpl5050OneYearPct.toFixed(1)}%` : "—"}
-
-                    </div>
-
-                  </div>
-
-                  <div>
-
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-
-                    <div style={{ fontSize:15, fontWeight:700, color: lpl5050FiveYearPct == null ? "#cbd5e1" : lpl5050FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
-                      {lpl5050FiveYearPct != null ? `${lpl5050FiveYearPct >= 0 ? "+" : ""}${lpl5050FiveYearPct.toFixed(1)}%` : "—"}
-
-                    </div>
-
-                  </div>
-
-                </div>
-              </div>
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("vg4060"); }}>
-                <div className="lbl">VG 40/60 YTD</div>
-                <div className="valHero">
-                  {vg4060YtdPct != null ? `${vg4060YtdPct >= 0 ? "+" : ""}${vg4060YtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div style={{ display:"flex", gap:10, marginTop:8 }}>
-
-                  <div>
-
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-
-                    <div style={{ fontSize:15, fontWeight:700, color: vg4060TodayPct == null ? "#cbd5e1" : vg4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
-                      {vg4060TodayPct != null ? `${vg4060TodayPct >= 0 ? "+" : ""}${vg4060TodayPct.toFixed(1)}%` : "—"}
-
-                    </div>
-
-                  </div>
-
-                  <div>
-
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-
-                    <div style={{ fontSize:15, fontWeight:700, color: vg4060OneYearPct == null ? "#cbd5e1" : vg4060OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
-                      {vg4060OneYearPct != null ? `${vg4060OneYearPct >= 0 ? "+" : ""}${vg4060OneYearPct.toFixed(1)}%` : "—"}
-
-                    </div>
-
-                  </div>
-
-                  <div>
-
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-
-                    <div style={{ fontSize:15, fontWeight:700, color: vg4060FiveYearPct == null ? "#cbd5e1" : vg4060FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-
-                      {vg4060FiveYearPct != null ? `${vg4060FiveYearPct >= 0 ? "+" : ""}${vg4060FiveYearPct.toFixed(1)}%` : "—"}
-
-                    </div>
-
-                  </div>
-
-                </div>
-              </div>
-            </div>
-
-            {/* Third row — Chris's rough-draft proposal. Modeled on Noelle's
-                Rollover IRA dollar figures, but Mike confirmed the same
-                55/35/10 model is intended across all retirement accounts,
-                so it's treated as directly comparable to CUR 40/55/5 above,
-                not IRA-only. Swap BTAL for Chris's real Long/Short pick once
-                his weekend proposal lands. */}
-            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
-              Retirement Allocation — Portfolios to Watch
-            </div>
-            <div className="grid5">
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("noelleMockup"); }}>
                 <div className="lbl">Proposed 55/35/10 YTD</div>
                 <div className="valHero">
