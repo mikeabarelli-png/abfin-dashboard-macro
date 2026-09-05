@@ -304,51 +304,19 @@ type PositionMetrics = {
   pctVs200: number | null;
   ytdReturnPct: number | null;
   oneYearReturnPct: number | null;
-  fiveYearReturnPct: number | null; // manual, monthly refresh — see MANUAL_5YR_RETURNS below
+  fiveYearReturnPct: number | null; // live, same technique as YTD/1-YR — see fetchPositionMetrics
   error?: string;
 };
 
-// ═══════════════════════════════════════════════════════════════════
-// 5-YEAR RETURN TABLE — refresh only when Mike explicitly asks
-// ═══════════════════════════════════════════════════════════════════
-// Unlike everything else in this file, these are NOT live-fetched. A 5-year
-// lookback needs ~5x the price history of the 200-DMA/YTD/1-YR fetch above,
-// and a 5-year trailing return barely moves day to day, so pulling it fresh
-// on every page load buys almost nothing for real added fetch cost. Mike's
-// call: keep this on the same cadence as the CAPE/Buffett Sigma refresh
-// above, but as its own separate ask ("please refresh the 5-YR values"),
-// not bundled into the weekly Saturday checklist.
-//
-// STATUS: not yet populated. Every entry is null until the first refresh
-// request. When that request comes: pull each ticker's 5-year cumulative
-// total return (dividends reinvested) from a source like totalrealreturns.com
-// or the fund's own fact sheet, fill in the numbers below with a date
-// comment, and the tiles below switch from "—" to a real figure automatically
-// — no other code changes needed.
-const MANUAL_5YR_RETURNS: Record<string, number | null> = {
-  VTI: null, SCHD: null, VEA: null, SGOV: null, VTIP: null, VGIT: null, GLDM: null,
-  VTWO: null, VIGI: null, DBMF: null, BTAL: null, PDBC: null, BND: null, BNDX: null,
-  VUG: null, VTV: null, VWO: null, VCIT: null, VMBS: null, IGF: null, SPX: null,
-};
-function fiveYearFor(ticker: string): number | null {
-  return MANUAL_5YR_RETURNS[ticker] ?? null;
-}
-// Blends a 5-YR figure for a multi-ticker portfolio the same defensive way
-// every other blended return in this file works: only returns a number if
-// every component ticker actually has one, otherwise null (shows "—" rather
-// than a silently-wrong partial average).
-function blendFiveYear(components: { ticker: string; weight: number }[]): number | null {
-  const values = components.map((c) => ({ weight: c.weight, val: fiveYearFor(c.ticker) }));
-  if (values.some((v) => v.val == null)) return null;
-  return values.reduce((sum, v) => sum + (v.val as number) * v.weight, 0);
-}
 
 async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
-  // 380 calendar days covers 200 trading days for the DMA itself, plus the
-  // extra ~20 trading days of lookback the slope calc needs beyond that.
-  // It also comfortably reaches back before Jan 1 of the current year, so
-  // the same fetch covers the YTD return calc with no second network call.
-  const chart = await fetchChart(ticker, 380);
+  // 1830 calendar days (~5 years) covers the 200-DMA (needs ~380 days),
+  // YTD (needs back to Jan 1), 1-YR (needs back 365 days), AND 5-YR (needs
+  // back ~1825 days) from one single fetch. Tickers with less than 5 years
+  // of actual trading history (e.g. BTAL's current strategy only dates to
+  // Feb 2022) simply won't have a timestamp that far back — the 5-YR calc
+  // below handles that by returning null rather than guessing.
+  const chart = await fetchChart(ticker, 1830);
 
   if (chart.error || chart.closes.length < 220) {
     return {
@@ -360,7 +328,7 @@ async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
       pctVs200: null,
       ytdReturnPct: null,
       oneYearReturnPct: null,
-      fiveYearReturnPct: fiveYearFor(ticker),
+      fiveYearReturnPct: null,
       error: chart.error ?? `${ticker}: insufficient price history for 200-DMA`,
     };
   }
@@ -407,14 +375,32 @@ async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
       ? ((price - oneYearStartAdjClose) / oneYearStartAdjClose) * 100
       : null;
 
+  // 5-YR total return — same technique again, anchored 5*365 days back.
+  // Now possible with zero extra network calls since the fetch window
+  // above was widened to 1830 days specifically for this. Tickers with
+  // under 5 years of actual trading history (BTAL's current strategy only
+  // dates to Feb 2022) simply have no timestamp that old — the loop below
+  // never finds a match, fiveYearStartIdx stays -1, and this correctly
+  // returns null rather than guessing at a return the fund never had.
+  const fiveYearAgoMs = Date.now() - 5 * 365 * 24 * 60 * 60 * 1000;
+  let fiveYearStartIdx = -1;
+  for (let i = 0; i < chart.timestamps.length; i++) {
+    if (chart.timestamps[i] * 1000 >= fiveYearAgoMs) { fiveYearStartIdx = i; break; }
+  }
+  const fiveYearStartAdjClose = fiveYearStartIdx >= 0 ? chart.adjcloses[fiveYearStartIdx] : null;
+  const fiveYearReturnPct: number | null =
+    fiveYearStartAdjClose != null && price != null && fiveYearStartAdjClose !== 0
+      ? ((price - fiveYearStartAdjClose) / fiveYearStartAdjClose) * 100
+      : null;
+
   console.log(
-    `${ticker}: price=${price} 200dma=${dma200.toFixed(2)} slope=${slope200?.toFixed(2)}% vs200=${pctVs200?.toFixed(2)}% ytd=${ytdReturnPct?.toFixed(2)}% 1yr=${oneYearReturnPct?.toFixed(2)}%`
+    `${ticker}: price=${price} 200dma=${dma200.toFixed(2)} slope=${slope200?.toFixed(2)}% vs200=${pctVs200?.toFixed(2)}% ytd=${ytdReturnPct?.toFixed(2)}% 1yr=${oneYearReturnPct?.toFixed(2)}% 5yr=${fiveYearReturnPct?.toFixed(2)}%`
   );
 
   return {
     ticker, price, dailyChangePct, dma200, slope200, pctVs200, ytdReturnPct,
     oneYearReturnPct,
-    fiveYearReturnPct: fiveYearFor(ticker),
+    fiveYearReturnPct,
     error: chart.error,
   };
 }
@@ -545,13 +531,19 @@ export async function GET() {
   positions["IGF"] = lplIGF;
   positions["BNDX"] = vgBNDX;
 
-  // Shared helpers for every blended portfolio below. blendOneYear computes
-  // a weighted 1-YR return live from the same `positions` dict everything
-  // else on this file already reads; blendFiveYear does the same against
-  // the manual MANUAL_5YR_RETURNS table above. Both take just the
-  // {ticker, weight} pairs every portfolio's components array already has,
-  // and both use the same defensive null-if-any-missing pattern as the YTD
-  // blends below — a partial average would be silently wrong, not helpful.
+  // Shared helpers for every blended portfolio below. Both compute a
+  // weighted return live from the same `positions` dict everything else on
+  // this file already reads — 1-YR and 5-YR are no longer treated
+  // differently; both are just a different anchor date on the same
+  // fetchPositionMetrics call every ticker already makes. Both take just
+  // the {ticker, weight} pairs every portfolio's components array already
+  // has, and both use the same defensive null-if-any-missing pattern as
+  // the YTD blends below — a partial average would be silently wrong.
+  function blendFiveYear(components: { ticker: string; weight: number }[]): number | null {
+    const values = components.map((c) => ({ weight: c.weight, val: positions[c.ticker]?.fiveYearReturnPct ?? null }));
+    if (values.some((v) => v.val == null)) return null;
+    return values.reduce((sum, v) => sum + (v.val as number) * v.weight, 0);
+  }
   function blendOneYear(components: { ticker: string; weight: number }[]): number | null {
     const values = components.map((c) => ({ weight: c.weight, val: positions[c.ticker]?.oneYearReturnPct ?? null }));
     if (values.some((v) => v.val == null)) return null;
@@ -1141,7 +1133,23 @@ export async function GET() {
   } catch (err: any) {
     diagnostics["spx_one_year"] = err?.message ?? "1-YR fetch failed";
   }
-  const spxFiveYearPct = fiveYearFor("SPX"); // manual table — see MANUAL_5YR_RETURNS
+
+  // Same technique again for 5-YR — separate fetch since SPX doesn't run
+  // through fetchPositionMetrics's shared 1830-day window like every other
+  // ticker on this dashboard does.
+  let spxFiveYearPct: number | null = null;
+  try {
+    const trFiveYear = await fetchChart("^SP500TR", 1830);
+    if (trFiveYear.closes.length > 0) {
+      const trStart = trFiveYear.closes[0];
+      const trLatest = trFiveYear.meta.regularMarketPrice ?? trFiveYear.closes[trFiveYear.closes.length - 1];
+      spxFiveYearPct = ((trLatest - trStart) / trStart) * 100;
+    } else if (trFiveYear.error) {
+      diagnostics["spx_five_year_total_return"] = trFiveYear.error;
+    }
+  } catch (err: any) {
+    diagnostics["spx_five_year"] = err?.message ?? "5-YR fetch failed";
+  }
 
   const hasPartialData = spxPrice != null;
   const status = Object.keys(diagnostics).length === 0 ? "ok" : hasPartialData ? "partial" : "error";
