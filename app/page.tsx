@@ -491,7 +491,7 @@ export default function Page() {
       components: [{ ticker: "SPX", weight: 100, ytd: spxYtd, today: spxDailyPct, oneYear: spxOneYearPct, fiveYear: spxFiveYearPct }],
     },
     alt: {
-      title: "ALT 45/40/15",
+      title: "M0 45/40/15",
       subtitle: "Panel's from-scratch build — 45% equity / 40% fixed income / 15% alternatives",
       ytd: cleanSlateYtdPct, today: cleanSlateTodayPct, oneYear: cleanSlateOneYearPct, fiveYear: cleanSlateFiveYearPct,
       components: apiComponents(metrics?.clean_slate ?? marketData?.clean_slate),
@@ -515,13 +515,13 @@ export default function Page() {
       components: apiComponents(metrics?.vg_4060 ?? marketData?.vg_4060),
     },
     noelleMockup: {
-      title: "Noelle IRA Mockup",
+      title: "C0 55/35/10",
       subtitle: "Chris's rough draft for Noelle's Rollover IRA — 55% equity / 35% fixed income / 10% alts (DBMF + BTAL placeholder for TBD Long/Short). IRA-level, not household.",
       ytd: noelleMockupYtdPct, today: noelleMockupTodayPct, oneYear: noelleMockupOneYearPct, fiveYear: noelleMockupFiveYearPct,
       components: apiComponents(metrics?.noelle_mockup ?? marketData?.noelle_mockup),
     },
     hybrid8: {
-      title: "Hybrid 8",
+      title: "M1 50/35/15",
       subtitle: "Mike's curated blend of ALT 45/40/15 and the Noelle Mockup — SCHD foundational, VTWO for Chris's small-cap input, VIGI/PDBC/BTAL cut for overlap. 50% equity / 35% fixed income / 15% alts, 8 holdings.",
       ytd: hybrid8YtdPct, today: hybrid8TodayPct, oneYear: hybrid8OneYearPct, fiveYear: hybrid8FiveYearPct,
       components: apiComponents(metrics?.hybrid_8 ?? marketData?.hybrid_8),
@@ -1355,7 +1355,7 @@ RESPONSE RULES:
             </div>
             <div className="grid5">
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("alt"); }}>
-                <div className="lbl">ALT 45/40/15 YTD</div>
+                <div className="lbl">M0 45/40/15 YTD</div>
                 <div className="valHero">
                   {cleanSlateYtdPct != null ? `${cleanSlateYtdPct >= 0 ? "+" : ""}${cleanSlateYtdPct.toFixed(1)}%` : "—"}
                 </div>
@@ -1375,7 +1375,7 @@ RESPONSE RULES:
                 </div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("noelleMockup"); }}>
-                <div className="lbl">Proposed 55/35/10 YTD</div>
+                <div className="lbl">C0 55/35/10 YTD</div>
                 <div className="valHero">
                   {noelleMockupYtdPct != null ? `${noelleMockupYtdPct >= 0 ? "+" : ""}${noelleMockupYtdPct.toFixed(1)}%` : "—"}
                 </div>
@@ -1395,7 +1395,7 @@ RESPONSE RULES:
               </div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("hybrid8"); }}>
-                <div className="lbl">Hybrid 8 YTD</div>
+                <div className="lbl">M1 50/35/15 YTD</div>
                 <div className="valHero">
                   {hybrid8YtdPct != null ? `${hybrid8YtdPct >= 0 ? "+" : ""}${hybrid8YtdPct.toFixed(1)}%` : "—"}
                 </div>
@@ -1438,35 +1438,31 @@ RESPONSE RULES:
                 const todayColor = p.dailyPct == null ? "#cbd5e1" : p.dailyPct >= 0 ? "#4ade80" : "#ff6b88";
                 const oneYearLabel = p.oneYearReturnPct != null ? `${p.oneYearReturnPct >= 0 ? "+" : ""}${p.oneYearReturnPct.toFixed(1)}%` : "—";
                 const fiveYearLabel = p.fiveYearReturnPct != null ? `${p.fiveYearReturnPct >= 0 ? "+" : ""}${p.fiveYearReturnPct.toFixed(1)}%` : "—";
-                const jobStyle: React.CSSProperties = { fontSize:11, color:"#64748b", marginBottom:8, marginTop:-4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" };
+                // Shared stats grid — same 2-col (label / value) x 3-row shape
+                // as the Portfolio Position Health tiles, for visual
+                // consistency across the dashboard. Price and job
+                // description dropped per Mike's cleanup — ticker + weight
+                // in the header already carries what's needed at a glance.
+                const statsGrid = (
+                  <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                    <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color:todayColor }}>{todayLabel}</div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                    <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color:p.oneYearReturnPct == null ? "#cbd5e1" : p.oneYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{oneYearLabel}</div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                    <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color:p.fiveYearReturnPct == null ? "#cbd5e1" : p.fiveYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{fiveYearLabel}</div>
+                  </div>
+                );
 
                 if (p.sleeve === "defensive") {
                   const neutralBarPos = Math.max(2, Math.min(p.barPos, 98));
-                  const ytdColor = p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88";
                   return (
                     <div key={p.ticker} className="tile" style={{ position:"relative", borderTop:"2px solid rgba(148,163,184,0.35)" }}>
                       <div className="tileTop">
                         <span className="lbl">{p.ticker} · {p.weight}%</span>
                       </div>
-                      <div style={jobStyle}>{p.job}</div>
-                      <div style={{ fontSize:11, color:"#64748b", marginTop:-6, marginBottom:2 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
-
-                      <div className="valHero" style={{ fontSize:24, color:ytdColor }}>{ytdLabel}</div>
-
-                      <div style={{ display:"flex", gap:10, marginTop:8 }}>
-                        <div>
-                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                          <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-                          <div style={{ fontSize:15, fontWeight:700, color:p.oneYearReturnPct == null ? "#cbd5e1" : p.oneYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{oneYearLabel}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-                          <div style={{ fontSize:15, fontWeight:700, color:p.fiveYearReturnPct == null ? "#cbd5e1" : p.fiveYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{fiveYearLabel}</div>
-                        </div>
-                      </div>
+                      <div className="valHero" style={{ fontSize:24, color:"#fff" }}>{ytdLabel}</div>
+                      {statsGrid}
 
                       {/* Position-only gauge, deliberately flat gray rather
                           than the equity tiles' red-yellow-green gradient.
@@ -1499,24 +1495,8 @@ RESPONSE RULES:
                     <div className="tileTop" style={{ paddingRight:20 }}>
                       <span className="lbl">{p.ticker} · {p.weight}%</span>
                     </div>
-                    <div style={jobStyle}>{p.job}</div>
-                    <div style={{ fontSize:11, color:"#64748b", marginTop:-6, marginBottom:2 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
-                    <div className="valHero" style={{ fontSize:24, color:p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{ytdLabel}</div>
-
-                    <div style={{ display:"flex", gap:10, marginTop:8 }}>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                        <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-                        <div style={{ fontSize:15, fontWeight:700, color:p.oneYearReturnPct == null ? "#cbd5e1" : p.oneYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{oneYearLabel}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-                        <div style={{ fontSize:15, fontWeight:700, color:p.fiveYearReturnPct == null ? "#cbd5e1" : p.fiveYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{fiveYearLabel}</div>
-                      </div>
-                    </div>
+                    <div className="valHero" style={{ fontSize:24, color:"#fff" }}>{ytdLabel}</div>
+                    {statsGrid}
 
                     <div style={{ fontSize:10, color:p.color, fontWeight:600, marginTop:8 }}>{p.state}</div>
 
