@@ -446,78 +446,84 @@ export default function Page() {
   const hybrid8FiveYearPct = getNum(metrics?.hybrid_8?.five_year_return_pct, marketData?.hybrid_8?.five_year_return_pct);
 
   // Raw component breakdowns for the drill-down modal — ticker/weight/YTD/today
-  // for each hypothetical portfolio, sourced straight from route.ts.
-  type DetailComponent = { ticker: string; weight: number; ytd: number | null; today: number | null };
+  // for each hypothetical portfolio, sourced straight from route.ts. 1-YR/5-YR
+  // per ticker aren't in the components array route.ts returns (that only
+  // carries what each blend needs), but every ticker's own 1-YR/5-YR already
+  // lives in the shared positions dict from the "Your Holdings" tiles, so
+  // this just looks each one up there instead of needing a backend change.
+  type DetailComponent = { ticker: string; weight: number; ytd: number | null; today: number | null; oneYear: number | null; fiveYear: number | null };
   const apiComponents = (obj: any): DetailComponent[] =>
     (obj?.components ?? []).map((c: any) => ({
       ticker: c.ticker, weight: c.weight_pct, ytd: c.ytd_pct, today: c.today_pct,
+      oneYear: positionsData?.[c.ticker]?.oneYearReturnPct ?? null,
+      fiveYear: positionsData?.[c.ticker]?.fiveYearReturnPct ?? null,
     }));
 
-  const portfolioDetailData: Record<string, { title: string; subtitle: string; ytd: number | null; today: number | null; components: DetailComponent[] }> = {
+  const portfolioDetailData: Record<string, { title: string; subtitle: string; ytd: number | null; today: number | null; oneYear: number | null; fiveYear: number | null; components: DetailComponent[] }> = {
     cur: {
       title: "Your Current Portfolio",
       subtitle: "Weighted by actual allocation · estimate, not brokerage-reported return",
-      ytd: portfolioYtdPct, today: portfolioTodayPct,
-      components: positionCards.map(p => ({ ticker: p.ticker, weight: p.weight, ytd: p.ytdReturnPct, today: p.dailyPct })),
+      ytd: portfolioYtdPct, today: portfolioTodayPct, oneYear: portfolioOneYearPct, fiveYear: portfolioFiveYearPct,
+      components: positionCards.map(p => ({ ticker: p.ticker, weight: p.weight, ytd: p.ytdReturnPct, today: p.dailyPct, oneYear: p.oneYearReturnPct, fiveYear: p.fiveYearReturnPct })),
     },
     idx4060: {
       title: "40/60 Index Proxy",
       subtitle: "40% VTI / 60% BND",
-      ytd: benchmark4060YtdPct, today: benchmark4060TodayPct,
+      ytd: benchmark4060YtdPct, today: benchmark4060TodayPct, oneYear: benchmark4060OneYearPct, fiveYear: benchmark4060FiveYearPct,
       components: apiComponents(metrics?.benchmark_4060 ?? marketData?.benchmark_4060),
     },
     idx5050: {
       title: "50/50 Index Proxy",
       subtitle: "50% VTI / 50% BND · Mike's rough read on where the household lands",
-      ytd: benchmark5050YtdPct, today: benchmark5050TodayPct,
+      ytd: benchmark5050YtdPct, today: benchmark5050TodayPct, oneYear: benchmark5050OneYearPct, fiveYear: benchmark5050FiveYearPct,
       components: apiComponents(metrics?.benchmark_5050 ?? marketData?.benchmark_5050),
     },
     idx6040: {
       title: "60/40 Index Proxy",
       subtitle: "60% VTI / 40% BND · same indices as VBINX",
-      ytd: benchmark6040YtdPct, today: benchmark6040TodayPct,
+      ytd: benchmark6040YtdPct, today: benchmark6040TodayPct, oneYear: benchmark6040OneYearPct, fiveYear: benchmark6040FiveYearPct,
       components: apiComponents(metrics?.benchmark_6040 ?? marketData?.benchmark_6040),
     },
     spx: {
       title: "S&P 500",
       subtitle: "Total return, dividends included",
-      ytd: spxYtd, today: spxDailyPct,
-      components: [{ ticker: "SPX", weight: 100, ytd: spxYtd, today: spxDailyPct }],
+      ytd: spxYtd, today: spxDailyPct, oneYear: spxOneYearPct, fiveYear: spxFiveYearPct,
+      components: [{ ticker: "SPX", weight: 100, ytd: spxYtd, today: spxDailyPct, oneYear: spxOneYearPct, fiveYear: spxFiveYearPct }],
     },
     alt: {
       title: "ALT 45/40/15",
       subtitle: "Panel's from-scratch build — 45% equity / 40% fixed income / 15% alternatives",
-      ytd: cleanSlateYtdPct, today: cleanSlateTodayPct,
+      ytd: cleanSlateYtdPct, today: cleanSlateTodayPct, oneYear: cleanSlateOneYearPct, fiveYear: cleanSlateFiveYearPct,
       components: apiComponents(metrics?.clean_slate ?? marketData?.clean_slate),
     },
     lpl4060: {
       title: "LPL 40/60",
       subtitle: "LPL STAAC \"Income with Moderate Growth\" proxy, mapped to ETFs",
-      ytd: lpl4060YtdPct, today: lpl4060TodayPct,
+      ytd: lpl4060YtdPct, today: lpl4060TodayPct, oneYear: lpl4060OneYearPct, fiveYear: lpl4060FiveYearPct,
       components: apiComponents(metrics?.lpl_4060 ?? marketData?.lpl_4060),
     },
     lpl5050: {
       title: "LPL 50/50",
       subtitle: "Interpolated between LPL's IMG and Growth-with-Income models",
-      ytd: lpl5050YtdPct, today: lpl5050TodayPct,
+      ytd: lpl5050YtdPct, today: lpl5050TodayPct, oneYear: lpl5050OneYearPct, fiveYear: lpl5050FiveYearPct,
       components: apiComponents(metrics?.lpl_5050 ?? marketData?.lpl_5050),
     },
     vg4060: {
       title: "VG 40/60",
       subtitle: "Vanguard's unconstrained VAAM/VCMM model, mapped to ETFs",
-      ytd: vg4060YtdPct, today: vg4060TodayPct,
+      ytd: vg4060YtdPct, today: vg4060TodayPct, oneYear: vg4060OneYearPct, fiveYear: vg4060FiveYearPct,
       components: apiComponents(metrics?.vg_4060 ?? marketData?.vg_4060),
     },
     noelleMockup: {
       title: "Noelle IRA Mockup",
       subtitle: "Chris's rough draft for Noelle's Rollover IRA — 55% equity / 35% fixed income / 10% alts (DBMF + BTAL placeholder for TBD Long/Short). IRA-level, not household.",
-      ytd: noelleMockupYtdPct, today: noelleMockupTodayPct,
+      ytd: noelleMockupYtdPct, today: noelleMockupTodayPct, oneYear: noelleMockupOneYearPct, fiveYear: noelleMockupFiveYearPct,
       components: apiComponents(metrics?.noelle_mockup ?? marketData?.noelle_mockup),
     },
     hybrid8: {
       title: "Hybrid 8",
       subtitle: "Mike's curated blend of ALT 45/40/15 and the Noelle Mockup — SCHD foundational, VTWO for Chris's small-cap input, VIGI/PDBC/BTAL cut for overlap. 50% equity / 35% fixed income / 15% alts, 8 holdings.",
-      ytd: hybrid8YtdPct, today: hybrid8TodayPct,
+      ytd: hybrid8YtdPct, today: hybrid8TodayPct, oneYear: hybrid8OneYearPct, fiveYear: hybrid8FiveYearPct,
       components: apiComponents(metrics?.hybrid_8 ?? marketData?.hybrid_8),
     },
   };
@@ -3266,10 +3272,24 @@ RESPONSE RULES:
         const hasAllYtd = d.components.every(c => c.ytd != null);
         return (
           <ModalWrapper onClose={()=>{ setModal(null); setDetailKey(null); }} title={d.title} sub={d.subtitle}>
-            <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>YTD</div>
-              <div style={{ fontSize:26, fontWeight:700, color: d.ytd == null ? "#fff" : d.ytd >= 0 ? "#4ade80" : "#ff6b88" }}>
-                {d.ytd != null ? `${d.ytd >= 0 ? "+" : ""}${d.ytd.toFixed(1)}%` : "—"}
+            <div style={{ display:"flex", gap:24, marginBottom:16 }}>
+              <div>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>YTD</div>
+                <div style={{ fontSize:26, fontWeight:700, color: d.ytd == null ? "#fff" : d.ytd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {d.ytd != null ? `${d.ytd >= 0 ? "+" : ""}${d.ytd.toFixed(1)}%` : "—"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>1-YR</div>
+                <div style={{ fontSize:26, fontWeight:700, color: d.oneYear == null ? "#fff" : d.oneYear >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {d.oneYear != null ? `${d.oneYear >= 0 ? "+" : ""}${d.oneYear.toFixed(1)}%` : "—"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>5-YR</div>
+                <div style={{ fontSize:26, fontWeight:700, color: d.fiveYear == null ? "#fff" : d.fiveYear >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {d.fiveYear != null ? `${d.fiveYear >= 0 ? "+" : ""}${d.fiveYear.toFixed(1)}%` : "—"}
+                </div>
               </div>
             </div>
             <table className="valTable">
@@ -3279,6 +3299,8 @@ RESPONSE RULES:
                   <th style={{ textAlign:"left" }}>Description</th>
                   <th style={{ textAlign:"right" }}>Weight</th>
                   <th style={{ textAlign:"right" }}>YTD</th>
+                  <th style={{ textAlign:"right" }}>1-YR</th>
+                  <th style={{ textAlign:"right" }}>5-YR</th>
                 </tr>
               </thead>
               <tbody>
@@ -3290,6 +3312,12 @@ RESPONSE RULES:
                       <td style={{ textAlign:"right", color:"#94a3b8" }}>{c.weight}%</td>
                       <td style={{ textAlign:"right", fontWeight:600, color: c.ytd == null ? "#64748b" : c.ytd >= 0 ? "#4ade80" : "#ff6b88" }}>
                         {c.ytd != null ? `${c.ytd >= 0 ? "+" : ""}${c.ytd.toFixed(1)}%` : "—"}
+                      </td>
+                      <td style={{ textAlign:"right", fontWeight:600, color: c.oneYear == null ? "#64748b" : c.oneYear >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {c.oneYear != null ? `${c.oneYear >= 0 ? "+" : ""}${c.oneYear.toFixed(1)}%` : "—"}
+                      </td>
+                      <td style={{ textAlign:"right", fontWeight:600, color: c.fiveYear == null ? "#64748b" : c.fiveYear >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {c.fiveYear != null ? `${c.fiveYear >= 0 ? "+" : ""}${c.fiveYear.toFixed(1)}%` : "—"}
                       </td>
                     </tr>
                   );
