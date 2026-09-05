@@ -637,6 +637,23 @@ export async function GET() {
   // names an actual fund. This tile tracks Noelle's Rollover IRA only, not
   // the household — label accordingly in the UI.
   const [noelleVTWO, noelleVIGI, noelleBTAL] = noelleExtras;
+
+  // Expose VTWO/VIGI/BTAL through the same `positions` dict real holdings
+  // use, so the "Your Holdings" UI can render full tiles for these
+  // candidate positions with zero new frontend fetch logic, and so
+  // blendOneYear/blendFiveYear below can find them via positions[ticker]
+  // the same way they find every other ticker. MUST happen before
+  // noelleMockupComponents is built — blendOneYear/blendFiveYear read
+  // straight from `positions`, not from this component array's own
+  // ytd/today fields, so merging these in late (as this block used to sit,
+  // right before the JSON return) silently zeroed out the Proposed tile's
+  // 1-YR/5-YR: it was reading positions["VTWO"] etc. before they existed.
+  // They're candidates under consideration, not real holdings —
+  // PORTFOLIO_POSITIONS in page.tsx stays untouched.
+  positions["VTWO"] = noelleVTWO;
+  positions["VIGI"] = noelleVIGI;
+  positions["BTAL"] = noelleBTAL;
+
   const noelleMockupWeights: Record<string, number> = {
     VEA: 0.15, SCHD: 0.15, VTI: 0.10, VGIT: 0.13, SGOV: 0.12, VTIP: 0.10,
   };
@@ -664,16 +681,6 @@ export async function GET() {
   if (noelleVTWO.error) diagnostics["noelle_vtwo"] = noelleVTWO.error;
   if (noelleVIGI.error) diagnostics["noelle_vigi"] = noelleVIGI.error;
   if (noelleBTAL.error) diagnostics["noelle_btal"] = noelleBTAL.error;
-
-  // Expose VTWO/VIGI/BTAL/DBMF through the same `positions` dict real
-  // holdings use, so the "Your Holdings" UI can render full tiles (price,
-  // 200-DMA, trend state) for these candidate positions with zero new
-  // frontend fetch logic. They're candidates under consideration, not real
-  // holdings — PORTFOLIO_POSITIONS in page.tsx stays untouched; these just
-  // ride the same `positions.<TICKER>` lookup a new UI section will use.
-  positions["VTWO"] = noelleVTWO;
-  positions["VIGI"] = noelleVIGI;
-  positions["BTAL"] = noelleBTAL;
 
   // "Hybrid 8" — Mike's curated blend of ALT 45/40/15 and the Noelle
   // Mockup, not a straight average of the two. SCHD stays the largest
