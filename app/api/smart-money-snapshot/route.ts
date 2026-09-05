@@ -303,8 +303,45 @@ type PositionMetrics = {
   slope200: number | null;
   pctVs200: number | null;
   ytdReturnPct: number | null;
+  oneYearReturnPct: number | null;
+  fiveYearReturnPct: number | null; // manual, monthly refresh — see MANUAL_5YR_RETURNS below
   error?: string;
 };
+
+// ═══════════════════════════════════════════════════════════════════
+// 5-YEAR RETURN TABLE — refresh only when Mike explicitly asks
+// ═══════════════════════════════════════════════════════════════════
+// Unlike everything else in this file, these are NOT live-fetched. A 5-year
+// lookback needs ~5x the price history of the 200-DMA/YTD/1-YR fetch above,
+// and a 5-year trailing return barely moves day to day, so pulling it fresh
+// on every page load buys almost nothing for real added fetch cost. Mike's
+// call: keep this on the same cadence as the CAPE/Buffett Sigma refresh
+// above, but as its own separate ask ("please refresh the 5-YR values"),
+// not bundled into the weekly Saturday checklist.
+//
+// STATUS: not yet populated. Every entry is null until the first refresh
+// request. When that request comes: pull each ticker's 5-year cumulative
+// total return (dividends reinvested) from a source like totalrealreturns.com
+// or the fund's own fact sheet, fill in the numbers below with a date
+// comment, and the tiles below switch from "—" to a real figure automatically
+// — no other code changes needed.
+const MANUAL_5YR_RETURNS: Record<string, number | null> = {
+  VTI: null, SCHD: null, VEA: null, SGOV: null, VTIP: null, VGIT: null, GLDM: null,
+  VTWO: null, VIGI: null, DBMF: null, BTAL: null, PDBC: null, BND: null, BNDX: null,
+  VUG: null, VTV: null, VWO: null, VCIT: null, VMBS: null, IGF: null, SPX: null,
+};
+function fiveYearFor(ticker: string): number | null {
+  return MANUAL_5YR_RETURNS[ticker] ?? null;
+}
+// Blends a 5-YR figure for a multi-ticker portfolio the same defensive way
+// every other blended return in this file works: only returns a number if
+// every component ticker actually has one, otherwise null (shows "—" rather
+// than a silently-wrong partial average).
+function blendFiveYear(components: { ticker: string; weight: number }[]): number | null {
+  const values = components.map((c) => ({ weight: c.weight, val: fiveYearFor(c.ticker) }));
+  if (values.some((v) => v.val == null)) return null;
+  return values.reduce((sum, v) => sum + (v.val as number) * v.weight, 0);
+}
 
 async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
   // 380 calendar days covers 200 trading days for the DMA itself, plus the
@@ -322,6 +359,8 @@ async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
       slope200: null,
       pctVs200: null,
       ytdReturnPct: null,
+      oneYearReturnPct: null,
+      fiveYearReturnPct: fiveYearFor(ticker),
       error: chart.error ?? `${ticker}: insufficient price history for 200-DMA`,
     };
   }
@@ -354,11 +393,30 @@ async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
       ? ((price - startAdjClose) / startAdjClose) * 100
       : null;
 
+  // 1-YR total return — same technique as YTD above, just anchored 365
+  // calendar days back instead of Jan 1. The 380-day fetch window already
+  // covers this with no second network call, unlike the 5-YR figure below.
+  const oneYearAgoMs = Date.now() - 365 * 24 * 60 * 60 * 1000;
+  let oneYearStartIdx = -1;
+  for (let i = 0; i < chart.timestamps.length; i++) {
+    if (chart.timestamps[i] * 1000 >= oneYearAgoMs) { oneYearStartIdx = i; break; }
+  }
+  const oneYearStartAdjClose = oneYearStartIdx >= 0 ? chart.adjcloses[oneYearStartIdx] : null;
+  const oneYearReturnPct: number | null =
+    oneYearStartAdjClose != null && price != null && oneYearStartAdjClose !== 0
+      ? ((price - oneYearStartAdjClose) / oneYearStartAdjClose) * 100
+      : null;
+
   console.log(
-    `${ticker}: price=${price} 200dma=${dma200.toFixed(2)} slope=${slope200?.toFixed(2)}% vs200=${pctVs200?.toFixed(2)}% ytd=${ytdReturnPct?.toFixed(2)}%`
+    `${ticker}: price=${price} 200dma=${dma200.toFixed(2)} slope=${slope200?.toFixed(2)}% vs200=${pctVs200?.toFixed(2)}% ytd=${ytdReturnPct?.toFixed(2)}% 1yr=${oneYearReturnPct?.toFixed(2)}%`
   );
 
-  return { ticker, price, dailyChangePct, dma200, slope200, pctVs200, ytdReturnPct, error: chart.error };
+  return {
+    ticker, price, dailyChangePct, dma200, slope200, pctVs200, ytdReturnPct,
+    oneYearReturnPct,
+    fiveYearReturnPct: fiveYearFor(ticker),
+    error: chart.error,
+  };
 }
 
 // Update this list when the GLDM → SCHD swap executes.
@@ -472,6 +530,33 @@ export async function GET() {
     if (p.error) diagnostics[`position_${p.ticker.toLowerCase()}`] = p.error;
   }
   if (benchmarkBND.error) diagnostics["benchmark_bnd"] = benchmarkBND.error;
+  positions["BND"] = benchmarkBND;
+  // DBMF/PDBC merged in early (rather than down by the Clean Slate block
+  // where they're fetched) so every blended portfolio below, including
+  // Clean Slate itself, can rely on one consistent `positions[ticker]`
+  // lookup path for the 1-YR/5-YR helpers right below.
+  positions["DBMF"] = cleanSlateDBMF;
+  positions["PDBC"] = cleanSlatePDBC;
+  positions["VUG"] = lplVUG;
+  positions["VTV"] = lplVTV;
+  positions["VWO"] = lplVWO;
+  positions["VCIT"] = lplVCIT;
+  positions["VMBS"] = lplVMBS;
+  positions["IGF"] = lplIGF;
+  positions["BNDX"] = vgBNDX;
+
+  // Shared helpers for every blended portfolio below. blendOneYear computes
+  // a weighted 1-YR return live from the same `positions` dict everything
+  // else on this file already reads; blendFiveYear does the same against
+  // the manual MANUAL_5YR_RETURNS table above. Both take just the
+  // {ticker, weight} pairs every portfolio's components array already has,
+  // and both use the same defensive null-if-any-missing pattern as the YTD
+  // blends below — a partial average would be silently wrong, not helpful.
+  function blendOneYear(components: { ticker: string; weight: number }[]): number | null {
+    const values = components.map((c) => ({ weight: c.weight, val: positions[c.ticker]?.oneYearReturnPct ?? null }));
+    if (values.some((v) => v.val == null)) return null;
+    return values.reduce((sum, v) => sum + (v.val as number) * v.weight, 0);
+  }
 
   // Three benchmark proxies, all built from the same VTI + BND YTD figures,
   // just weighted differently. 60/40 is the traditional convention Mike has
@@ -505,6 +590,13 @@ export async function GET() {
     vtiForBenchmark?.dailyChangePct != null && benchmarkBND.dailyChangePct != null
       ? vtiForBenchmark.dailyChangePct * 0.5 + benchmarkBND.dailyChangePct * 0.5
       : null;
+  // 1-YR (live) and 5-YR (manual table) for the same three proxies.
+  const benchmark6040OneYearPct = blendOneYear([{ ticker: "VTI", weight: 0.6 }, { ticker: "BND", weight: 0.4 }]);
+  const benchmark4060OneYearPct = blendOneYear([{ ticker: "VTI", weight: 0.4 }, { ticker: "BND", weight: 0.6 }]);
+  const benchmark5050OneYearPct = blendOneYear([{ ticker: "VTI", weight: 0.5 }, { ticker: "BND", weight: 0.5 }]);
+  const benchmark6040FiveYearPct = blendFiveYear([{ ticker: "VTI", weight: 0.6 }, { ticker: "BND", weight: 0.4 }]);
+  const benchmark4060FiveYearPct = blendFiveYear([{ ticker: "VTI", weight: 0.4 }, { ticker: "BND", weight: 0.6 }]);
+  const benchmark5050FiveYearPct = blendFiveYear([{ ticker: "VTI", weight: 0.5 }, { ticker: "BND", weight: 0.5 }]);
 
 
   // "Clean Slate" hypothetical portfolio blend — SCHD 20 / SGOV 20 / VEA 15 /
@@ -530,6 +622,8 @@ export async function GET() {
   const cleanSlateTodayPct: number | null = cleanSlateHasAllToday
     ? cleanSlateComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
     : null;
+  const cleanSlateOneYearPct = blendOneYear(cleanSlateComponents);
+  const cleanSlateFiveYearPct = blendFiveYear(cleanSlateComponents);
   if (cleanSlatePDBC.error) diagnostics["clean_slate_pdbc"] = cleanSlatePDBC.error;
   if (cleanSlateDBMF.error) diagnostics["clean_slate_dbmf"] = cleanSlateDBMF.error;
 
@@ -565,6 +659,8 @@ export async function GET() {
   const noelleMockupTodayPct: number | null = noelleMockupHasAllToday
     ? noelleMockupComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
     : null;
+  const noelleMockupOneYearPct = blendOneYear(noelleMockupComponents);
+  const noelleMockupFiveYearPct = blendFiveYear(noelleMockupComponents);
   if (noelleVTWO.error) diagnostics["noelle_vtwo"] = noelleVTWO.error;
   if (noelleVIGI.error) diagnostics["noelle_vigi"] = noelleVIGI.error;
   if (noelleBTAL.error) diagnostics["noelle_btal"] = noelleBTAL.error;
@@ -578,7 +674,6 @@ export async function GET() {
   positions["VTWO"] = noelleVTWO;
   positions["VIGI"] = noelleVIGI;
   positions["BTAL"] = noelleBTAL;
-  positions["DBMF"] = cleanSlateDBMF;
 
   // "Hybrid 8" — Mike's curated blend of ALT 45/40/15 and the Noelle
   // Mockup, not a straight average of the two. SCHD stays the largest
@@ -608,6 +703,8 @@ export async function GET() {
   const hybrid8TodayPct: number | null = hybrid8HasAllToday
     ? hybrid8Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
     : null;
+  const hybrid8OneYearPct = blendOneYear(hybrid8Components);
+  const hybrid8FiveYearPct = blendFiveYear(hybrid8Components);
 
   // LPL "40/60" proxy blend — essentially LPL's own "Income with Moderate
   // Growth" model (39% equity), close enough to 40% that no reweighting is
@@ -635,6 +732,8 @@ export async function GET() {
   const lpl4060TodayPct: number | null = lpl4060HasAllToday
     ? lpl4060Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
     : null;
+  const lpl4060OneYearPct = blendOneYear(lpl4060Components);
+  const lpl4060FiveYearPct = blendFiveYear(lpl4060Components);
 
   // LPL "50/50" proxy blend — interpolated roughly two-thirds of the way from
   // LPL's IMG model (39% equity) toward its Growth-with-Income model (56%
@@ -663,6 +762,8 @@ export async function GET() {
   const lpl5050TodayPct: number | null = lpl5050HasAllToday
     ? lpl5050Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
     : null;
+  const lpl5050OneYearPct = blendOneYear(lpl5050Components);
+  const lpl5050FiveYearPct = blendFiveYear(lpl5050Components);
 
   [
     ["vug", lplVUG], ["vtv", lplVTV], ["vwo", lplVWO],
@@ -692,6 +793,8 @@ export async function GET() {
   const vg4060TodayPct: number | null = vg4060HasAllToday
     ? vg4060Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
     : null;
+  const vg4060OneYearPct = blendOneYear(vg4060Components);
+  const vg4060FiveYearPct = blendFiveYear(vg4060Components);
   if (vgBNDX.error) diagnostics["vg_bndx"] = vgBNDX.error;
 
   if (spx.error) diagnostics["spx"] = spx.error;
@@ -1016,6 +1119,23 @@ export async function GET() {
     diagnostics["ytd"] = err?.message ?? "YTD fetch failed";
   }
 
+  // Same technique, fixed ~365-day window instead of days-into-year, for
+  // the SPX 100/0 tile's new 1-YR figure.
+  let spxOneYearPct: number | null = null;
+  try {
+    const trOneYear = await fetchChart("^SP500TR", 375);
+    if (trOneYear.closes.length > 0) {
+      const trStart = trOneYear.closes[0];
+      const trLatest = trOneYear.meta.regularMarketPrice ?? trOneYear.closes[trOneYear.closes.length - 1];
+      spxOneYearPct = ((trLatest - trStart) / trStart) * 100;
+    } else if (trOneYear.error) {
+      diagnostics["spx_one_year_total_return"] = trOneYear.error;
+    }
+  } catch (err: any) {
+    diagnostics["spx_one_year"] = err?.message ?? "1-YR fetch failed";
+  }
+  const spxFiveYearPct = fiveYearFor("SPX"); // manual table — see MANUAL_5YR_RETURNS
+
   const hasPartialData = spxPrice != null;
   const status = Object.keys(diagnostics).length === 0 ? "ok" : hasPartialData ? "partial" : "error";
 
@@ -1028,6 +1148,8 @@ export async function GET() {
     spx_price: spxPrice,
     spx_change_pct: spxChangePct,
     spx_ytd_pct: spxYtdPct,
+    spx_one_year_pct: spxOneYearPct,
+    spx_five_year_pct: spxFiveYearPct,
     spx_trend_14d: spxTrend14d,
     spx_history: spxCloses,
     vix: vixPrice,
@@ -1035,6 +1157,8 @@ export async function GET() {
       spx_price: spxPrice,
       spx_change_pct: spxChangePct,
       spx_ytd_pct: spxYtdPct,
+      spx_one_year_pct: spxOneYearPct,
+      spx_five_year_pct: spxFiveYearPct,
       spx_ytd_is_total_return: spxYtdIsTotalReturn,
       spx_trend_14d: spxTrend14d,
       spx_history: spxCloses,
@@ -1115,6 +1239,8 @@ export async function GET() {
       benchmark_6040: {
         ytd_return_pct: benchmark6040YtdPct,
         today_change_pct: benchmark6040TodayPct,
+        one_year_return_pct: benchmark6040OneYearPct,
+        five_year_return_pct: benchmark6040FiveYearPct,
         vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
         bnd_ytd_pct: benchmarkBND.ytdReturnPct,
         components: [
@@ -1125,6 +1251,8 @@ export async function GET() {
       benchmark_4060: {
         ytd_return_pct: benchmark4060YtdPct,
         today_change_pct: benchmark4060TodayPct,
+        one_year_return_pct: benchmark4060OneYearPct,
+        five_year_return_pct: benchmark4060FiveYearPct,
         vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
         bnd_ytd_pct: benchmarkBND.ytdReturnPct,
         components: [
@@ -1135,6 +1263,8 @@ export async function GET() {
       benchmark_5050: {
         ytd_return_pct: benchmark5050YtdPct,
         today_change_pct: benchmark5050TodayPct,
+        one_year_return_pct: benchmark5050OneYearPct,
+        five_year_return_pct: benchmark5050FiveYearPct,
         vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
         bnd_ytd_pct: benchmarkBND.ytdReturnPct,
         components: [
@@ -1145,31 +1275,43 @@ export async function GET() {
       clean_slate: {
         ytd_return_pct: cleanSlateYtdPct,
         today_change_pct: cleanSlateTodayPct,
+        one_year_return_pct: cleanSlateOneYearPct,
+        five_year_return_pct: cleanSlateFiveYearPct,
         components: serializeComponents(cleanSlateComponents),
       },
       lpl_4060: {
         ytd_return_pct: lpl4060YtdPct,
         today_change_pct: lpl4060TodayPct,
+        one_year_return_pct: lpl4060OneYearPct,
+        five_year_return_pct: lpl4060FiveYearPct,
         components: serializeComponents(lpl4060Components),
       },
       lpl_5050: {
         ytd_return_pct: lpl5050YtdPct,
         today_change_pct: lpl5050TodayPct,
+        one_year_return_pct: lpl5050OneYearPct,
+        five_year_return_pct: lpl5050FiveYearPct,
         components: serializeComponents(lpl5050Components),
       },
       vg_4060: {
         ytd_return_pct: vg4060YtdPct,
         today_change_pct: vg4060TodayPct,
+        one_year_return_pct: vg4060OneYearPct,
+        five_year_return_pct: vg4060FiveYearPct,
         components: serializeComponents(vg4060Components),
       },
       noelle_mockup: {
         ytd_return_pct: noelleMockupYtdPct,
         today_change_pct: noelleMockupTodayPct,
+        one_year_return_pct: noelleMockupOneYearPct,
+        five_year_return_pct: noelleMockupFiveYearPct,
         components: serializeComponents(noelleMockupComponents),
       },
       hybrid_8: {
         ytd_return_pct: hybrid8YtdPct,
         today_change_pct: hybrid8TodayPct,
+        one_year_return_pct: hybrid8OneYearPct,
+        five_year_return_pct: hybrid8FiveYearPct,
         components: serializeComponents(hybrid8Components),
       },
     },
