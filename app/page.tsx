@@ -152,6 +152,8 @@ export default function Page() {
   const regimeEmoji = metrics?.regime_emoji ?? marketData?.regime_emoji ?? "🟡";
   const spxDailyPct = getNum(metrics?.spx_change_pct, marketData?.spx_change_pct);
   const spxYtd = getNum(metrics?.spx_ytd_pct, marketData?.spx_ytd_pct) ?? -2.13;
+  const spxOneYearPct = getNum(metrics?.spx_one_year_pct, marketData?.spx_one_year_pct);
+  const spxFiveYearPct = getNum(metrics?.spx_five_year_pct, marketData?.spx_five_year_pct);
   const spxYtdIsTotalReturn: boolean = metrics?.spx_ytd_is_total_return ?? marketData?.spx_ytd_is_total_return ?? false;
   const spxTrend = getArr(metrics?.spx_trend_14d, marketData?.spx_trend_14d) ?? [6946,6908,6878,6881,6816,6869,6830,6740,6795,6781,6775,6672,6632,6699];
   const spxHistory = getArr(metrics?.spx_history, marketData?.spx_history) ?? [];
@@ -323,6 +325,8 @@ export default function Page() {
     const slope200: number | null = d?.slope200 ?? null;
     const pctVs200: number | null = d?.pctVs200 ?? null;
     const ytdReturnPct: number | null = d?.ytdReturnPct ?? null;
+    const oneYearReturnPct: number | null = d?.oneYearReturnPct ?? null;
+    const fiveYearReturnPct: number | null = d?.fiveYearReturnPct ?? null;
     const state = positionDmaState(pctVs200, slope200, dailyPct, true);
     const tone = positionDmaTone(pctVs200, slope200, dailyPct, true);
     const color = toneColor(tone);
@@ -330,7 +334,7 @@ export default function Page() {
     // an outsized move never pushes the dot off the track.
     const clampedPct = pctVs200 == null ? 0 : Math.max(-15, Math.min(15, pctVs200));
     const barPos = 50 + (clampedPct / 15) * 50;
-    return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, state, tone, color, barPos };
+    return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, oneYearReturnPct, fiveYearReturnPct, state, tone, color, barPos };
   });
 
   // Candidate positions Mike is watching alongside real holdings — the four
@@ -354,12 +358,14 @@ export default function Page() {
     const slope200: number | null = d?.slope200 ?? null;
     const pctVs200: number | null = d?.pctVs200 ?? null;
     const ytdReturnPct: number | null = d?.ytdReturnPct ?? null;
+    const oneYearReturnPct: number | null = d?.oneYearReturnPct ?? null;
+    const fiveYearReturnPct: number | null = d?.fiveYearReturnPct ?? null;
     const state = positionDmaState(pctVs200, slope200, dailyPct, true);
     const tone = positionDmaTone(pctVs200, slope200, dailyPct, true);
     const color = toneColor(tone);
     const clampedPct = pctVs200 == null ? 0 : Math.max(-15, Math.min(15, pctVs200));
     const barPos = 50 + (clampedPct / 15) * 50;
-    return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, state, tone, color, barPos };
+    return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, oneYearReturnPct, fiveYearReturnPct, state, tone, color, barPos };
   });
 
   // Blended portfolio YTD return — weight × each position's own YTD total
@@ -378,27 +384,49 @@ export default function Page() {
   const portfolioTodayPct: number | null = portfolioHasAllToday
     ? positionCards.reduce((sum, p) => sum + (p.dailyPct as number) * (p.weight / 100), 0)
     : null;
+  const portfolioHasAllOneYear = positionCards.every(p => p.oneYearReturnPct != null);
+  const portfolioOneYearPct: number | null = portfolioHasAllOneYear
+    ? positionCards.reduce((sum, p) => sum + (p.oneYearReturnPct as number) * (p.weight / 100), 0)
+    : null;
+  const portfolioHasAllFiveYear = positionCards.every(p => p.fiveYearReturnPct != null);
+  const portfolioFiveYearPct: number | null = portfolioHasAllFiveYear
+    ? positionCards.reduce((sum, p) => sum + (p.fiveYearReturnPct as number) * (p.weight / 100), 0)
+    : null;
 
   // Benchmarks — SPX already computed elsewhere as spxYtd/spxDailyPct;
   // the two index proxies come from route.ts using the same VTI/BND blend.
   const benchmark6040YtdPct = getNum(metrics?.benchmark_6040?.ytd_return_pct, marketData?.benchmark_6040?.ytd_return_pct);
   const benchmark4060YtdPct = getNum(metrics?.benchmark_4060?.ytd_return_pct, marketData?.benchmark_4060?.ytd_return_pct);
   const benchmark6040TodayPct = getNum(metrics?.benchmark_6040?.today_change_pct, marketData?.benchmark_6040?.today_change_pct);
+  const benchmark6040OneYearPct = getNum(metrics?.benchmark_6040?.one_year_return_pct, marketData?.benchmark_6040?.one_year_return_pct);
+  const benchmark6040FiveYearPct = getNum(metrics?.benchmark_6040?.five_year_return_pct, marketData?.benchmark_6040?.five_year_return_pct);
   const benchmark4060TodayPct = getNum(metrics?.benchmark_4060?.today_change_pct, marketData?.benchmark_4060?.today_change_pct);
+  const benchmark4060OneYearPct = getNum(metrics?.benchmark_4060?.one_year_return_pct, marketData?.benchmark_4060?.one_year_return_pct);
+  const benchmark4060FiveYearPct = getNum(metrics?.benchmark_4060?.five_year_return_pct, marketData?.benchmark_4060?.five_year_return_pct);
   // Simple 50/50 VTI/BND — added as a plainer benchmark closer to where Mike
   // expects the household to actually land once Chris's proposal settles.
   const benchmark5050YtdPct = getNum(metrics?.benchmark_5050?.ytd_return_pct, marketData?.benchmark_5050?.ytd_return_pct);
   const benchmark5050TodayPct = getNum(metrics?.benchmark_5050?.today_change_pct, marketData?.benchmark_5050?.today_change_pct);
+  const benchmark5050OneYearPct = getNum(metrics?.benchmark_5050?.one_year_return_pct, marketData?.benchmark_5050?.one_year_return_pct);
+  const benchmark5050FiveYearPct = getNum(metrics?.benchmark_5050?.five_year_return_pct, marketData?.benchmark_5050?.five_year_return_pct);
   // Clean Slate — hypothetical from-scratch panel build (SCHD/SGOV/VEA/VTIP/VTI/VGIT/DBMF/PDBC)
   const cleanSlateYtdPct = getNum(metrics?.clean_slate?.ytd_return_pct, marketData?.clean_slate?.ytd_return_pct);
   const cleanSlateTodayPct = getNum(metrics?.clean_slate?.today_change_pct, marketData?.clean_slate?.today_change_pct);
+  const cleanSlateOneYearPct = getNum(metrics?.clean_slate?.one_year_return_pct, marketData?.clean_slate?.one_year_return_pct);
+  const cleanSlateFiveYearPct = getNum(metrics?.clean_slate?.five_year_return_pct, marketData?.clean_slate?.five_year_return_pct);
   // LPL "Income with Moderate Growth" proxy — 39% equity model, mapped to ETFs
   const lpl4060YtdPct = getNum(metrics?.lpl_4060?.ytd_return_pct, marketData?.lpl_4060?.ytd_return_pct);
   const lpl4060TodayPct = getNum(metrics?.lpl_4060?.today_change_pct, marketData?.lpl_4060?.today_change_pct);
+  const lpl4060OneYearPct = getNum(metrics?.lpl_4060?.one_year_return_pct, marketData?.lpl_4060?.one_year_return_pct);
+  const lpl4060FiveYearPct = getNum(metrics?.lpl_4060?.five_year_return_pct, marketData?.lpl_4060?.five_year_return_pct);
   const lpl5050YtdPct = getNum(metrics?.lpl_5050?.ytd_return_pct, marketData?.lpl_5050?.ytd_return_pct);
   const lpl5050TodayPct = getNum(metrics?.lpl_5050?.today_change_pct, marketData?.lpl_5050?.today_change_pct);
+  const lpl5050OneYearPct = getNum(metrics?.lpl_5050?.one_year_return_pct, marketData?.lpl_5050?.one_year_return_pct);
+  const lpl5050FiveYearPct = getNum(metrics?.lpl_5050?.five_year_return_pct, marketData?.lpl_5050?.five_year_return_pct);
   const vg4060YtdPct = getNum(metrics?.vg_4060?.ytd_return_pct, marketData?.vg_4060?.ytd_return_pct);
   const vg4060TodayPct = getNum(metrics?.vg_4060?.today_change_pct, marketData?.vg_4060?.today_change_pct);
+  const vg4060OneYearPct = getNum(metrics?.vg_4060?.one_year_return_pct, marketData?.vg_4060?.one_year_return_pct);
+  const vg4060FiveYearPct = getNum(metrics?.vg_4060?.five_year_return_pct, marketData?.vg_4060?.five_year_return_pct);
   // Noelle Mockup — Mike's what-if replacing GLDM with DBMF + BTAL (a
   // placeholder for the still-unnamed Long/Short fund Chris is researching),
   // equity held at Chris's original 55%. Tracks Noelle's Rollover IRA only,
@@ -406,12 +434,16 @@ export default function Page() {
   // long/short fund from his Nitrogen screen.
   const noelleMockupYtdPct = getNum(metrics?.noelle_mockup?.ytd_return_pct, marketData?.noelle_mockup?.ytd_return_pct);
   const noelleMockupTodayPct = getNum(metrics?.noelle_mockup?.today_change_pct, marketData?.noelle_mockup?.today_change_pct);
+  const noelleMockupOneYearPct = getNum(metrics?.noelle_mockup?.one_year_return_pct, marketData?.noelle_mockup?.one_year_return_pct);
+  const noelleMockupFiveYearPct = getNum(metrics?.noelle_mockup?.five_year_return_pct, marketData?.noelle_mockup?.five_year_return_pct);
   // Hybrid 8 — Mike's curated blend of ALT 45/40/15 and the Noelle Mockup.
   // SCHD foundational, VTWO carried over for Chris's small-cap input, VIGI
   // and PDBC cut for overlap with VEA/DBMF, BTAL cut to consolidate alts
   // into a single DBMF line. 8 holdings by design, not a straight average.
   const hybrid8YtdPct = getNum(metrics?.hybrid_8?.ytd_return_pct, marketData?.hybrid_8?.ytd_return_pct);
   const hybrid8TodayPct = getNum(metrics?.hybrid_8?.today_change_pct, marketData?.hybrid_8?.today_change_pct);
+  const hybrid8OneYearPct = getNum(metrics?.hybrid_8?.one_year_return_pct, marketData?.hybrid_8?.one_year_return_pct);
+  const hybrid8FiveYearPct = getNum(metrics?.hybrid_8?.five_year_return_pct, marketData?.hybrid_8?.five_year_return_pct);
 
   // Raw component breakdowns for the drill-down modal — ticker/weight/YTD/today
   // for each hypothetical portfolio, sourced straight from route.ts.
@@ -1190,11 +1222,44 @@ RESPONSE RULES:
                 <div className="valHero">
                   {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: portfolioTodayPct == null ? "#cbd5e1" : portfolioTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {portfolioTodayPct != null ? `${portfolioTodayPct >= 0 ? "+" : ""}${portfolioTodayPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: portfolioTodayPct == null ? "#cbd5e1" : portfolioTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {portfolioTodayPct != null ? `${portfolioTodayPct >= 0 ? "+" : ""}${portfolioTodayPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
                   </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: portfolioOneYearPct == null ? "#cbd5e1" : portfolioOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {portfolioOneYearPct != null ? `${portfolioOneYearPct >= 0 ? "+" : ""}${portfolioOneYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: portfolioFiveYearPct == null ? "#cbd5e1" : portfolioFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {portfolioFiveYearPct != null ? `${portfolioFiveYearPct >= 0 ? "+" : ""}${portfolioFiveYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx4060"); }}>
@@ -1202,11 +1267,44 @@ RESPONSE RULES:
                 <div className="valHero">
                   {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: benchmark4060TodayPct == null ? "#cbd5e1" : benchmark4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {benchmark4060TodayPct != null ? `${benchmark4060TodayPct >= 0 ? "+" : ""}${benchmark4060TodayPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: benchmark4060TodayPct == null ? "#cbd5e1" : benchmark4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {benchmark4060TodayPct != null ? `${benchmark4060TodayPct >= 0 ? "+" : ""}${benchmark4060TodayPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
                   </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: benchmark4060OneYearPct == null ? "#cbd5e1" : benchmark4060OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {benchmark4060OneYearPct != null ? `${benchmark4060OneYearPct >= 0 ? "+" : ""}${benchmark4060OneYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: benchmark4060FiveYearPct == null ? "#cbd5e1" : benchmark4060FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {benchmark4060FiveYearPct != null ? `${benchmark4060FiveYearPct >= 0 ? "+" : ""}${benchmark4060FiveYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx5050"); }}>
@@ -1214,11 +1312,44 @@ RESPONSE RULES:
                 <div className="valHero">
                   {benchmark5050YtdPct != null ? `${benchmark5050YtdPct >= 0 ? "+" : ""}${benchmark5050YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: benchmark5050TodayPct == null ? "#cbd5e1" : benchmark5050TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {benchmark5050TodayPct != null ? `${benchmark5050TodayPct >= 0 ? "+" : ""}${benchmark5050TodayPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: benchmark5050TodayPct == null ? "#cbd5e1" : benchmark5050TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {benchmark5050TodayPct != null ? `${benchmark5050TodayPct >= 0 ? "+" : ""}${benchmark5050TodayPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
                   </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: benchmark5050OneYearPct == null ? "#cbd5e1" : benchmark5050OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {benchmark5050OneYearPct != null ? `${benchmark5050OneYearPct >= 0 ? "+" : ""}${benchmark5050OneYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: benchmark5050FiveYearPct == null ? "#cbd5e1" : benchmark5050FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {benchmark5050FiveYearPct != null ? `${benchmark5050FiveYearPct >= 0 ? "+" : ""}${benchmark5050FiveYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx6040"); }}>
@@ -1226,11 +1357,44 @@ RESPONSE RULES:
                 <div className="valHero">
                   {benchmark6040YtdPct != null ? `${benchmark6040YtdPct >= 0 ? "+" : ""}${benchmark6040YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: benchmark6040TodayPct == null ? "#cbd5e1" : benchmark6040TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {benchmark6040TodayPct != null ? `${benchmark6040TodayPct >= 0 ? "+" : ""}${benchmark6040TodayPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: benchmark6040TodayPct == null ? "#cbd5e1" : benchmark6040TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {benchmark6040TodayPct != null ? `${benchmark6040TodayPct >= 0 ? "+" : ""}${benchmark6040TodayPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
                   </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: benchmark6040OneYearPct == null ? "#cbd5e1" : benchmark6040OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {benchmark6040OneYearPct != null ? `${benchmark6040OneYearPct >= 0 ? "+" : ""}${benchmark6040OneYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: benchmark6040FiveYearPct == null ? "#cbd5e1" : benchmark6040FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {benchmark6040FiveYearPct != null ? `${benchmark6040FiveYearPct >= 0 ? "+" : ""}${benchmark6040FiveYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("spx"); }}>
@@ -1238,10 +1402,24 @@ RESPONSE RULES:
                 <div className="valHero">
                   {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
                 </div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+                  <div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                    <div style={{ fontSize:15, fontWeight:700, color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                      {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                    <div style={{ fontSize:15, fontWeight:700, color: spxOneYearPct == null ? "#cbd5e1" : spxOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                      {spxOneYearPct != null ? `${spxOneYearPct >= 0 ? "+" : ""}${spxOneYearPct.toFixed(1)}%` : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                    <div style={{ fontSize:15, fontWeight:700, color: spxFiveYearPct == null ? "#cbd5e1" : spxFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                      {spxFiveYearPct != null ? `${spxFiveYearPct >= 0 ? "+" : ""}${spxFiveYearPct.toFixed(1)}%` : "—"}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1258,11 +1436,44 @@ RESPONSE RULES:
                 <div className="valHero">
                   {cleanSlateYtdPct != null ? `${cleanSlateYtdPct >= 0 ? "+" : ""}${cleanSlateYtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: cleanSlateTodayPct == null ? "#cbd5e1" : cleanSlateTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {cleanSlateTodayPct != null ? `${cleanSlateTodayPct >= 0 ? "+" : ""}${cleanSlateTodayPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: cleanSlateTodayPct == null ? "#cbd5e1" : cleanSlateTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {cleanSlateTodayPct != null ? `${cleanSlateTodayPct >= 0 ? "+" : ""}${cleanSlateTodayPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
                   </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: cleanSlateOneYearPct == null ? "#cbd5e1" : cleanSlateOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {cleanSlateOneYearPct != null ? `${cleanSlateOneYearPct >= 0 ? "+" : ""}${cleanSlateOneYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: cleanSlateFiveYearPct == null ? "#cbd5e1" : cleanSlateFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {cleanSlateFiveYearPct != null ? `${cleanSlateFiveYearPct >= 0 ? "+" : ""}${cleanSlateFiveYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("lpl4060"); }}>
@@ -1270,11 +1481,44 @@ RESPONSE RULES:
                 <div className="valHero">
                   {lpl4060YtdPct != null ? `${lpl4060YtdPct >= 0 ? "+" : ""}${lpl4060YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: lpl4060TodayPct == null ? "#cbd5e1" : lpl4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {lpl4060TodayPct != null ? `${lpl4060TodayPct >= 0 ? "+" : ""}${lpl4060TodayPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: lpl4060TodayPct == null ? "#cbd5e1" : lpl4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {lpl4060TodayPct != null ? `${lpl4060TodayPct >= 0 ? "+" : ""}${lpl4060TodayPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
                   </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: lpl4060OneYearPct == null ? "#cbd5e1" : lpl4060OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {lpl4060OneYearPct != null ? `${lpl4060OneYearPct >= 0 ? "+" : ""}${lpl4060OneYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: lpl4060FiveYearPct == null ? "#cbd5e1" : lpl4060FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {lpl4060FiveYearPct != null ? `${lpl4060FiveYearPct >= 0 ? "+" : ""}${lpl4060FiveYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("lpl5050"); }}>
@@ -1282,11 +1526,44 @@ RESPONSE RULES:
                 <div className="valHero">
                   {lpl5050YtdPct != null ? `${lpl5050YtdPct >= 0 ? "+" : ""}${lpl5050YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: lpl5050TodayPct == null ? "#cbd5e1" : lpl5050TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {lpl5050TodayPct != null ? `${lpl5050TodayPct >= 0 ? "+" : ""}${lpl5050TodayPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: lpl5050TodayPct == null ? "#cbd5e1" : lpl5050TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {lpl5050TodayPct != null ? `${lpl5050TodayPct >= 0 ? "+" : ""}${lpl5050TodayPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
                   </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: lpl5050OneYearPct == null ? "#cbd5e1" : lpl5050OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {lpl5050OneYearPct != null ? `${lpl5050OneYearPct >= 0 ? "+" : ""}${lpl5050OneYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: lpl5050FiveYearPct == null ? "#cbd5e1" : lpl5050FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {lpl5050FiveYearPct != null ? `${lpl5050FiveYearPct >= 0 ? "+" : ""}${lpl5050FiveYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("vg4060"); }}>
@@ -1294,11 +1571,44 @@ RESPONSE RULES:
                 <div className="valHero">
                   {vg4060YtdPct != null ? `${vg4060YtdPct >= 0 ? "+" : ""}${vg4060YtdPct.toFixed(1)}%` : "—"}
                 </div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: vg4060TodayPct == null ? "#cbd5e1" : vg4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {vg4060TodayPct != null ? `${vg4060TodayPct >= 0 ? "+" : ""}${vg4060TodayPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: vg4060TodayPct == null ? "#cbd5e1" : vg4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {vg4060TodayPct != null ? `${vg4060TodayPct >= 0 ? "+" : ""}${vg4060TodayPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
                   </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: vg4060OneYearPct == null ? "#cbd5e1" : vg4060OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {vg4060OneYearPct != null ? `${vg4060OneYearPct >= 0 ? "+" : ""}${vg4060OneYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: vg4060FiveYearPct == null ? "#cbd5e1" : vg4060FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {vg4060FiveYearPct != null ? `${vg4060FiveYearPct >= 0 ? "+" : ""}${vg4060FiveYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
             </div>
@@ -1319,11 +1629,44 @@ RESPONSE RULES:
                   {noelleMockupYtdPct != null ? `${noelleMockupYtdPct >= 0 ? "+" : ""}${noelleMockupYtdPct.toFixed(1)}%` : "—"}
                 </div>
                 <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>Chris's draft · DBMF + BTAL placeholder for TBD Long/Short</div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: noelleMockupTodayPct == null ? "#cbd5e1" : noelleMockupTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {noelleMockupTodayPct != null ? `${noelleMockupTodayPct >= 0 ? "+" : ""}${noelleMockupTodayPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: noelleMockupTodayPct == null ? "#cbd5e1" : noelleMockupTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {noelleMockupTodayPct != null ? `${noelleMockupTodayPct >= 0 ? "+" : ""}${noelleMockupTodayPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
                   </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: noelleMockupOneYearPct == null ? "#cbd5e1" : noelleMockupOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {noelleMockupOneYearPct != null ? `${noelleMockupOneYearPct >= 0 ? "+" : ""}${noelleMockupOneYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: noelleMockupFiveYearPct == null ? "#cbd5e1" : noelleMockupFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {noelleMockupFiveYearPct != null ? `${noelleMockupFiveYearPct >= 0 ? "+" : ""}${noelleMockupFiveYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("hybrid8"); }}>
@@ -1332,11 +1675,44 @@ RESPONSE RULES:
                   {hybrid8YtdPct != null ? `${hybrid8YtdPct >= 0 ? "+" : ""}${hybrid8YtdPct.toFixed(1)}%` : "—"}
                 </div>
                 <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>Mike's curated blend of ALT + Mockup · 50/35/15, 8 holdings</div>
-                <div style={{ marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, color: hybrid8TodayPct == null ? "#cbd5e1" : hybrid8TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {hybrid8TodayPct != null ? `${hybrid8TodayPct >= 0 ? "+" : ""}${hybrid8TodayPct.toFixed(1)}%` : "—"}
+                <div style={{ display:"flex", gap:10, marginTop:8 }}>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: hybrid8TodayPct == null ? "#cbd5e1" : hybrid8TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {hybrid8TodayPct != null ? `${hybrid8TodayPct >= 0 ? "+" : ""}${hybrid8TodayPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
                   </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: hybrid8OneYearPct == null ? "#cbd5e1" : hybrid8OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {hybrid8OneYearPct != null ? `${hybrid8OneYearPct >= 0 ? "+" : ""}${hybrid8OneYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+
+                    <div style={{ fontSize:15, fontWeight:700, color: hybrid8FiveYearPct == null ? "#cbd5e1" : hybrid8FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+
+                      {hybrid8FiveYearPct != null ? `${hybrid8FiveYearPct >= 0 ? "+" : ""}${hybrid8FiveYearPct.toFixed(1)}%` : "—"}
+
+                    </div>
+
+                  </div>
+
                 </div>
               </div>
             </div>
@@ -1361,27 +1737,35 @@ RESPONSE RULES:
                 const ytdLabel = p.ytdReturnPct != null ? `${p.ytdReturnPct >= 0 ? "+" : ""}${p.ytdReturnPct.toFixed(1)}%` : "—";
                 const todayLabel = p.dailyPct != null ? `${p.dailyPct >= 0 ? "+" : ""}${p.dailyPct.toFixed(1)}%` : "—";
                 const todayColor = p.dailyPct == null ? "#cbd5e1" : p.dailyPct >= 0 ? "#4ade80" : "#ff6b88";
+                const oneYearLabel = p.oneYearReturnPct != null ? `${p.oneYearReturnPct >= 0 ? "+" : ""}${p.oneYearReturnPct.toFixed(1)}%` : "—";
+                const fiveYearLabel = p.fiveYearReturnPct != null ? `${p.fiveYearReturnPct >= 0 ? "+" : ""}${p.fiveYearReturnPct.toFixed(1)}%` : "—";
                 const jobStyle: React.CSSProperties = { fontSize:11, color:"#64748b", marginBottom:8, marginTop:-4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" };
 
                 if (p.sleeve === "defensive") {
                   const neutralBarPos = Math.max(2, Math.min(p.barPos, 98));
+                  const ytdColor = p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88";
                   return (
                     <div key={p.ticker} className="tile" style={{ position:"relative", borderTop:"2px solid rgba(148,163,184,0.35)" }}>
                       <div className="tileTop">
                         <span className="lbl">{p.ticker} · {p.weight}%</span>
                       </div>
                       <div style={jobStyle}>{p.job}</div>
+                      <div style={{ fontSize:11, color:"#64748b", marginTop:-6, marginBottom:2 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
 
-                      <div className="valHero" style={{ fontSize:24 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
+                      <div className="valHero" style={{ fontSize:24, color:ytdColor }}>{ytdLabel}</div>
 
-                      <div style={{ display:"flex", gap:14, marginTop:8 }}>
-                        <div>
-                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
-                          <div style={{ fontSize:15, fontWeight:700, color:p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{ytdLabel}</div>
-                        </div>
+                      <div style={{ display:"flex", gap:10, marginTop:8 }}>
                         <div>
                           <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
                           <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                          <div style={{ fontSize:15, fontWeight:700, color:p.oneYearReturnPct == null ? "#cbd5e1" : p.oneYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{oneYearLabel}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                          <div style={{ fontSize:15, fontWeight:700, color:p.fiveYearReturnPct == null ? "#cbd5e1" : p.fiveYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{fiveYearLabel}</div>
                         </div>
                       </div>
 
@@ -1417,16 +1801,21 @@ RESPONSE RULES:
                       <span className="lbl">{p.ticker} · {p.weight}%</span>
                     </div>
                     <div style={jobStyle}>{p.job}</div>
-                    <div className="valHero" style={{ fontSize:24 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
+                    <div style={{ fontSize:11, color:"#64748b", marginTop:-6, marginBottom:2 }}>{p.price != null ? `$${p.price.toFixed(2)}` : "—"}</div>
+                    <div className="valHero" style={{ fontSize:24, color:p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{ytdLabel}</div>
 
-                    <div style={{ display:"flex", gap:14, marginTop:8 }}>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
-                        <div style={{ fontSize:15, fontWeight:700, color:p.ytdReturnPct == null ? "#cbd5e1" : p.ytdReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{ytdLabel}</div>
-                      </div>
+                    <div style={{ display:"flex", gap:10, marginTop:8 }}>
                       <div>
                         <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
                         <div style={{ fontSize:15, fontWeight:700, color:todayColor }}>{todayLabel}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:p.oneYearReturnPct == null ? "#cbd5e1" : p.oneYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{oneYearLabel}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:p.fiveYearReturnPct == null ? "#cbd5e1" : p.fiveYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{fiveYearLabel}</div>
                       </div>
                     </div>
 
