@@ -1559,8 +1559,8 @@ RESPONSE RULES:
               // reads as an actual holding that isn't one.
               const byTicker = (t: string) =>
                 positionCards.find(p => p.ticker === t) ?? candidateCards.find(p => p.ticker === t);
-              const equityCards = ["VEA", "SCHD", "VTI", "VTWO", "VIGI"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
-              const incomeCards = ["VTIP", "SGOV", "VGIT"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              const equityCards = ["VEA", "SCHD", "VTI", "VTWO", "VIGI", "VXUS"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              const incomeCards = ["VTIP", "SGOV", "VGIT", "VTEB"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
               const altCards = ["GLDM", "DBMF", "BTAL"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
 
               return (
@@ -1568,14 +1568,15 @@ RESPONSE RULES:
                   <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
                     Equity Sleeve
                   </div>
-                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>VEA / SCHD / VTI real holdings · VTWO / VIGI under consideration</div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>VEA / SCHD / VTI real holdings · VTWO / VIGI / VXUS under consideration</div>
                   <div className="grid5" style={{ marginBottom:16 }}>
                     {equityCards.map(renderPositionTile)}
                   </div>
 
-                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
                     Fixed Income
                   </div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>VTIP / SGOV / VGIT real holdings · VTEB under consideration</div>
                   <div className="grid5" style={{ marginBottom:16 }}>
                     {incomeCards.map(renderPositionTile)}
                   </div>
