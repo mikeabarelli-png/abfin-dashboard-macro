@@ -349,6 +349,8 @@ export default function Page() {
     { ticker: "VIGI", weight: 5,  job: "Int'l dividend growth",                sleeve: "trend" as const },
     { ticker: "DBMF", weight: 5,  job: "Managed futures, trend-following",     sleeve: "defensive" as const },
     { ticker: "BTAL", weight: 5,  job: "Mkt-neutral anti-beta — TBD L/S manager", sleeve: "defensive" as const },
+    { ticker: "VXUS", weight: 15, job: "Total intl (dev + EM) — Chris's C1 tax pick", sleeve: "trend" as const },
+    { ticker: "VTEB", weight: 60, job: "Muni bonds, tax-exempt — Chris's C1 tax pick", sleeve: "defensive" as const },
   ];
   const candidateCards = CANDIDATE_POSITIONS.map(p => {
     const d = positionsData?.[p.ticker] ?? null;
@@ -436,6 +438,13 @@ export default function Page() {
   const noelleMockupTodayPct = getNum(metrics?.noelle_mockup?.today_change_pct, marketData?.noelle_mockup?.today_change_pct);
   const noelleMockupOneYearPct = getNum(metrics?.noelle_mockup?.one_year_return_pct, marketData?.noelle_mockup?.one_year_return_pct);
   const noelleMockupFiveYearPct = getNum(metrics?.noelle_mockup?.five_year_return_pct, marketData?.noelle_mockup?.five_year_return_pct);
+  // C1 TAX 40/60 — Chris's actual proposal for Noelle's TOD (taxable)
+  // accounts: 25% VTI / 15% VXUS / 60% VTEB. Distinct from C0 (his
+  // retirement-account proposal) — this one is taxable-specific.
+  const c1TaxYtdPct = getNum(metrics?.c1_tax?.ytd_return_pct, marketData?.c1_tax?.ytd_return_pct);
+  const c1TaxTodayPct = getNum(metrics?.c1_tax?.today_change_pct, marketData?.c1_tax?.today_change_pct);
+  const c1TaxOneYearPct = getNum(metrics?.c1_tax?.one_year_return_pct, marketData?.c1_tax?.one_year_return_pct);
+  const c1TaxFiveYearPct = getNum(metrics?.c1_tax?.five_year_return_pct, marketData?.c1_tax?.five_year_return_pct);
   // Hybrid 8 — Mike's curated blend of ALT 45/40/15 and the Noelle Mockup.
   // SCHD foundational, VTWO carried over for Chris's small-cap input, VIGI
   // and PDBC cut for overlap with VEA/DBMF, BTAL cut to consolidate alts
@@ -519,6 +528,12 @@ export default function Page() {
       subtitle: "Chris's rough draft for Noelle's Rollover IRA — 55% equity / 35% fixed income / 10% alts (DBMF + BTAL placeholder for TBD Long/Short). IRA-level, not household.",
       ytd: noelleMockupYtdPct, today: noelleMockupTodayPct, oneYear: noelleMockupOneYearPct, fiveYear: noelleMockupFiveYearPct,
       components: apiComponents(metrics?.noelle_mockup ?? marketData?.noelle_mockup),
+    },
+    c1Tax: {
+      title: "C1 TAX 40/60",
+      subtitle: "Chris's actual proposal for Noelle's TOD (taxable) accounts — 25% VTI / 15% VXUS / 60% VTEB. Tax-exempt income via munis, sized for the household's early-retirement funding bucket.",
+      ytd: c1TaxYtdPct, today: c1TaxTodayPct, oneYear: c1TaxOneYearPct, fiveYear: c1TaxFiveYearPct,
+      components: apiComponents(metrics?.c1_tax ?? marketData?.c1_tax),
     },
     hybrid8: {
       title: "M1 50/35/15",
@@ -1411,6 +1426,26 @@ RESPONSE RULES:
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
                   <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: hybrid8FiveYearPct == null ? "#cbd5e1" : hybrid8FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                     {hybrid8FiveYearPct != null ? `${hybrid8FiveYearPct >= 0 ? "+" : ""}${hybrid8FiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+              </div>
+            </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("c1Tax"); }}>
+                <div className="lbl">C1 TAX 40/60 YTD</div>
+                <div className="valHero">
+                  {c1TaxYtdPct != null ? `${c1TaxYtdPct >= 0 ? "+" : ""}${c1TaxYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1TaxTodayPct == null ? "#cbd5e1" : c1TaxTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1TaxTodayPct != null ? `${c1TaxTodayPct >= 0 ? "+" : ""}${c1TaxTodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1TaxOneYearPct == null ? "#cbd5e1" : c1TaxOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1TaxOneYearPct != null ? `${c1TaxOneYearPct >= 0 ? "+" : ""}${c1TaxOneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1TaxFiveYearPct == null ? "#cbd5e1" : c1TaxFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1TaxFiveYearPct != null ? `${c1TaxFiveYearPct >= 0 ? "+" : ""}${c1TaxFiveYearPct.toFixed(1)}%` : "—"}
                   </div>
               </div>
             </div>
