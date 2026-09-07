@@ -440,6 +440,7 @@ export async function GET() {
     lplImgExtras,
     vgBNDX,
     noelleExtras,
+    c1TaxExtras,
   ] = await Promise.all([
     Promise.all([
       fetchChart("^GSPC", 420),
@@ -506,6 +507,12 @@ export async function GET() {
     // fund yet and has said he won't use ETFs for this category, so treat
     // this tile's return as illustrative, not predictive of his final pick.
     Promise.all([fetchPositionMetrics("VTWO"), fetchPositionMetrics("VIGI"), fetchPositionMetrics("BTAL")]),
+    // "C1 TAX 40/60" — Chris's actual proposal for Noelle's TOD (taxable)
+    // accounts: 25% VTI / 15% VXUS / 60% VTEB. VTI is already a real
+    // holding; VXUS and VTEB are the two new tickers here. Chris flagged
+    // FMUB as a suitable Fidelity-platform substitute for VTEB if Mike
+    // ever needs it — not modeled separately since it's the same strategy.
+    Promise.all([fetchPositionMetrics("VXUS"), fetchPositionMetrics("VTEB")]),
   ]);
   const [cleanSlatePDBC, cleanSlateDBMF] = cleanSlateExtras;
   const [lplVUG, lplVTV, lplVWO, lplVCIT, lplVMBS, lplIGF] = lplImgExtras;
@@ -629,22 +636,25 @@ export async function GET() {
   // names an actual fund. This tile tracks Noelle's Rollover IRA only, not
   // the household — label accordingly in the UI.
   const [noelleVTWO, noelleVIGI, noelleBTAL] = noelleExtras;
+  const [c1VXUS, c1VTEB] = c1TaxExtras;
 
-  // Expose VTWO/VIGI/BTAL through the same `positions` dict real holdings
-  // use, so the "Your Holdings" UI can render full tiles for these
+  // Expose VTWO/VIGI/BTAL/VXUS/VTEB through the same `positions` dict real
+  // holdings use, so the "Your Holdings" UI can render full tiles for these
   // candidate positions with zero new frontend fetch logic, and so
   // blendOneYear/blendFiveYear below can find them via positions[ticker]
   // the same way they find every other ticker. MUST happen before
-  // noelleMockupComponents is built — blendOneYear/blendFiveYear read
-  // straight from `positions`, not from this component array's own
-  // ytd/today fields, so merging these in late (as this block used to sit,
-  // right before the JSON return) silently zeroed out the Proposed tile's
-  // 1-YR/5-YR: it was reading positions["VTWO"] etc. before they existed.
-  // They're candidates under consideration, not real holdings —
-  // PORTFOLIO_POSITIONS in page.tsx stays untouched.
+  // noelleMockupComponents/c1TaxComponents are built — blendOneYear/
+  // blendFiveYear read straight from `positions`, not from a component
+  // array's own ytd/today fields, so merging these in late (as this block
+  // used to sit, right before the JSON return) silently zeroed out the
+  // Proposed tile's 1-YR/5-YR: it was reading positions["VTWO"] etc.
+  // before they existed. They're candidates under consideration, not real
+  // holdings — PORTFOLIO_POSITIONS in page.tsx stays untouched.
   positions["VTWO"] = noelleVTWO;
   positions["VIGI"] = noelleVIGI;
   positions["BTAL"] = noelleBTAL;
+  positions["VXUS"] = c1VXUS;
+  positions["VTEB"] = c1VTEB;
 
   const noelleMockupWeights: Record<string, number> = {
     VEA: 0.15, SCHD: 0.15, VTI: 0.10, VGIT: 0.13, SGOV: 0.12, VTIP: 0.10,
@@ -673,6 +683,31 @@ export async function GET() {
   if (noelleVTWO.error) diagnostics["noelle_vtwo"] = noelleVTWO.error;
   if (noelleVIGI.error) diagnostics["noelle_vigi"] = noelleVIGI.error;
   if (noelleBTAL.error) diagnostics["noelle_btal"] = noelleBTAL.error;
+
+  // "C1 TAX 40/60" — Chris's actual proposal for Noelle's TOD (taxable)
+  // accounts, from his note: 25% VTI / 15% VXUS / 60% VTEB. Distinct from
+  // C0 (55/35/10), which is his retirement-account proposal — this one is
+  // taxable-specific, built around tax-exempt income (VTEB) rather than
+  // taxable bonds, which is why it looks nothing like the IRA-side models.
+  const c1TaxWeights: Record<string, number> = { VTI: 0.25, VXUS: 0.15, VTEB: 0.60 };
+  const c1TaxComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
+    Object.entries(c1TaxWeights).map(([ticker, weight]) => ({
+      ticker, weight,
+      ytd: positions[ticker]?.ytdReturnPct ?? null,
+      today: positions[ticker]?.dailyChangePct ?? null,
+    }));
+  const c1TaxHasAllYtd = c1TaxComponents.every((c) => c.ytd != null);
+  const c1TaxYtdPct: number | null = c1TaxHasAllYtd
+    ? c1TaxComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const c1TaxHasAllToday = c1TaxComponents.every((c) => c.today != null);
+  const c1TaxTodayPct: number | null = c1TaxHasAllToday
+    ? c1TaxComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+  const c1TaxOneYearPct = blendOneYear(c1TaxComponents);
+  const c1TaxFiveYearPct = blendFiveYear(c1TaxComponents);
+  if (c1VXUS.error) diagnostics["c1_vxus"] = c1VXUS.error;
+  if (c1VTEB.error) diagnostics["c1_vteb"] = c1VTEB.error;
 
   // "Hybrid 8" — Mike's curated blend of ALT 45/40/15 and the Noelle
   // Mockup, not a straight average of the two. SCHD stays the largest
@@ -1321,6 +1356,13 @@ export async function GET() {
         one_year_return_pct: noelleMockupOneYearPct,
         five_year_return_pct: noelleMockupFiveYearPct,
         components: serializeComponents(noelleMockupComponents),
+      },
+      c1_tax: {
+        ytd_return_pct: c1TaxYtdPct,
+        today_change_pct: c1TaxTodayPct,
+        one_year_return_pct: c1TaxOneYearPct,
+        five_year_return_pct: c1TaxFiveYearPct,
+        components: serializeComponents(c1TaxComponents),
       },
       hybrid_8: {
         ytd_return_pct: hybrid8YtdPct,
