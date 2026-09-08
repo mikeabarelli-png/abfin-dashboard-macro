@@ -709,6 +709,37 @@ export async function GET() {
   if (c1VXUS.error) diagnostics["c1_vxus"] = c1VXUS.error;
   if (c1VTEB.error) diagnostics["c1_vteb"] = c1VTEB.error;
 
+  // "C1 IRA" — Chris's proposed uniform model for the six retirement
+  // accounts running the standard IRA structure (Noelle's SEP/Rollover/
+  // Inherited/Roth, Mike's Traditional/Rollover). Explicitly excludes the
+  // Alpine 401k (pending rollover, stays in its target-date fund for now)
+  // and the TOD accounts (separate C1 TAX model). Drops VGIT in favor of
+  // BND — Chris's rationale: BND is the anchor bond fund Vanguard's own
+  // target-date funds use, and it's the only place Mike/Noelle currently
+  // hold any corporate bond exposure at all. Every ticker here is already
+  // live in `positions` from real holdings or earlier candidate-fetch
+  // work — no new network calls needed for this one.
+  const c1IraWeights: Record<string, number> = {
+    SCHD: 0.16, VEA: 0.15, VTIP: 0.15, SGOV: 0.14, VTI: 0.10,
+    VTWO: 0.10, BND: 0.09, VIGI: 0.05, GLDM: 0.03, DBMF: 0.03,
+  };
+  const c1IraComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
+    Object.entries(c1IraWeights).map(([ticker, weight]) => ({
+      ticker, weight,
+      ytd: positions[ticker]?.ytdReturnPct ?? null,
+      today: positions[ticker]?.dailyChangePct ?? null,
+    }));
+  const c1IraHasAllYtd = c1IraComponents.every((c) => c.ytd != null);
+  const c1IraYtdPct: number | null = c1IraHasAllYtd
+    ? c1IraComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const c1IraHasAllToday = c1IraComponents.every((c) => c.today != null);
+  const c1IraTodayPct: number | null = c1IraHasAllToday
+    ? c1IraComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+  const c1IraOneYearPct = blendOneYear(c1IraComponents);
+  const c1IraFiveYearPct = blendFiveYear(c1IraComponents);
+
   // "Hybrid 8" — Mike's curated blend of ALT 45/40/15 and the Noelle
   // Mockup, not a straight average of the two. SCHD stays the largest
   // single line as the foundational quality/value holding. VTWO carries
@@ -1363,6 +1394,13 @@ export async function GET() {
         one_year_return_pct: c1TaxOneYearPct,
         five_year_return_pct: c1TaxFiveYearPct,
         components: serializeComponents(c1TaxComponents),
+      },
+      c1_ira: {
+        ytd_return_pct: c1IraYtdPct,
+        today_change_pct: c1IraTodayPct,
+        one_year_return_pct: c1IraOneYearPct,
+        five_year_return_pct: c1IraFiveYearPct,
+        components: serializeComponents(c1IraComponents),
       },
       hybrid_8: {
         ytd_return_pct: hybrid8YtdPct,
