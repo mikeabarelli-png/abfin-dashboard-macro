@@ -463,6 +463,19 @@ export default function Page() {
   const m3TodayPct = getNum(metrics?.m3?.today_change_pct, marketData?.m3?.today_change_pct);
   const m3OneYearPct = getNum(metrics?.m3?.one_year_return_pct, marketData?.m3?.one_year_return_pct);
   const m3FiveYearPct = getNum(metrics?.m3?.five_year_return_pct, marketData?.m3?.five_year_return_pct);
+  // Panel Consensus — the 12-voice panel's debate over C1, 50% equity cap
+  // held fixed, cut concentrated in VTWO, BND raised more than Chris's
+  // original, gold weighted above DBMF. Other AI — a second AI's take on
+  // the same question, close to M2 but BND at 11% and GLDM/DBMF split
+  // evenly, kept separate to compare philosophies side by side.
+  const panelYtdPct = getNum(metrics?.panel_consensus?.ytd_return_pct, marketData?.panel_consensus?.ytd_return_pct);
+  const panelTodayPct = getNum(metrics?.panel_consensus?.today_change_pct, marketData?.panel_consensus?.today_change_pct);
+  const panelOneYearPct = getNum(metrics?.panel_consensus?.one_year_return_pct, marketData?.panel_consensus?.one_year_return_pct);
+  const panelFiveYearPct = getNum(metrics?.panel_consensus?.five_year_return_pct, marketData?.panel_consensus?.five_year_return_pct);
+  const otherAiYtdPct = getNum(metrics?.other_ai?.ytd_return_pct, marketData?.other_ai?.ytd_return_pct);
+  const otherAiTodayPct = getNum(metrics?.other_ai?.today_change_pct, marketData?.other_ai?.today_change_pct);
+  const otherAiOneYearPct = getNum(metrics?.other_ai?.one_year_return_pct, marketData?.other_ai?.one_year_return_pct);
+  const otherAiFiveYearPct = getNum(metrics?.other_ai?.five_year_return_pct, marketData?.other_ai?.five_year_return_pct);
   // Hybrid 8 — Mike's curated blend of ALT 45/40/15 and the Noelle Mockup.
   // SCHD foundational, VTWO carried over for Chris's small-cap input, VIGI
   // and PDBC cut for overlap with VEA/DBMF, BTAL cut to consolidate alts
@@ -570,6 +583,18 @@ export default function Page() {
       subtitle: "Same as M2 but VTWO restored to Chris's original 10% and GLDM/DBMF each at 2.5%. 55% equity / 40% fixed income / 5% alts.",
       ytd: m3YtdPct, today: m3TodayPct, oneYear: m3OneYearPct, fiveYear: m3FiveYearPct,
       components: apiComponents(metrics?.m3 ?? marketData?.m3),
+    },
+    panelConsensus: {
+      title: "Panel Consensus",
+      subtitle: "The 12-voice panel's debate over C1 IRA with the 50% equity cap held fixed — cut concentrated in VTWO (its true CAPE runs higher than the S&P's own), BND raised above Chris's original 9%, gold weighted above DBMF since they hedge different risks. 50% equity / 42% fixed income / 8% alts.",
+      ytd: panelYtdPct, today: panelTodayPct, oneYear: panelOneYearPct, fiveYear: panelFiveYearPct,
+      components: apiComponents(metrics?.panel_consensus ?? marketData?.panel_consensus),
+    },
+    otherAi: {
+      title: "Other AI",
+      subtitle: "A second AI's independent take on C1 with the same 50% equity cap — same equity lines as M2/Panel, BND at 11%, GLDM/DBMF split evenly at 5/5 rather than weighted toward gold. Stated rationale: round numbers are easier to hold to when markets get volatile. 50% equity / 40% fixed income / 10% alts.",
+      ytd: otherAiYtdPct, today: otherAiTodayPct, oneYear: otherAiOneYearPct, fiveYear: otherAiFiveYearPct,
+      components: apiComponents(metrics?.other_ai ?? marketData?.other_ai),
     },
     hybrid8: {
       title: "M1 50/35/15",
@@ -1551,6 +1576,46 @@ RESPONSE RULES:
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
                   <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m3FiveYearPct == null ? "#cbd5e1" : m3FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                     {m3FiveYearPct != null ? `${m3FiveYearPct >= 0 ? "+" : ""}${m3FiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+              </div>
+              </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("panelConsensus"); }}>
+                <div className="lbl">Panel Consensus YTD</div>
+                <div className="valHero">
+                  {panelYtdPct != null ? `${panelYtdPct >= 0 ? "+" : ""}${panelYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: panelTodayPct == null ? "#cbd5e1" : panelTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {panelTodayPct != null ? `${panelTodayPct >= 0 ? "+" : ""}${panelTodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: panelOneYearPct == null ? "#cbd5e1" : panelOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {panelOneYearPct != null ? `${panelOneYearPct >= 0 ? "+" : ""}${panelOneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: panelFiveYearPct == null ? "#cbd5e1" : panelFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {panelFiveYearPct != null ? `${panelFiveYearPct >= 0 ? "+" : ""}${panelFiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+              </div>
+              </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("otherAi"); }}>
+                <div className="lbl">Other AI YTD</div>
+                <div className="valHero">
+                  {otherAiYtdPct != null ? `${otherAiYtdPct >= 0 ? "+" : ""}${otherAiYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: otherAiTodayPct == null ? "#cbd5e1" : otherAiTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {otherAiTodayPct != null ? `${otherAiTodayPct >= 0 ? "+" : ""}${otherAiTodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: otherAiOneYearPct == null ? "#cbd5e1" : otherAiOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {otherAiOneYearPct != null ? `${otherAiOneYearPct >= 0 ? "+" : ""}${otherAiOneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: otherAiFiveYearPct == null ? "#cbd5e1" : otherAiFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {otherAiFiveYearPct != null ? `${otherAiFiveYearPct >= 0 ? "+" : ""}${otherAiFiveYearPct.toFixed(1)}%` : "—"}
                   </div>
               </div>
             </div>
