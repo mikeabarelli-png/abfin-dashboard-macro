@@ -452,6 +452,17 @@ export default function Page() {
   const c1IraTodayPct = getNum(metrics?.c1_ira?.today_change_pct, marketData?.c1_ira?.today_change_pct);
   const c1IraOneYearPct = getNum(metrics?.c1_ira?.one_year_return_pct, marketData?.c1_ira?.one_year_return_pct);
   const c1IraFiveYearPct = getNum(metrics?.c1_ira?.five_year_return_pct, marketData?.c1_ira?.five_year_return_pct);
+  // M2 — Mike's dial-back of C1 IRA toward a clean 50/40/10 (VTWO cut to
+  // 5%, GLDM/DBMF each doubled to 5%). M3 — same base but VTWO back to
+  // 10% and GLDM/DBMF at 2.5% each (nets to 55/40/5, not 50/40/10).
+  const m2YtdPct = getNum(metrics?.m2?.ytd_return_pct, marketData?.m2?.ytd_return_pct);
+  const m2TodayPct = getNum(metrics?.m2?.today_change_pct, marketData?.m2?.today_change_pct);
+  const m2OneYearPct = getNum(metrics?.m2?.one_year_return_pct, marketData?.m2?.one_year_return_pct);
+  const m2FiveYearPct = getNum(metrics?.m2?.five_year_return_pct, marketData?.m2?.five_year_return_pct);
+  const m3YtdPct = getNum(metrics?.m3?.ytd_return_pct, marketData?.m3?.ytd_return_pct);
+  const m3TodayPct = getNum(metrics?.m3?.today_change_pct, marketData?.m3?.today_change_pct);
+  const m3OneYearPct = getNum(metrics?.m3?.one_year_return_pct, marketData?.m3?.one_year_return_pct);
+  const m3FiveYearPct = getNum(metrics?.m3?.five_year_return_pct, marketData?.m3?.five_year_return_pct);
   // Hybrid 8 — Mike's curated blend of ALT 45/40/15 and the Noelle Mockup.
   // SCHD foundational, VTWO carried over for Chris's small-cap input, VIGI
   // and PDBC cut for overlap with VEA/DBMF, BTAL cut to consolidate alts
@@ -547,6 +558,18 @@ export default function Page() {
       subtitle: "Chris's proposed uniform model across the six standard retirement accounts — 16% SCHD / 15% VEA / 15% VTIP / 14% SGOV / 10% VTI / 10% VTWO / 9% BND / 5% VIGI / 3% GLDM / 3% DBMF. Drops VGIT for BND (the anchor bond fund in Vanguard's own target-date funds). Excludes the Alpine 401k (pending rollover) and TOD accounts (see C1 TAX).",
       ytd: c1IraYtdPct, today: c1IraTodayPct, oneYear: c1IraOneYearPct, fiveYear: c1IraFiveYearPct,
       components: apiComponents(metrics?.c1_ira ?? marketData?.c1_ira),
+    },
+    m2: {
+      title: "M2 50/40/10",
+      subtitle: "Mike's dial-back of C1 IRA — same fund selection, VTWO cut from 10% to 5%, GLDM/DBMF each doubled to 5%. 50% equity / 40% fixed income / 10% alts.",
+      ytd: m2YtdPct, today: m2TodayPct, oneYear: m2OneYearPct, fiveYear: m2FiveYearPct,
+      components: apiComponents(metrics?.m2 ?? marketData?.m2),
+    },
+    m3: {
+      title: "M3 55/40/5",
+      subtitle: "Same as M2 but VTWO restored to Chris's original 10% and GLDM/DBMF each at 2.5%. 55% equity / 40% fixed income / 5% alts.",
+      ytd: m3YtdPct, today: m3TodayPct, oneYear: m3OneYearPct, fiveYear: m3FiveYearPct,
+      components: apiComponents(metrics?.m3 ?? marketData?.m3),
     },
     hybrid8: {
       title: "M1 50/35/15",
@@ -1479,6 +1502,55 @@ RESPONSE RULES:
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
                   <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1IraFiveYearPct == null ? "#cbd5e1" : c1IraFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                     {c1IraFiveYearPct != null ? `${c1IraFiveYearPct >= 0 ? "+" : ""}${c1IraFiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+              </div>
+            </div>
+            </div>
+
+            {/* Row 4 — Mike's own tuning of C1 IRA, exploring how much
+                dialing back Chris's 56% equity lean actually costs in
+                return, before deciding what to bring back to him. */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+              Dialing Back C1 IRA — Mike's Tuning
+            </div>
+            <div className="grid5">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("m2"); }}>
+                <div className="lbl">M2 50/40/10 YTD</div>
+                <div className="valHero">
+                  {m2YtdPct != null ? `${m2YtdPct >= 0 ? "+" : ""}${m2YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2TodayPct == null ? "#cbd5e1" : m2TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m2TodayPct != null ? `${m2TodayPct >= 0 ? "+" : ""}${m2TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2OneYearPct == null ? "#cbd5e1" : m2OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m2OneYearPct != null ? `${m2OneYearPct >= 0 ? "+" : ""}${m2OneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2FiveYearPct == null ? "#cbd5e1" : m2FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m2FiveYearPct != null ? `${m2FiveYearPct >= 0 ? "+" : ""}${m2FiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+              </div>
+              </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("m3"); }}>
+                <div className="lbl">M3 55/40/5 YTD</div>
+                <div className="valHero">
+                  {m3YtdPct != null ? `${m3YtdPct >= 0 ? "+" : ""}${m3YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m3TodayPct == null ? "#cbd5e1" : m3TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m3TodayPct != null ? `${m3TodayPct >= 0 ? "+" : ""}${m3TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m3OneYearPct == null ? "#cbd5e1" : m3OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m3OneYearPct != null ? `${m3OneYearPct >= 0 ? "+" : ""}${m3OneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m3FiveYearPct == null ? "#cbd5e1" : m3FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m3FiveYearPct != null ? `${m3FiveYearPct >= 0 ? "+" : ""}${m3FiveYearPct.toFixed(1)}%` : "—"}
                   </div>
               </div>
             </div>
