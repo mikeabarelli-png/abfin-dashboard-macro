@@ -740,6 +740,61 @@ export async function GET() {
   const c1IraOneYearPct = blendOneYear(c1IraComponents);
   const c1IraFiveYearPct = blendFiveYear(c1IraComponents);
 
+  // "M2" — Mike's dial-back of Chris's C1 IRA model (56/38/6) toward a
+  // cleaner 50/40/10. Built by adjusting C1 IRA's actual weights rather
+  // than starting fresh: the full -6 equity points comes out of VTWO
+  // alone (10% → 5%), leaving SCHD/VEA/VTI/VIGI at or near Chris's
+  // original weights so the fund selection still follows his input as
+  // closely as possible. SGOV and BND each nudged +1 to round out fixed
+  // income to 40; GLDM and DBMF both doubled to 5% to bring alts to 10.
+  const m2Weights: Record<string, number> = {
+    SCHD: 0.15, VEA: 0.15, VTI: 0.10, VTWO: 0.05, VIGI: 0.05,
+    VTIP: 0.15, SGOV: 0.15, BND: 0.10,
+    GLDM: 0.05, DBMF: 0.05,
+  };
+  const m2Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
+    Object.entries(m2Weights).map(([ticker, weight]) => ({
+      ticker, weight,
+      ytd: positions[ticker]?.ytdReturnPct ?? null,
+      today: positions[ticker]?.dailyChangePct ?? null,
+    }));
+  const m2HasAllYtd = m2Components.every((c) => c.ytd != null);
+  const m2YtdPct: number | null = m2HasAllYtd
+    ? m2Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const m2HasAllToday = m2Components.every((c) => c.today != null);
+  const m2TodayPct: number | null = m2HasAllToday
+    ? m2Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+  const m2OneYearPct = blendOneYear(m2Components);
+  const m2FiveYearPct = blendFiveYear(m2Components);
+
+  // "M3" — same as M2, but VTWO restored to Chris's original 10% and
+  // GLDM/DBMF each at 2.5% instead of 5%. Net effect: equity climbs back
+  // to 55%, alts drops to 5%, fixed income holds at 40% — genuinely a
+  // different sleeve mix from M2's clean 50/40/10, not just a relabeling.
+  const m3Weights: Record<string, number> = {
+    SCHD: 0.15, VEA: 0.15, VTI: 0.10, VTWO: 0.10, VIGI: 0.05,
+    VTIP: 0.15, SGOV: 0.15, BND: 0.10,
+    GLDM: 0.025, DBMF: 0.025,
+  };
+  const m3Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
+    Object.entries(m3Weights).map(([ticker, weight]) => ({
+      ticker, weight,
+      ytd: positions[ticker]?.ytdReturnPct ?? null,
+      today: positions[ticker]?.dailyChangePct ?? null,
+    }));
+  const m3HasAllYtd = m3Components.every((c) => c.ytd != null);
+  const m3YtdPct: number | null = m3HasAllYtd
+    ? m3Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const m3HasAllToday = m3Components.every((c) => c.today != null);
+  const m3TodayPct: number | null = m3HasAllToday
+    ? m3Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+  const m3OneYearPct = blendOneYear(m3Components);
+  const m3FiveYearPct = blendFiveYear(m3Components);
+
   // "Hybrid 8" — Mike's curated blend of ALT 45/40/15 and the Noelle
   // Mockup, not a straight average of the two. SCHD stays the largest
   // single line as the foundational quality/value holding. VTWO carries
@@ -1401,6 +1456,20 @@ export async function GET() {
         one_year_return_pct: c1IraOneYearPct,
         five_year_return_pct: c1IraFiveYearPct,
         components: serializeComponents(c1IraComponents),
+      },
+      m2: {
+        ytd_return_pct: m2YtdPct,
+        today_change_pct: m2TodayPct,
+        one_year_return_pct: m2OneYearPct,
+        five_year_return_pct: m2FiveYearPct,
+        components: serializeComponents(m2Components),
+      },
+      m3: {
+        ytd_return_pct: m3YtdPct,
+        today_change_pct: m3TodayPct,
+        one_year_return_pct: m3OneYearPct,
+        five_year_return_pct: m3FiveYearPct,
+        components: serializeComponents(m3Components),
       },
       hybrid_8: {
         ytd_return_pct: hybrid8YtdPct,
