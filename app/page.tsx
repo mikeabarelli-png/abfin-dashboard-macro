@@ -445,6 +445,13 @@ export default function Page() {
   const c1TaxTodayPct = getNum(metrics?.c1_tax?.today_change_pct, marketData?.c1_tax?.today_change_pct);
   const c1TaxOneYearPct = getNum(metrics?.c1_tax?.one_year_return_pct, marketData?.c1_tax?.one_year_return_pct);
   const c1TaxFiveYearPct = getNum(metrics?.c1_tax?.five_year_return_pct, marketData?.c1_tax?.five_year_return_pct);
+  // C1 IRA — Chris's proposed uniform model for the six standard-structure
+  // retirement accounts (excludes Alpine 401k pending rollover, excludes
+  // TOD accounts which use C1 TAX). Drops VGIT in favor of BND.
+  const c1IraYtdPct = getNum(metrics?.c1_ira?.ytd_return_pct, marketData?.c1_ira?.ytd_return_pct);
+  const c1IraTodayPct = getNum(metrics?.c1_ira?.today_change_pct, marketData?.c1_ira?.today_change_pct);
+  const c1IraOneYearPct = getNum(metrics?.c1_ira?.one_year_return_pct, marketData?.c1_ira?.one_year_return_pct);
+  const c1IraFiveYearPct = getNum(metrics?.c1_ira?.five_year_return_pct, marketData?.c1_ira?.five_year_return_pct);
   // Hybrid 8 — Mike's curated blend of ALT 45/40/15 and the Noelle Mockup.
   // SCHD foundational, VTWO carried over for Chris's small-cap input, VIGI
   // and PDBC cut for overlap with VEA/DBMF, BTAL cut to consolidate alts
@@ -534,6 +541,12 @@ export default function Page() {
       subtitle: "Chris's actual proposal for Noelle's TOD (taxable) accounts — 25% VTI / 15% VXUS / 60% VTEB. Tax-exempt income via munis, sized for the household's early-retirement funding bucket.",
       ytd: c1TaxYtdPct, today: c1TaxTodayPct, oneYear: c1TaxOneYearPct, fiveYear: c1TaxFiveYearPct,
       components: apiComponents(metrics?.c1_tax ?? marketData?.c1_tax),
+    },
+    c1Ira: {
+      title: "C1 IRA",
+      subtitle: "Chris's proposed uniform model across the six standard retirement accounts — 16% SCHD / 15% VEA / 15% VTIP / 14% SGOV / 10% VTI / 10% VTWO / 9% BND / 5% VIGI / 3% GLDM / 3% DBMF. Drops VGIT for BND (the anchor bond fund in Vanguard's own target-date funds). Excludes the Alpine 401k (pending rollover) and TOD accounts (see C1 TAX).",
+      ytd: c1IraYtdPct, today: c1IraTodayPct, oneYear: c1IraOneYearPct, fiveYear: c1IraFiveYearPct,
+      components: apiComponents(metrics?.c1_ira ?? marketData?.c1_ira),
     },
     hybrid8: {
       title: "M1 50/35/15",
@@ -1446,6 +1459,26 @@ RESPONSE RULES:
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
                   <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1TaxFiveYearPct == null ? "#cbd5e1" : c1TaxFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                     {c1TaxFiveYearPct != null ? `${c1TaxFiveYearPct >= 0 ? "+" : ""}${c1TaxFiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+              </div>
+            </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("c1Ira"); }}>
+                <div className="lbl">C1 IRA YTD</div>
+                <div className="valHero">
+                  {c1IraYtdPct != null ? `${c1IraYtdPct >= 0 ? "+" : ""}${c1IraYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1IraTodayPct == null ? "#cbd5e1" : c1IraTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1IraTodayPct != null ? `${c1IraTodayPct >= 0 ? "+" : ""}${c1IraTodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1IraOneYearPct == null ? "#cbd5e1" : c1IraOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1IraOneYearPct != null ? `${c1IraOneYearPct >= 0 ? "+" : ""}${c1IraOneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1IraFiveYearPct == null ? "#cbd5e1" : c1IraFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1IraFiveYearPct != null ? `${c1IraFiveYearPct >= 0 ? "+" : ""}${c1IraFiveYearPct.toFixed(1)}%` : "—"}
                   </div>
               </div>
             </div>
