@@ -795,6 +795,67 @@ export async function GET() {
   const m3OneYearPct = blendOneYear(m3Components);
   const m3FiveYearPct = blendFiveYear(m3Components);
 
+  // "Panel Consensus" — the 12-voice panel's debate over C1 IRA, holding
+  // the 50% equity cap fixed. Cut concentrated entirely in VTWO (its true
+  // CAPE runs to ~58x once negative-earnings members are counted, higher
+  // than the S&P's own 42x — Hussman's and Slegers' argument). BND raised
+  // more than Chris's original (Grantham/Rieder: the freed weight has to
+  // land somewhere, but Noland flagged tight credit spreads as a reason
+  // not to lean too hard into corporates). GLDM raised more than DBMF —
+  // Dalio's point that gold and managed futures hedge different risks
+  // (currency debasement vs. equity/rate), not interchangeable "alts."
+  const panelWeights: Record<string, number> = {
+    SCHD: 0.15, VEA: 0.15, VTI: 0.10, VTWO: 0.05, VIGI: 0.05,
+    VTIP: 0.15, SGOV: 0.14, BND: 0.13,
+    GLDM: 0.05, DBMF: 0.03,
+  };
+  const panelComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
+    Object.entries(panelWeights).map(([ticker, weight]) => ({
+      ticker, weight,
+      ytd: positions[ticker]?.ytdReturnPct ?? null,
+      today: positions[ticker]?.dailyChangePct ?? null,
+    }));
+  const panelHasAllYtd = panelComponents.every((c) => c.ytd != null);
+  const panelYtdPct: number | null = panelHasAllYtd
+    ? panelComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const panelHasAllToday = panelComponents.every((c) => c.today != null);
+  const panelTodayPct: number | null = panelHasAllToday
+    ? panelComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+  const panelOneYearPct = blendOneYear(panelComponents);
+  const panelFiveYearPct = blendFiveYear(panelComponents);
+
+  // "Other AI" — a second AI's independent take on the same C1-plus-50%-cap
+  // question. Landed close to M2 (same equity lines, same VTIP/SGOV), but
+  // BND at 11% (between Chris's 9% and the panel's 13%) and GLDM/DBMF split
+  // evenly at 5/5 rather than weighted toward gold. Explicit rationale
+  // given was round numbers being easier to hold to when markets get
+  // volatile, a real but different kind of argument than the panel's
+  // risk-specific reasoning — kept as a separate tile rather than merged
+  // in, precisely so the two philosophies can be compared side by side.
+  const otherAiWeights: Record<string, number> = {
+    SCHD: 0.15, VEA: 0.15, VTI: 0.10, VTWO: 0.05, VIGI: 0.05,
+    VTIP: 0.15, SGOV: 0.14, BND: 0.11,
+    GLDM: 0.05, DBMF: 0.05,
+  };
+  const otherAiComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
+    Object.entries(otherAiWeights).map(([ticker, weight]) => ({
+      ticker, weight,
+      ytd: positions[ticker]?.ytdReturnPct ?? null,
+      today: positions[ticker]?.dailyChangePct ?? null,
+    }));
+  const otherAiHasAllYtd = otherAiComponents.every((c) => c.ytd != null);
+  const otherAiYtdPct: number | null = otherAiHasAllYtd
+    ? otherAiComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
+    : null;
+  const otherAiHasAllToday = otherAiComponents.every((c) => c.today != null);
+  const otherAiTodayPct: number | null = otherAiHasAllToday
+    ? otherAiComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
+    : null;
+  const otherAiOneYearPct = blendOneYear(otherAiComponents);
+  const otherAiFiveYearPct = blendFiveYear(otherAiComponents);
+
   // "Hybrid 8" — Mike's curated blend of ALT 45/40/15 and the Noelle
   // Mockup, not a straight average of the two. SCHD stays the largest
   // single line as the foundational quality/value holding. VTWO carries
@@ -1470,6 +1531,20 @@ export async function GET() {
         one_year_return_pct: m3OneYearPct,
         five_year_return_pct: m3FiveYearPct,
         components: serializeComponents(m3Components),
+      },
+      panel_consensus: {
+        ytd_return_pct: panelYtdPct,
+        today_change_pct: panelTodayPct,
+        one_year_return_pct: panelOneYearPct,
+        five_year_return_pct: panelFiveYearPct,
+        components: serializeComponents(panelComponents),
+      },
+      other_ai: {
+        ytd_return_pct: otherAiYtdPct,
+        today_change_pct: otherAiTodayPct,
+        one_year_return_pct: otherAiOneYearPct,
+        five_year_return_pct: otherAiFiveYearPct,
+        components: serializeComponents(otherAiComponents),
       },
       hybrid_8: {
         ytd_return_pct: hybrid8YtdPct,
