@@ -1099,6 +1099,10 @@ export async function GET() {
   const spx50slope = spx50dma != null && spx50dma_prev != null
     ? ((spx50dma - spx50dma_prev) / spx50dma_prev) * 100 : null;
 
+  const spx100dma_prev = spxCloses.length >= 120 ? avg(spxCloses.slice(-120, -20)) : null;
+  const spx100slope = spx100dma != null && spx100dma_prev != null
+    ? ((spx100dma - spx100dma_prev) / spx100dma_prev) * 100 : null;
+
   const spx200dma_prev = spxCloses.length >= 220 ? avg(spxCloses.slice(-220, -20)) : null;
   const spx200slope = spx200dma != null && spx200dma_prev != null
     ? ((spx200dma - spx200dma_prev) / spx200dma_prev) * 100 : null;
@@ -1362,7 +1366,7 @@ export async function GET() {
       vix: vixPrice,
       spx_20dma: { level: spx20dma, slope: spx20slope },
       spx_50dma: { level: spx50dma, slope: spx50slope },
-      spx_100dma: { level: spx100dma },
+      spx_100dma: { level: spx100dma, slope: spx100slope },
       spx_200dma: { level: spx200dma, slope: spx200slope },
       qqq: {
         price: qqqPrice,
