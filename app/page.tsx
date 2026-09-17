@@ -1451,7 +1451,7 @@ RESPONSE RULES:
                 BTAL for Chris's real Long/Short pick once his weekend
                 proposal lands. */}
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
-              Portfolios I'm Considering
+              LPL Recommendations
             </div>
             <div className="grid5">
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("c1Tax"); }}>
@@ -1475,7 +1475,7 @@ RESPONSE RULES:
               </div>
             </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("c1Ira"); }}>
-                <div className="lbl">C1 IRA YTD</div>
+                <div className="lbl">C1 IRA 56/38/6 YTD</div>
                 <div className="valHero">
                   {c1IraYtdPct != null ? `${c1IraYtdPct >= 0 ? "+" : ""}${c1IraYtdPct.toFixed(1)}%` : "—"}
                 </div>
@@ -1496,34 +1496,6 @@ RESPONSE RULES:
             </div>
             </div>
 
-            {/* Row 4 — Mike's own tuning of C1 IRA, exploring how much
-                dialing back Chris's 56% equity lean actually costs in
-                return, before deciding what to bring back to him. */}
-            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
-              Dialing Back C1 IRA — Mike's Tuning
-            </div>
-            <div className="grid5">
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("m2"); }}>
-                <div className="lbl">M2 50/40/10 YTD</div>
-                <div className="valHero">
-                  {m2YtdPct != null ? `${m2YtdPct >= 0 ? "+" : ""}${m2YtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2TodayPct == null ? "#cbd5e1" : m2TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {m2TodayPct != null ? `${m2TodayPct >= 0 ? "+" : ""}${m2TodayPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2OneYearPct == null ? "#cbd5e1" : m2OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {m2OneYearPct != null ? `${m2OneYearPct >= 0 ? "+" : ""}${m2OneYearPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2FiveYearPct == null ? "#cbd5e1" : m2FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {m2FiveYearPct != null ? `${m2FiveYearPct >= 0 ? "+" : ""}${m2FiveYearPct.toFixed(1)}%` : "—"}
-                  </div>
-              </div>
-              </div>
-            </div>
           </section>
 
           {/* ①-C YOUR HOLDINGS — the actual position tiles, split into their
@@ -1635,7 +1607,7 @@ RESPONSE RULES:
                 positionCards.find(p => p.ticker === t) ?? candidateCards.find(p => p.ticker === t);
               const equityCards = ["VEA", "SCHD", "VTI", "VTWO", "VIGI", "VXUS"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
               const incomeCards = ["VTIP", "SGOV", "VGIT", "VTEB"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
-              const altCards = ["GLDM", "DBMF", "BTAL"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              const altCards = ["GLDM", "DBMF"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
 
               return (
                 <>
@@ -1658,7 +1630,7 @@ RESPONSE RULES:
                   <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
                     Alternatives Sleeve
                   </div>
-                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>GLDM real holding, exit pending · DBMF / BTAL under consideration</div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>GLDM real holding, exit pending · DBMF under consideration</div>
                   <div className="grid5">
                     {altCards.map(renderPositionTile)}
                   </div>
@@ -3159,36 +3131,6 @@ RESPONSE RULES:
                   : `Official positions as of ${ivyOfficialDate} · Next reading: ${ivyEOMDate}`}
               </span>
             </div>
-          </section>
-
-          {/* ⑨ AI STRATEGIST */}
-          <section className="panel panelAI">
-            <div className="aiHeader">
-              <div className="aiIcon">✦</div>
-              <div><div className="panelTitle">AI Wealth Strategist</div><div className="aiSub">Roberts · Marks · Druckenmiller · Buffett · Dalio · Hussman · Stack · Rieder · Grantham · Leyden · Noland · Slegers · Zeberg</div></div>
-            </div>
-            <div className="aiTabs">
-              {(["summary","action","triggers","chat"] as const).map(t => (
-                <button key={t} className={`aiTab${aiTab===t?" aiTabOn":""}`} onClick={() => handleAiTab(t)}>
-                  {{ summary:"Market Summary", action:"Recommended Action", triggers:"Trigger Watch", chat:"Ask a Question" }[t]}
-                </button>
-              ))}
-              {aiTab !== "chat" && <button className="aiTab" onClick={refreshAiTab} style={{ marginLeft:"auto", opacity:aiLoading?0.4:1 }} disabled={aiLoading}>↺ Refresh</button>}
-            </div>
-            {aiTab !== "chat" ? (
-              <div className="aiOut">{aiLoading && !aiCache[aiTab] ? <><span className="spinner" /> Analyzing...</> : (aiCache[aiTab] ?? "")}</div>
-            ) : (
-              <div>
-                <div className="chatHist">
-                  {chatHistory.map((m,i) => <div key={i} className={m.role==="user"?"msgUser":"msgAI"}>{m.text}</div>)}
-                  {aiLoading && <div className="msgAI"><span className="spinner" /> Thinking...</div>}
-                </div>
-                <div className="chatRow">
-                  <input className="chatInp" value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendChat()} placeholder="Ask about your dashboard..." />
-                  <button className="chatBtn" onClick={sendChat} disabled={aiLoading}>Ask ↗</button>
-                </div>
-              </div>
-            )}
           </section>
 
         </div>
