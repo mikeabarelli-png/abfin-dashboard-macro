@@ -131,6 +131,7 @@ export default function Page() {
   const qqq200 = getNum(metrics?.qqq?.dma_200?.level, marketData?.qqq?.dma_200?.level);
   const qqqSlope20 = getNum(metrics?.qqq?.dma_20?.slope, marketData?.qqq?.dma_20?.slope);
   const qqqSlope50 = getNum(metrics?.qqq?.dma_50?.slope, marketData?.qqq?.dma_50?.slope);
+  const qqqSlope100 = getNum(metrics?.qqq?.dma_100?.slope, marketData?.qqq?.dma_100?.slope);
   const qqqSlope200 = getNum(metrics?.qqq?.dma_200?.slope, marketData?.qqq?.dma_200?.slope);
   const qqqRegimeLabel = metrics?.qqq?.regime_label ?? marketData?.qqq?.regime_label ?? null;
   const qqqRegimeDesc = metrics?.qqq?.regime_desc ?? marketData?.qqq?.regime_desc ?? null;
@@ -1220,48 +1221,40 @@ RESPONSE RULES:
                 {qqqTrend.length > 0 && (
                   <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(qqqTrend, qqqChangePct != null && qqqChangePct >= 0 ? "#4ade80" : "#ff6b88") }} />
                 )}
-                <div style={{ display:"flex", gap:14, marginTop:8 }}>
-                  <div>
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
-                    <div style={{ fontSize:15, fontWeight:700, color: qqqYtd == null ? "#cbd5e1" : qqqYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
-                      {qqqYtd != null ? `${qqqYtd >= 0 ? "+" : ""}${qqqYtd.toFixed(1)}%` : "—"}
-                    </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: qqqChangePct == null ? "#cbd5e1" : qqqChangePct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {qqqChangePct != null ? `${qqqChangePct >= 0 ? "+" : ""}${qqqChangePct.toFixed(1)}%` : "—"}
                   </div>
-                  <div>
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                    <div style={{ fontSize:15, fontWeight:700, color: qqqChangePct == null ? "#cbd5e1" : qqqChangePct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                      {qqqChangePct != null ? `${qqqChangePct >= 0 ? "+" : ""}${qqqChangePct.toFixed(1)}%` : "—"}
-                    </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: qqqYtd == null ? "#cbd5e1" : qqqYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {qqqYtd != null ? `${qqqYtd >= 0 ? "+" : ""}${qqqYtd.toFixed(1)}%` : "—"}
                   </div>
                 </div>
               </div>
 
+              {/* DMA tiles — arrow next to Gap, no Today/Slope-text rows,
+                  same as the SPX group above. */}
               {[
                 { label:"200-DMA", level:qqq200, slope:qqqSlope200, pct:qqq200Pct, isLong:true },
-                { label:"100-DMA", level:qqq100, slope:null,         pct:qqqVs(qqq100), isLong:false },
+                { label:"100-DMA", level:qqq100, slope:qqqSlope100, pct:qqqVs(qqq100), isLong:false },
                 { label:"50-DMA",  level:qqq50,  slope:qqqSlope50,   pct:qqqVs(qqq50),  isLong:false },
                 { label:"20-DMA",  level:qqq20,  slope:qqqSlope20,   pct:qqqVs(qqq20),  isLong:false },
               ].map(d => {
                 const state = positionDmaState(d.pct, d.slope, qqqChangePct, d.isLong);
                 const tone = positionDmaTone(d.pct, d.slope, qqqChangePct, d.isLong);
                 const color = toneColor(tone);
-                const slopeColor = d.slope == null ? "#cbd5e1" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
+                const arrow = d.slope == null ? null : d.slope > 0.02 ? "↗" : d.slope < -0.02 ? "↘" : "→";
+                const arrowColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
                 return (
                   <div key={d.label} className="tile">
                     <div className="tileTop"><span className="lbl">{d.label}</span></div>
                     <div className="valHero">{d.level != null ? `$${d.level.toFixed(2)}` : "—"}</div>
                     <div className="status" style={{ color }}>{state}</div>
-                    <div style={{ display:"flex", gap:14, marginTop:8 }}>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
-                        <div style={{ fontSize:15, fontWeight:700, color }}>{d.pct != null ? fmtSigned1(d.pct) : "—"}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Slope</div>
-                        <div style={{ fontSize:15, fontWeight:700, color: slopeColor }}>
-                          {d.slope != null ? `${d.slope > 0 ? "+" : ""}${d.slope.toFixed(1)}%` : "—"}
-                        </div>
-                      </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:3, marginTop:8, alignItems:"center" }}>
+                      <span style={{ fontSize:12, fontWeight:700, color: arrowColor }}>{arrow ?? ""}</span>
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
+                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color }}>{d.pct != null ? fmtSigned1(d.pct) : "—"}</div>
                     </div>
                   </div>
                 );
