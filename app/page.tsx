@@ -1322,6 +1322,30 @@ RESPONSE RULES:
                   </div>
                 </div>
               </div>
+              {/* M2 50/40/10 added here as tile #2 — this is the allocation
+                  for the remainder of the year, sitting alongside CUR
+                  40/55/5 (the allocation through early Sept) so the two are
+                  directly comparable as "before" and "after". */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("m2"); }}>
+                <div className="lbl">M2 50/40/10 YTD</div>
+                <div className="valHero">
+                  {m2YtdPct != null ? `${m2YtdPct >= 0 ? "+" : ""}${m2YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2TodayPct == null ? "#cbd5e1" : m2TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m2TodayPct != null ? `${m2TodayPct >= 0 ? "+" : ""}${m2TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2OneYearPct == null ? "#cbd5e1" : m2OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m2OneYearPct != null ? `${m2OneYearPct >= 0 ? "+" : ""}${m2OneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2FiveYearPct == null ? "#cbd5e1" : m2FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m2FiveYearPct != null ? `${m2FiveYearPct >= 0 ? "+" : ""}${m2FiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Row 2 — the four passive index benchmarks, on their own row
@@ -1430,66 +1454,6 @@ RESPONSE RULES:
               Portfolios I'm Considering
             </div>
             <div className="grid5">
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("alt"); }}>
-                <div className="lbl">M0 45/40/15 YTD</div>
-                <div className="valHero">
-                  {cleanSlateYtdPct != null ? `${cleanSlateYtdPct >= 0 ? "+" : ""}${cleanSlateYtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: cleanSlateTodayPct == null ? "#cbd5e1" : cleanSlateTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {cleanSlateTodayPct != null ? `${cleanSlateTodayPct >= 0 ? "+" : ""}${cleanSlateTodayPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: cleanSlateOneYearPct == null ? "#cbd5e1" : cleanSlateOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {cleanSlateOneYearPct != null ? `${cleanSlateOneYearPct >= 0 ? "+" : ""}${cleanSlateOneYearPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: cleanSlateFiveYearPct == null ? "#cbd5e1" : cleanSlateFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {cleanSlateFiveYearPct != null ? `${cleanSlateFiveYearPct >= 0 ? "+" : ""}${cleanSlateFiveYearPct.toFixed(1)}%` : "—"}
-                  </div>
-                </div>
-              </div>
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("noelleMockup"); }}>
-                <div className="lbl">C0 55/35/10 YTD</div>
-                <div className="valHero">
-                  {noelleMockupYtdPct != null ? `${noelleMockupYtdPct >= 0 ? "+" : ""}${noelleMockupYtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: noelleMockupTodayPct == null ? "#cbd5e1" : noelleMockupTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {noelleMockupTodayPct != null ? `${noelleMockupTodayPct >= 0 ? "+" : ""}${noelleMockupTodayPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: noelleMockupOneYearPct == null ? "#cbd5e1" : noelleMockupOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                      {noelleMockupOneYearPct != null ? `${noelleMockupOneYearPct >= 0 ? "+" : ""}${noelleMockupOneYearPct.toFixed(1)}%` : "—"}
-                    </div>
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-                    <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: noelleMockupFiveYearPct == null ? "#cbd5e1" : noelleMockupFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                      {noelleMockupFiveYearPct != null ? `${noelleMockupFiveYearPct >= 0 ? "+" : ""}${noelleMockupFiveYearPct.toFixed(1)}%` : "—"}
-                    </div>
-              </div>
-              </div>
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("hybrid8"); }}>
-                <div className="lbl">M1 50/35/15 YTD</div>
-                <div className="valHero">
-                  {hybrid8YtdPct != null ? `${hybrid8YtdPct >= 0 ? "+" : ""}${hybrid8YtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: hybrid8TodayPct == null ? "#cbd5e1" : hybrid8TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {hybrid8TodayPct != null ? `${hybrid8TodayPct >= 0 ? "+" : ""}${hybrid8TodayPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: hybrid8OneYearPct == null ? "#cbd5e1" : hybrid8OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {hybrid8OneYearPct != null ? `${hybrid8OneYearPct >= 0 ? "+" : ""}${hybrid8OneYearPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: hybrid8FiveYearPct == null ? "#cbd5e1" : hybrid8FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {hybrid8FiveYearPct != null ? `${hybrid8FiveYearPct >= 0 ? "+" : ""}${hybrid8FiveYearPct.toFixed(1)}%` : "—"}
-                  </div>
-              </div>
-            </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("c1Tax"); }}>
                 <div className="lbl">C1 TAX 40/60 YTD</div>
                 <div className="valHero">
@@ -1559,66 +1523,6 @@ RESPONSE RULES:
                   </div>
               </div>
               </div>
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("m3"); }}>
-                <div className="lbl">M3 55/40/5 YTD</div>
-                <div className="valHero">
-                  {m3YtdPct != null ? `${m3YtdPct >= 0 ? "+" : ""}${m3YtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m3TodayPct == null ? "#cbd5e1" : m3TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {m3TodayPct != null ? `${m3TodayPct >= 0 ? "+" : ""}${m3TodayPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m3OneYearPct == null ? "#cbd5e1" : m3OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {m3OneYearPct != null ? `${m3OneYearPct >= 0 ? "+" : ""}${m3OneYearPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m3FiveYearPct == null ? "#cbd5e1" : m3FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {m3FiveYearPct != null ? `${m3FiveYearPct >= 0 ? "+" : ""}${m3FiveYearPct.toFixed(1)}%` : "—"}
-                  </div>
-              </div>
-              </div>
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("panelConsensus"); }}>
-                <div className="lbl">Panel Consensus YTD</div>
-                <div className="valHero">
-                  {panelYtdPct != null ? `${panelYtdPct >= 0 ? "+" : ""}${panelYtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: panelTodayPct == null ? "#cbd5e1" : panelTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {panelTodayPct != null ? `${panelTodayPct >= 0 ? "+" : ""}${panelTodayPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: panelOneYearPct == null ? "#cbd5e1" : panelOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {panelOneYearPct != null ? `${panelOneYearPct >= 0 ? "+" : ""}${panelOneYearPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: panelFiveYearPct == null ? "#cbd5e1" : panelFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {panelFiveYearPct != null ? `${panelFiveYearPct >= 0 ? "+" : ""}${panelFiveYearPct.toFixed(1)}%` : "—"}
-                  </div>
-              </div>
-              </div>
-              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("otherAi"); }}>
-                <div className="lbl">Other AI YTD</div>
-                <div className="valHero">
-                  {otherAiYtdPct != null ? `${otherAiYtdPct >= 0 ? "+" : ""}${otherAiYtdPct.toFixed(1)}%` : "—"}
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: otherAiTodayPct == null ? "#cbd5e1" : otherAiTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {otherAiTodayPct != null ? `${otherAiTodayPct >= 0 ? "+" : ""}${otherAiTodayPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: otherAiOneYearPct == null ? "#cbd5e1" : otherAiOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {otherAiOneYearPct != null ? `${otherAiOneYearPct >= 0 ? "+" : ""}${otherAiOneYearPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: otherAiFiveYearPct == null ? "#cbd5e1" : otherAiFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {otherAiFiveYearPct != null ? `${otherAiFiveYearPct >= 0 ? "+" : ""}${otherAiFiveYearPct.toFixed(1)}%` : "—"}
-                  </div>
-              </div>
-            </div>
             </div>
           </section>
 
