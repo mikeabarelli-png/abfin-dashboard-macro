@@ -52,6 +52,10 @@ export default function Page() {
     IGF:  "Infrastructure",
     BNDX: "Intl Bonds",
     SPX:  "US Index",
+    VTWO: "Small Cap",
+    VIGI: "Intl Dividend",
+    VXUS: "Total Intl",
+    VTEB: "Muni Bonds",
   };
 
   const [modal, setModal] = useState<Modal>(null);
