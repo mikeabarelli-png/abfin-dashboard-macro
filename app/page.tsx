@@ -1124,11 +1124,6 @@ RESPONSE RULES:
                     </div>
                     <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:3, marginTop:8, alignItems:"center" }}>
                       <span style={{ fontSize:12, fontWeight:700, color: arrowColor }}>{arrow ?? ""}</span>
-                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                        {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
-                      </div>
-                      <span />
                       <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
                       <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: subColor }}>{spx200Pct != null ? fmtSigned1(spx200Pct) : "—"}</div>
                     </div>
@@ -1154,11 +1149,6 @@ RESPONSE RULES:
                     <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct, d.slope)}</div>
                     <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:3, marginTop:8, alignItems:"center" }}>
                       <span style={{ fontSize:12, fontWeight:700, color: arrowColor }}>{arrow ?? ""}</span>
-                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                        {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
-                      </div>
-                      <span />
                       <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
                       <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: toneColor(tone) }}>{pct != null ? fmtSigned1(pct) : "—"}</div>
                     </div>
