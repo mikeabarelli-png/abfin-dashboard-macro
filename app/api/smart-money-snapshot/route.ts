@@ -1164,6 +1164,10 @@ export async function GET() {
   const qqq50slope = qqq50dma != null && qqq50dma_prev != null
     ? ((qqq50dma - qqq50dma_prev) / qqq50dma_prev) * 100 : null;
 
+  const qqq100dma_prev = qqqCloses.length >= 120 ? avg(qqqCloses.slice(-120, -20)) : null;
+  const qqq100slope = qqq100dma != null && qqq100dma_prev != null
+    ? ((qqq100dma - qqq100dma_prev) / qqq100dma_prev) * 100 : null;
+
   const qqq200dma_prev = qqqCloses.length >= 220 ? avg(qqqCloses.slice(-220, -20)) : null;
   const qqq200slope = qqq200dma != null && qqq200dma_prev != null
     ? ((qqq200dma - qqq200dma_prev) / qqq200dma_prev) * 100 : null;
@@ -1375,7 +1379,7 @@ export async function GET() {
         trend_14d: qqqTrend14d,
         dma_20: { level: qqq20dma, slope: qqq20slope },
         dma_50: { level: qqq50dma, slope: qqq50slope },
-        dma_100: { level: qqq100dma },
+        dma_100: { level: qqq100dma, slope: qqq100slope },
         dma_200: { level: qqq200dma, slope: qqq200slope },
         regime: qqqRegime,
         regime_label: regimeLabel[qqqRegime],
