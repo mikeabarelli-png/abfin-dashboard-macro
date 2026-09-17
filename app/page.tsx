@@ -1078,35 +1078,36 @@ RESPONSE RULES:
             </div>
 
             <div className="grid5" style={{ marginBottom:8 }}>
-              {/* Tile 1: SPX Price — YTD/Today now stacked the same way as
-                  the equity sleeve tiles' YTD/Today pair. */}
+              {/* Tile 1: SPX Price — stacked rows (Today, YTD) matching the
+                  portfolio tiles' layout. No arrow/Gap here — those apply
+                  to the DMA tiles below, not to the raw index itself. */}
               <div className="tile">
                 <div className="tileTop"><span className="lbl">S&P 500</span></div>
                 <div className="valHero">{spxPrice != null ? fmtWhole(spxPrice) : "—"}</div>
-                <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(spxTrend, spxDailyPct != null && spxDailyPct >= 0 ? "#4ade80" : "#ff6b88") }} />
-                <div style={{ display:"flex", gap:14, marginTop:8 }}>
-                  <div>
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
-                    <div style={{ fontSize:15, fontWeight:700, color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>{spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%</div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
                   </div>
-                  <div>
-                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                    <div style={{ fontSize:15, fontWeight:700, color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                      {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
-                    </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
                   </div>
                 </div>
               </div>
 
-              {/* Tile 2: 200-DMA — Gap/Slope now a stat pair matching the
-                  same layout, instead of two separate sentence lines. */}
+              {/* Tile 2: 200-DMA — stacked rows with a slope arrow to the
+                  left of Today, then YTD, then Gap (this tile's own
+                  differentiator). Arrow direction only, not scaled by
+                  magnitude, per Mike's call. */}
               {(() => {
                 const isNear = spx200Pct != null && spx200Pct >= 0 && spx200Pct <= 3;
                 const tileClass = is200Broken ? "tile tile200Red" : isNear ? "tile tile200" : "tile";
                 const badgeBg = is200Broken ? "#ef4444" : "#f59e0b";
                 const statusColor = is200Broken ? "#ff6b88" : isNear ? "#fbbf24" : "#4ade80";
                 const subColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
-                const slopeColor = slope200 == null ? "#cbd5e1" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24";
+                const arrow = slope200 == null ? null : slope200 > 0.02 ? "↗" : slope200 < -0.02 ? "↘" : "→";
+                const arrowColor = slope200 == null ? "#475569" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24";
                 return (
                   <div className={tileClass} style={{ cursor:"pointer" }} onClick={() => setModal("dma200")}>
                     <div className="tileTop">
@@ -1117,48 +1118,56 @@ RESPONSE RULES:
                     <div className="status" style={{ color: statusColor }}>
                       {dmaState(spx200Pct, slope200, true)}
                     </div>
-                    <div style={{ display:"flex", gap:14, marginTop:8 }}>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
-                        <div style={{ fontSize:15, fontWeight:700, color: subColor }}>{spx200Pct != null ? fmtSigned1(spx200Pct) : "—"}</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:3, marginTop:8, alignItems:"center" }}>
+                      <span style={{ fontSize:12, fontWeight:700, color: arrowColor }}>{arrow ?? ""}</span>
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
                       </div>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Slope</div>
-                        <div style={{ fontSize:15, fontWeight:700, color: slopeColor }}>
-                          {slope200 != null ? `${slope200 > 0 ? "+" : ""}${slope200.toFixed(1)}%` : "—"}
-                        </div>
+                      <span />
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
                       </div>
+                      <span />
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
+                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: subColor }}>{spx200Pct != null ? fmtSigned1(spx200Pct) : "—"}</div>
                     </div>
                     <div style={{ fontSize:10, color:"#64748b", marginTop:8 }}>Click for detail</div>
                   </div>
                 );
               })()}
 
-              {/* Tiles 3-5: 100 / 50 / 20-DMA — same Gap/Slope stat pair as
-                  tile 2, so all five tiles share one consistent layout. */}
+              {/* Tiles 3-5: 100 / 50 / 20-DMA — same stacked layout as
+                  tile 2. 100-DMA has no slope data, so its arrow slot
+                  stays blank rather than guessing. */}
               {[
                 { label:"100-DMA", level:spx100, slope:null     },
                 { label:"50-DMA",  level:spx50,  slope:slope50  },
                 { label:"20-DMA",  level:spx20,  slope:slope20  },
               ].map(d => {
                 const pct = spxVs(d.level); const tone = dmaTone(pct, d.slope);
-                const slopeColor = d.slope == null ? "#cbd5e1" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
+                const arrow = d.slope == null ? null : d.slope > 0.02 ? "↗" : d.slope < -0.02 ? "↘" : "→";
+                const arrowColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
                 return (
                   <div key={d.label} className="tile">
                     <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:toneColor(tone), color:tone==="warning"?"#000":"#fff" }}>!</span></div>
                     <div className="valHero">{fmtWhole(d.level)}</div>
                     <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct, d.slope)}</div>
-                    <div style={{ display:"flex", gap:14, marginTop:8 }}>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
-                        <div style={{ fontSize:15, fontWeight:700, color: toneColor(tone) }}>{pct != null ? fmtSigned1(pct) : "—"}</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:3, marginTop:8, alignItems:"center" }}>
+                      <span style={{ fontSize:12, fontWeight:700, color: arrowColor }}>{arrow ?? ""}</span>
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
                       </div>
-                      <div>
-                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Slope</div>
-                        <div style={{ fontSize:15, fontWeight:700, color: slopeColor }}>
-                          {d.slope != null ? `${d.slope > 0 ? "+" : ""}${d.slope.toFixed(1)}%` : "—"}
-                        </div>
+                      <span />
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
                       </div>
+                      <span />
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
+                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: toneColor(tone) }}>{pct != null ? fmtSigned1(pct) : "—"}</div>
                     </div>
                   </div>
                 );
