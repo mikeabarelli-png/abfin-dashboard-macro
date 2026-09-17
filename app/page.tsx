@@ -142,6 +142,7 @@ export default function Page() {
   // DMA slopes (% change over last 20 trading days)
   const slope20 = getNum(metrics?.spx_20dma?.slope, marketData?.spx_20dma?.slope);
   const slope50 = getNum(metrics?.spx_50dma?.slope, marketData?.spx_50dma?.slope);
+  const slope100 = getNum(metrics?.spx_100dma?.slope, marketData?.spx_100dma?.slope);
   const slope200 = getNum(metrics?.spx_200dma?.slope, marketData?.spx_200dma?.slope);
 
   // Market regime
@@ -258,9 +259,13 @@ export default function Page() {
   const fmtSigned1 = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
   const spxVs = (level: number) => spxPrice == null ? null : ((spxPrice - level) / level) * 100;
 
-  // 5-state DMA label engine — factors in both position AND direction of travel
-  // slope: positive = DMA rising (bullish context), negative = falling
-  // spxDailyPct: positive = SPX moving up today (recovering), negative = moving down
+  // 4-state DMA label engine — position-only wording. Direction (rising/
+  // flattening/falling) is now conveyed by the arrow next to Today, so the
+  // label itself no longer needs a separate "Bullish" vs "Holding Above"
+  // split for the same above-average state; both used the same color
+  // already (dmaTone always returned "healthy" above the average
+  // regardless of slope), so the wording was implying a distinction the
+  // color never actually made.
   const dmaState = (pct: number | null, slope?: number | null, isLong = false) => {
     if (pct == null) return "Loading";
     if (pct < 0) {
@@ -268,8 +273,6 @@ export default function Page() {
       return (spxDailyPct != null && spxDailyPct > 0) ? "Recovering" : "Bearish";
     }
     if (isLong && pct <= 2) return "Testing Support";
-    // Above DMA — is slope rising (bullish) or flattening/falling?
-    if (slope != null && slope > 0.02) return "Bullish";
     return "Holding Above";
   };
   const dmaTone = (pct: number | null, slope?: number | null, isLong = false) => {
@@ -290,7 +293,6 @@ export default function Page() {
       return (dailyPct != null && dailyPct > 0) ? "Recovering" : "Bearish";
     }
     if (isLong && pct <= 2) return "Testing Support";
-    if (slope != null && slope > 0.02) return "Bullish";
     return "Holding Above";
   };
   const positionDmaTone = (pct: number | null, slope: number | null, dailyPct: number | null, isLong = false) => {
@@ -1084,6 +1086,7 @@ RESPONSE RULES:
               <div className="tile">
                 <div className="tileTop"><span className="lbl">S&P 500</span></div>
                 <div className="valHero">{spxPrice != null ? fmtWhole(spxPrice) : "—"}</div>
+                <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(spxTrend, spxDailyPct != null && spxDailyPct >= 0 ? "#4ade80" : "#ff6b88") }} />
                 <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
                   <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
@@ -1097,9 +1100,10 @@ RESPONSE RULES:
               </div>
 
               {/* Tile 2: 200-DMA — stacked rows with a slope arrow to the
-                  left of Today, then YTD, then Gap (this tile's own
-                  differentiator). Arrow direction only, not scaled by
-                  magnitude, per Mike's call. */}
+                  left of Today, then Gap (this tile's own differentiator).
+                  YTD dropped — it repeated the same index-level number
+                  across every DMA tile without adding anything unique.
+                  Arrow direction only, not scaled by magnitude. */}
               {(() => {
                 const isNear = spx200Pct != null && spx200Pct >= 0 && spx200Pct <= 3;
                 const tileClass = is200Broken ? "tile tile200Red" : isNear ? "tile tile200" : "tile";
@@ -1125,11 +1129,6 @@ RESPONSE RULES:
                         {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
                       </div>
                       <span />
-                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
-                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
-                        {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
-                      </div>
-                      <span />
                       <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
                       <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: subColor }}>{spx200Pct != null ? fmtSigned1(spx200Pct) : "—"}</div>
                     </div>
@@ -1139,10 +1138,9 @@ RESPONSE RULES:
               })()}
 
               {/* Tiles 3-5: 100 / 50 / 20-DMA — same stacked layout as
-                  tile 2. 100-DMA has no slope data, so its arrow slot
-                  stays blank rather than guessing. */}
+                  tile 2, YTD dropped for the same reason. */}
               {[
-                { label:"100-DMA", level:spx100, slope:null     },
+                { label:"100-DMA", level:spx100, slope:slope100 },
                 { label:"50-DMA",  level:spx50,  slope:slope50  },
                 { label:"20-DMA",  level:spx20,  slope:slope20  },
               ].map(d => {
@@ -1159,11 +1157,6 @@ RESPONSE RULES:
                       <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
                       <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                         {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
-                      </div>
-                      <span />
-                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
-                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
-                        {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
                       </div>
                       <span />
                       <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
