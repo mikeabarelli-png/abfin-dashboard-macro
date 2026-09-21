@@ -1047,6 +1047,56 @@ RESPONSE RULES:
 
           {feedError && <div className="errorBar">Feed error: {feedError}</div>}
 
+          {/* ⓪ TOP 10 SIGNALS — force-ranked scoreboard, #1 most critical to
+              watch through #10 least urgent. Two rows of five. Each tile
+              reuses the same live thresholds already computed elsewhere on
+              this dashboard, this section is a consolidated view, not a
+              new data source, except AAII Bears (#10), which has no live
+              feed in this pipeline and is manually maintained. */}
+          <section className="panel" style={{ marginBottom:16 }}>
+            <div className="panelHeader">
+              <div><div className="panelTitle">Top 10 Signals</div><div className="panelSub">Force-ranked · most critical to watch first</div></div>
+            </div>
+            {(() => {
+              type Sig = { rank: number; label: string; value: string; sub: string; color: string };
+
+              const robertsColor = regimeGate==="trend_broken" ? "#ff6b88" : regimeGate==="near_ma" ? "#fbbf24" : "#4ade80";
+              const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<50 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
+              const hyColor = hySpread>=5 ? "#ff6b88" : hySpread>=3.5 ? "#fbbf24" : "#4ade80";
+              const vixColor2 = vixValue==null ? "#94a3b8" : vixValue>=30 ? "#ff6b88" : vixValue>=20 ? "#fbbf24" : "#4ade80";
+              const buffettColor = buffettSigma>=2.0 ? "#ff6b88" : buffettSigma>=1.5 ? "#fbbf24" : "#4ade80";
+              const ivyColor = ivyInvestedCount>=5 ? "#4ade80" : ivyInvestedCount>=3 ? "#fbbf24" : "#ff6b88";
+              const ycColor = yieldCurve<0 ? "#ff6b88" : yieldCurve<0.5 ? "#fbbf24" : "#4ade80";
+              const fedColor = fedStance==="tightening" ? "#ff6b88" : fedStance==="easing" ? "#4ade80" : "#fbbf24";
+
+              const signals: Sig[] = [
+                { rank:1,  label:"Roberts 40-Wk Trend", value: regimeLabel ?? "—", sub:"Primary trend gate · SPX vs 200-DMA", color: robertsColor },
+                { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor },
+                { rank:3,  label:"HY Spread",           value: `${Math.round(hySpread*100)}bps`, sub:"Credit stress", color: hyColor },
+                { rank:4,  label:"VIX",                 value: vixValue!=null?vixValue.toFixed(1):"—", sub:"Near-term fear gauge", color: vixColor2 },
+                { rank:5,  label:"Buffett Indicator",   value: `${buffettSigma.toFixed(2)}σ`, sub:"Valuation vs GDP trend", color: buffettColor },
+                { rank:6,  label:"Ivy Portfolio",       value: `${ivyInvestedCount}/5`, sub:"Multi-asset trend confirmation", color: ivyColor },
+                { rank:7,  label:"Schannep / Dow Theory", value: schannepLabel ?? "—", sub:"Economic confirmation, SPX + Transports", color: schannepColor },
+                { rank:8,  label:"Yield Curve",         value: `${yieldCurve>=0?"+":""}${yieldCurve.toFixed(2)}`, sub:"10Y-2Y spread · recession lead", color: ycColor },
+                { rank:9,  label:"Fed Policy Stance",   value: fedStance==="tightening"?"Tightening":fedStance==="easing"?"Easing":"Holding", sub:"Rate policy backdrop", color: fedColor },
+                { rank:10, label:"AAII Bears",          value: "52%", sub:"Sentiment · Manual, updated weekly", color: "#fbbf24" },
+              ];
+
+              return (
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
+                  {signals.map(s => (
+                    <div key={s.rank} className="tile" style={{ position:"relative" }}>
+                      <div style={{ position:"absolute", top:10, right:10, width:10, height:10, borderRadius:"50%", background:s.color, boxShadow:`0 0 6px ${s.color}88` }} />
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:2 }}>#{s.rank}</div>
+                      <div className="lbl" style={{ marginBottom:6, paddingRight:18 }}>{s.label}</div>
+                      <div className="valHero" style={{ fontSize:24 }}>{s.value}</div>
+                      <div className="sub" style={{ marginTop:6 }}>{s.sub}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </section>
 
           {/* ① MARKET STRUCTURE */}
           <section className="panel">
