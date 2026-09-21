@@ -1240,7 +1240,7 @@ export async function GET() {
   const scoreCAFE    = capeRatio > 30 ? 2 : capeRatio > 20 ? 1 : 0;
   const scoreBuffett = MANUAL_BUFFETT_SIGMA >= 2.0 ? 2 : MANUAL_BUFFETT_SIGMA >= 1.0 ? 1 : 0;
   const scoreVIX     = vixPrice != null ? (vixPrice >= 30 ? 2 : vixPrice >= 20 ? 1 : 0) : 1;
-  const scoreHY      = hySpread >= 5.5 ? 2 : hySpread >= 3.5 ? 1 : 0;
+  const scoreHY      = hySpread >= 5 ? 2 : hySpread >= 4 ? 1 : 0;
   const scoreYC      = yieldCurve < -0.5 ? 2 : yieldCurve < 0.5 ? 1 : 0;
   const scoreBreadth = breadthPct != null ? (breadthPct < 50 ? 2 : breadthPct < 70 ? 1 : 0) : 1;
   const scoreERP     = erp != null ? (erp < 100 ? 2 : erp < 300 ? 1 : 0) : 1;
