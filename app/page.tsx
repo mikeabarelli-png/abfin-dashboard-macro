@@ -1058,7 +1058,7 @@ RESPONSE RULES:
               <div><div className="panelTitle">Top 10 Signals</div><div className="panelSub">Force-ranked · most critical to watch first</div></div>
             </div>
             {(() => {
-              type Sig = { rank: number; label: string; value: string; sub: string; color: string };
+              type Sig = { rank: number; label: string; value: string; sub: string; color: string; status: string; posPct?: number; reverse?: boolean };
 
               const robertsColor = regimeGate==="trend_broken" ? "#ff6b88" : regimeGate==="near_ma" ? "#fbbf24" : "#4ade80";
               const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<50 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
@@ -1069,18 +1069,44 @@ RESPONSE RULES:
               const ycColor = yieldCurve<0 ? "#ff6b88" : yieldCurve<0.5 ? "#fbbf24" : "#4ade80";
               const fedColor = fedStance==="tightening" ? "#ff6b88" : fedStance==="easing" ? "#4ade80" : "#fbbf24";
 
+              // Bar position, 0-100, for the five metrics on a continuous
+              // scale. reverse=true means low value sits at the red end
+              // (yield curve: negative/inverted is bad, so low = red).
+              // The other four are the opposite: low value = green end.
+              const breadthPos = breadthPct==null ? 50 : Math.max(0, Math.min(100, breadthPct));
+              const hyPos = Math.max(0, Math.min(100, ((hySpread*100 - 200) / 800) * 100));
+              const vixPos = vixValue==null ? 50 : Math.max(0, Math.min(100, (vixValue / 50) * 100));
+              const buffettPos = Math.max(0, Math.min(100, (buffettSigma / 3) * 100));
+              const ycPos = Math.max(0, Math.min(100, ((yieldCurve + 1) / 2.5) * 100));
+
               const signals: Sig[] = [
-                { rank:1,  label:"Roberts 40-Wk Trend", value: regimeLabel ?? "—", sub:"Primary trend gate · SPX vs 200-DMA", color: robertsColor },
-                { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor },
-                { rank:3,  label:"HY Spread",           value: `${Math.round(hySpread*100)}bps`, sub:"Credit stress", color: hyColor },
-                { rank:4,  label:"VIX",                 value: vixValue!=null?vixValue.toFixed(1):"—", sub:"Near-term fear gauge", color: vixColor2 },
-                { rank:5,  label:"Buffett Indicator",   value: `${buffettSigma.toFixed(2)}σ`, sub:"Valuation vs GDP trend", color: buffettColor },
-                { rank:6,  label:"Ivy Portfolio",       value: `${ivyInvestedCount}/5`, sub:"Multi-asset trend confirmation", color: ivyColor },
-                { rank:7,  label:"Schannep / Dow Theory", value: schannepLabel ?? "—", sub:"Economic confirmation, SPX + Transports", color: schannepColor },
-                { rank:8,  label:"Yield Curve",         value: `${yieldCurve>=0?"+":""}${yieldCurve.toFixed(2)}`, sub:"10Y-2Y spread · recession lead", color: ycColor },
-                { rank:9,  label:"Fed Policy Stance",   value: fedStance==="tightening"?"Tightening":fedStance==="easing"?"Easing":"Holding", sub:"Rate policy backdrop", color: fedColor },
-                { rank:10, label:"AAII Bears",          value: "52%", sub:"Sentiment · Manual, updated weekly", color: "#fbbf24" },
+                { rank:1,  label:"Roberts 40-Wk Trend", value: regimeLabel ?? "—", sub:"Primary trend gate · SPX vs 200-DMA", color: robertsColor,
+                  status: regimeGate==="trend_broken"?"Trend Broken":regimeGate==="near_ma"?"At the Line":regimeGate==="reclaiming"?"Reclaiming":"Bull Trend" },
+                { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor,
+                  status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos, reverse: true },
+                { rank:3,  label:"HY Spread",           value: `${Math.round(hySpread*100)}bps`, sub:"Credit stress", color: hyColor,
+                  status: hyColor==="#ff6b88"?"Stress":hyColor==="#fbbf24"?"Watch":"Tight", posPct: hyPos },
+                { rank:4,  label:"VIX",                 value: vixValue!=null?vixValue.toFixed(1):"—", sub:"Near-term fear gauge", color: vixColor2,
+                  status: vixColor2==="#ff6b88"?"Stress":vixColor2==="#fbbf24"?"Elevated":"Calm", posPct: vixPos },
+                { rank:5,  label:"Buffett Indicator",   value: `${buffettSigma.toFixed(2)}σ`, sub:"Valuation vs GDP trend", color: buffettColor,
+                  status: buffettColor==="#ff6b88"?"Extreme":buffettColor==="#fbbf24"?"Elevated":"Fair", posPct: buffettPos },
+                { rank:6,  label:"Ivy Portfolio",       value: `${ivyInvestedCount}/5`, sub:"Multi-asset trend confirmation", color: ivyColor,
+                  status: ivyColor==="#4ade80"?"Fully Invested":ivyColor==="#fbbf24"?"Mixed":"Defensive" },
+                { rank:7,  label:"Schannep / Dow Theory", value: schannepLabel ?? "—", sub:"Economic confirmation, SPX + Transports", color: schannepColor,
+                  status: schannepLabel ?? "—" },
+                { rank:8,  label:"Yield Curve",         value: `${yieldCurve>=0?"+":""}${yieldCurve.toFixed(2)}`, sub:"10Y-2Y spread · recession lead", color: ycColor,
+                  status: ycColor==="#ff6b88"?"Inverted":ycColor==="#fbbf24"?"Flat":"Healthy", posPct: ycPos, reverse: true },
+                { rank:9,  label:"Fed Policy Stance",   value: fedStance==="tightening"?"Tightening":fedStance==="easing"?"Easing":"Holding", sub:"Rate policy backdrop", color: fedColor,
+                  status: fedStance==="tightening"?"Headwind":fedStance==="easing"?"Tailwind":"Neutral" },
+                { rank:10, label:"AAII Bears",          value: "52%", sub:"Sentiment · Manual, updated weekly", color: "#fbbf24",
+                  status: "Watch" },
               ];
+
+              const Bar = ({ posPct, reverse, markerColor }: { posPct: number; reverse?: boolean; markerColor: string }) => (
+                <div style={{ position:"relative", height:4, borderRadius:9999, background: reverse ? "linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)" : "linear-gradient(to right,#4ade80,#fbbf24,#ff6b88)", marginTop:8, marginBottom:2 }}>
+                  <div style={{ position:"absolute", top:"50%", left:`${Math.max(3,Math.min(posPct,97))}%`, transform:"translate(-50%,-50%)", width:8, height:8, borderRadius:"50%", background:"#fff", border:`2px solid ${markerColor}`, zIndex:2 }} />
+                </div>
+              );
 
               return (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
@@ -1090,6 +1116,8 @@ RESPONSE RULES:
                       <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:2 }}>#{s.rank}</div>
                       <div className="lbl" style={{ marginBottom:6, paddingRight:18 }}>{s.label}</div>
                       <div className="valHero" style={{ fontSize:24 }}>{s.value}</div>
+                      <div className="status" style={{ color:s.color, fontSize:12, marginTop:2 }}>{s.status}</div>
+                      {s.posPct != null && <Bar posPct={s.posPct} reverse={s.reverse} markerColor={s.color} />}
                       <div className="sub" style={{ marginTop:6 }}>{s.sub}</div>
                     </div>
                   ))}
