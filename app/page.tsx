@@ -1059,33 +1059,46 @@ RESPONSE RULES:
             </div>
             {(() => {
               type Tick = { pos: number; color: string };
-              type Sig = { rank: number; label: string; value: string; sub: string; color: string; status: string; posPct?: number; reverse?: boolean; ticks?: Tick[]; distance?: string };
+              type Sig = { rank: number; label: string; value: string; sub: string; color: string; status: string; posPct?: number; ticks?: Tick[]; distance?: string };
 
               const robertsColor = regimeGate==="trend_broken" ? "#ff6b88" : regimeGate==="near_ma" ? "#fbbf24" : "#4ade80";
               const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<50 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
               const hySpreadBps = hySpread*100;
               const hyColor = hySpread>=5 ? "#ff6b88" : hySpread>=4 ? "#fbbf24" : "#4ade80";
               const vixColor2 = vixValue==null ? "#94a3b8" : vixValue>=30 ? "#ff6b88" : vixValue>=20 ? "#fbbf24" : "#4ade80";
-              const buffettColor = buffettSigma>=2.0 ? "#ff6b88" : buffettSigma>=1.0 ? "#fbbf24" : "#4ade80";
               const ivyColor = ivyInvestedCount>=5 ? "#4ade80" : ivyInvestedCount>=3 ? "#fbbf24" : "#ff6b88";
               const ycColor = yieldCurve<0 ? "#ff6b88" : yieldCurve<0.5 ? "#fbbf24" : "#4ade80";
               const fedColor = fedStance==="tightening" ? "#ff6b88" : fedStance==="easing" ? "#4ade80" : "#fbbf24";
 
-              // Bar position, 0-100, for the five metrics on a continuous
-              // scale. reverse=true means low value sits at the red end
-              // (breadth, yield curve: low/negative is bad). The other
-              // three (HY, VIX, Buffett) have low = green, high = red.
+              // Buffett gets its own 5-zone palette, matching
+              // currentmarketvaluation.com exactly: Strongly Overvalued
+              // (red, >2.0σ), Overvalued (yellow, 1.0-2.0σ), Fairly
+              // Valued (gray, -1.0 to 1.0σ), Undervalued (light green,
+              // -2.0 to -1.0σ), Strongly Undervalued (dark green, <-2.0σ).
+              const DARK_GREEN = "#15803d", LIGHT_GREEN = "#86efac", GRAY = "#94a3b8";
+              const buffettColor = buffettSigma>2.0 ? "#ff6b88" : buffettSigma>1.0 ? "#fbbf24" : buffettSigma>=-1.0 ? GRAY : buffettSigma>=-2.0 ? LIGHT_GREEN : DARK_GREEN;
+              const buffettStatus = buffettSigma>2.0 ? "Strongly Overvalued" : buffettSigma>1.0 ? "Overvalued" : buffettSigma>=-1.0 ? "Fairly Valued" : buffettSigma>=-2.0 ? "Undervalued" : "Strongly Undervalued";
+              const buffettDistance =
+                buffettSigma>2.0 ? "Past +2.0σ line" :
+                buffettSigma>1.0 ? `${(2.0-buffettSigma).toFixed(2)}σ to Strongly Overvalued` :
+                buffettSigma>=-1.0 ? `${(1.0-buffettSigma).toFixed(2)}σ to Overvalued` :
+                buffettSigma>=-2.0 ? `${(buffettSigma-(-2.0)).toFixed(2)}σ above Strongly Undervalued` :
+                "Past -2.0σ line";
+
+              // Bar position, 0-100. Breadth/Yield Curve: low = bad (left).
+              // HY/VIX: high = bad (right). Buffett: bidirectional, -3σ to
+              // +3σ, both tails represent zones (red high, dark green low).
               const breadthPos = breadthPct==null ? 50 : Math.max(0, Math.min(100, breadthPct));
               const hyPos = Math.max(0, Math.min(100, ((hySpreadBps - 200) / 800) * 100));
               const vixPos = vixValue==null ? 50 : Math.max(0, Math.min(100, (vixValue / 50) * 100));
-              const buffettPos = Math.max(0, Math.min(100, (buffettSigma / 3) * 100));
+              const buffettPos = Math.max(0, Math.min(100, ((buffettSigma + 3) / 6) * 100));
               const ycPos = Math.max(0, Math.min(100, ((yieldCurve + 1) / 2.5) * 100));
 
               const signals: Sig[] = [
                 { rank:1,  label:"Roberts 40-Wk Trend", value: regimeLabel ?? "—", sub:"Primary trend gate · SPX vs 200-DMA", color: robertsColor,
                   status: regimeGate==="trend_broken"?"Trend Broken":regimeGate==="near_ma"?"At the Line":regimeGate==="reclaiming"?"Reclaiming":"Bull Trend" },
                 { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor,
-                  status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos, reverse: true,
+                  status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos,
                   ticks: [{ pos:50, color:"#fbbf24" }, { pos:70, color:"#4ade80" }],
                   distance: breadthPct==null?"—": breadthColor==="#4ade80"?`${(breadthPct-70).toFixed(0)} pts above Mixed line`:breadthColor==="#fbbf24"?`${(breadthPct-50).toFixed(0)} pts above Narrow line`:"Already Narrow" },
                 { rank:3,  label:"HY Spread",           value: `${Math.round(hySpreadBps)}bps`, sub:"Credit stress", color: hyColor,
@@ -1097,15 +1110,15 @@ RESPONSE RULES:
                   ticks: [{ pos:40, color:"#fbbf24" }, { pos:60, color:"#ff6b88" }],
                   distance: vixValue==null?"—": vixColor2==="#4ade80"?`${(20-vixValue).toFixed(1)} pts to Elevated`:vixColor2==="#fbbf24"?`${(30-vixValue).toFixed(1)} pts to Stress`:"Past stress level" },
                 { rank:5,  label:"Buffett Indicator",   value: `${buffettSigma.toFixed(2)}σ`, sub:"Valuation vs GDP trend", color: buffettColor,
-                  status: buffettColor==="#ff6b88"?"Extreme":buffettColor==="#fbbf24"?"Elevated":"Fair", posPct: buffettPos,
-                  ticks: [{ pos:33.3, color:"#fbbf24" }, { pos:66.7, color:"#ff6b88" }],
-                  distance: buffettColor==="#4ade80"?`${(1.0-buffettSigma).toFixed(2)}σ to Elevated`:buffettColor==="#fbbf24"?`${(2.0-buffettSigma).toFixed(2)}σ to Extreme`:"Past extreme line" },
+                  status: buffettStatus, posPct: buffettPos,
+                  ticks: [{ pos:16.67, color: LIGHT_GREEN }, { pos:33.33, color: GRAY }, { pos:66.67, color:"#fbbf24" }, { pos:83.33, color:"#ff6b88" }],
+                  distance: buffettDistance },
                 { rank:6,  label:"Ivy Portfolio",       value: `${ivyInvestedCount}/5`, sub:"Multi-asset trend confirmation", color: ivyColor,
                   status: ivyColor==="#4ade80"?"Fully Invested":ivyColor==="#fbbf24"?"Mixed":"Defensive" },
                 { rank:7,  label:"Schannep / Dow Theory", value: schannepLabel ?? "—", sub:"Economic confirmation, SPX + Transports", color: schannepColor,
                   status: schannepLabel ?? "—" },
                 { rank:8,  label:"Yield Curve",         value: `${yieldCurve>=0?"+":""}${yieldCurve.toFixed(2)}`, sub:"10Y-2Y spread · recession lead", color: ycColor,
-                  status: ycColor==="#ff6b88"?"Inverted":ycColor==="#fbbf24"?"Flat":"Healthy", posPct: ycPos, reverse: true,
+                  status: ycColor==="#ff6b88"?"Inverted":ycColor==="#fbbf24"?"Flat":"Healthy", posPct: ycPos,
                   ticks: [{ pos:40, color:"#fbbf24" }, { pos:60, color:"#4ade80" }],
                   distance: ycColor==="#4ade80"?`${(yieldCurve-0.5).toFixed(2)} pts above Flat line`:ycColor==="#fbbf24"?`${(yieldCurve-0).toFixed(2)} pts above Inverted line`:"Already inverted" },
                 { rank:9,  label:"Fed Policy Stance",   value: fedStance==="tightening"?"Tightening":fedStance==="easing"?"Easing":"Holding", sub:"Rate policy backdrop", color: fedColor,
@@ -1114,12 +1127,16 @@ RESPONSE RULES:
                   status: "Watch" },
               ];
 
-              const Bar = ({ posPct, reverse, markerColor, ticks }: { posPct: number; reverse?: boolean; markerColor: string; ticks?: Tick[] }) => (
-                <div style={{ position:"relative", height:4, borderRadius:9999, background: reverse ? "linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)" : "linear-gradient(to right,#4ade80,#fbbf24,#ff6b88)", marginTop:8, marginBottom:2 }}>
+              // Fill-to-marker style: plain dark track, solid fill in the
+              // current status color from the left edge to the current
+              // reading, colored tick lines at the trigger points. No
+              // moving dot, the edge of the fill is the marker.
+              const Bar = ({ posPct, fillColor, ticks }: { posPct: number; fillColor: string; ticks?: Tick[] }) => (
+                <div style={{ position:"relative", height:4, borderRadius:9999, background:"#2a2f45", marginTop:8, marginBottom:2, overflow:"hidden" }}>
+                  <div style={{ position:"absolute", top:0, left:0, bottom:0, width:`${posPct}%`, background:fillColor, borderRadius:9999 }} />
                   {ticks?.map((t, i) => (
                     <div key={i} style={{ position:"absolute", top:-2, left:`${t.pos}%`, width:2, height:8, background:t.color, transform:"translateX(-1px)", zIndex:1 }} />
                   ))}
-                  <div style={{ position:"absolute", top:"50%", left:`${Math.max(3,Math.min(posPct,97))}%`, transform:"translate(-50%,-50%)", width:8, height:8, borderRadius:"50%", background:"#fff", border:`2px solid ${markerColor}`, zIndex:2 }} />
                 </div>
               );
 
@@ -1132,7 +1149,7 @@ RESPONSE RULES:
                       <div className="lbl" style={{ marginBottom:6, paddingRight:18 }}>{s.label}</div>
                       <div className="valHero" style={{ fontSize:24 }}>{s.value}</div>
                       <div className="status" style={{ color:s.color, fontSize:12, marginTop:2 }}>{s.status}</div>
-                      {s.posPct != null && <Bar posPct={s.posPct} reverse={s.reverse} markerColor={s.color} ticks={s.ticks} />}
+                      {s.posPct != null && <Bar posPct={s.posPct} fillColor={s.color} ticks={s.ticks} />}
                       <div className="sub" style={{ marginTop:6 }}>{s.distance ?? s.sub}</div>
                     </div>
                   ))}
