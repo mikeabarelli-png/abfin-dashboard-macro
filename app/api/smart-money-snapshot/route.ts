@@ -415,7 +415,7 @@ export async function GET() {
   // SATURDAY MANUAL UPDATE CHECKLIST — update every weekend
   // ═══════════════════════════════════════════════════════════════════
   const MANUAL_CAPE_FALLBACK       = 41.74;    // multpl.com/shiller-pe          · Aug 31 2026
-  const MANUAL_BUFFETT_SIGMA       = 2.52;     // currentmarketvaluation.com     · Aug 31 2026
+  const MANUAL_BUFFETT_SIGMA       = 2.40;     // currentmarketvaluation.com     · Sep 18 2026
   const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 26 2026
   const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 26 2026
   const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
@@ -1238,9 +1238,9 @@ export async function GET() {
     spxPctAbove200 != null && spxPctAbove200 <= 3 ? "near_ma"      : "trend_intact";
 
   const scoreCAFE    = capeRatio > 30 ? 2 : capeRatio > 20 ? 1 : 0;
-  const scoreBuffett = MANUAL_BUFFETT_SIGMA > 1.5 ? 2 : MANUAL_BUFFETT_SIGMA > 0.5 ? 1 : 0;
-  const scoreVIX     = vixPrice != null ? (vixPrice < 20 ? 2 : vixPrice < 28 ? 1 : 0) : 1;
-  const scoreHY      = hySpread < 3.5 ? 2 : hySpread < 5.5 ? 1 : 0;
+  const scoreBuffett = MANUAL_BUFFETT_SIGMA >= 2.0 ? 2 : MANUAL_BUFFETT_SIGMA >= 1.0 ? 1 : 0;
+  const scoreVIX     = vixPrice != null ? (vixPrice >= 30 ? 2 : vixPrice >= 20 ? 1 : 0) : 1;
+  const scoreHY      = hySpread >= 5.5 ? 2 : hySpread >= 3.5 ? 1 : 0;
   const scoreYC      = yieldCurve < -0.5 ? 2 : yieldCurve < 0.5 ? 1 : 0;
   const scoreBreadth = breadthPct != null ? (breadthPct < 50 ? 2 : breadthPct < 70 ? 1 : 0) : 1;
   const scoreERP     = erp != null ? (erp < 100 ? 2 : erp < 300 ? 1 : 0) : 1;
