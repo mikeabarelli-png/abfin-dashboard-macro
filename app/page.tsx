@@ -1058,8 +1058,8 @@ RESPONSE RULES:
               <div><div className="panelTitle">Top 10 Signals</div><div className="panelSub">Force-ranked · most critical to watch first</div></div>
             </div>
             {(() => {
-              type Tick = { pos: number; color: string };
-              type Sig = { rank: number; label: string; value: string; sub: string; color: string; status: string; posPct?: number; ticks?: Tick[]; distance?: string };
+              type Band = { color: string; from: number; to: number };
+              type Sig = { rank: number; label: string; value: string; sub: string; color: string; status: string; posPct?: number; bands?: Band[]; distance?: string };
 
               const robertsColor = regimeGate==="trend_broken" ? "#ff6b88" : regimeGate==="near_ma" ? "#fbbf24" : "#4ade80";
               const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<50 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
@@ -1094,32 +1094,38 @@ RESPONSE RULES:
               const buffettPos = Math.max(0, Math.min(100, ((buffettSigma + 3) / 6) * 100));
               const ycPos = Math.max(0, Math.min(100, ((yieldCurve + 1) / 2.5) * 100));
 
+              // Static zone bands, sized to the real proportion of each
+              // metric's scale, matching how currentmarketvaluation.com
+              // draws its gauges. The whole spectrum stays visible no
+              // matter where the current reading sits, only the marker
+              // line moves.
+              const breadthBands: Band[] = [{ color:"#ff6b88", from:0, to:50 }, { color:"#fbbf24", from:50, to:70 }, { color:"#4ade80", from:70, to:100 }];
+              const hyBands: Band[] = [{ color:"#4ade80", from:0, to:25 }, { color:"#fbbf24", from:25, to:37.5 }, { color:"#ff6b88", from:37.5, to:100 }];
+              const vixBands: Band[] = [{ color:"#4ade80", from:0, to:40 }, { color:"#fbbf24", from:40, to:60 }, { color:"#ff6b88", from:60, to:100 }];
+              const buffettBands: Band[] = [{ color:DARK_GREEN, from:0, to:16.67 }, { color:LIGHT_GREEN, from:16.67, to:33.33 }, { color:GRAY, from:33.33, to:66.67 }, { color:"#fbbf24", from:66.67, to:83.33 }, { color:"#ff6b88", from:83.33, to:100 }];
+              const ycBands: Band[] = [{ color:"#ff6b88", from:0, to:40 }, { color:"#fbbf24", from:40, to:60 }, { color:"#4ade80", from:60, to:100 }];
+
               const signals: Sig[] = [
                 { rank:1,  label:"Roberts 40-Wk Trend", value: regimeLabel ?? "—", sub:"Primary trend gate · SPX vs 200-DMA", color: robertsColor,
                   status: regimeGate==="trend_broken"?"Trend Broken":regimeGate==="near_ma"?"At the Line":regimeGate==="reclaiming"?"Reclaiming":"Bull Trend" },
                 { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor,
-                  status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos,
-                  ticks: [{ pos:50, color:"#fbbf24" }, { pos:70, color:"#4ade80" }],
+                  status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos, bands: breadthBands,
                   distance: breadthPct==null?"—": breadthColor==="#4ade80"?`${(breadthPct-70).toFixed(0)} pts above Mixed line`:breadthColor==="#fbbf24"?`${(breadthPct-50).toFixed(0)} pts above Narrow line`:"Already Narrow" },
                 { rank:3,  label:"HY Spread",           value: `${Math.round(hySpreadBps)}bps`, sub:"Credit stress", color: hyColor,
-                  status: hyColor==="#ff6b88"?"Stress":hyColor==="#fbbf24"?"Watch":"Tight", posPct: hyPos,
-                  ticks: [{ pos:25, color:"#fbbf24" }, { pos:37.5, color:"#ff6b88" }],
+                  status: hyColor==="#ff6b88"?"Stress":hyColor==="#fbbf24"?"Watch":"Tight", posPct: hyPos, bands: hyBands,
                   distance: hyColor==="#4ade80"?`${Math.round(400-hySpreadBps)}bps to Watch`:hyColor==="#fbbf24"?`${Math.round(500-hySpreadBps)}bps to Stress`:"Past red line" },
                 { rank:4,  label:"VIX",                 value: vixValue!=null?vixValue.toFixed(1):"—", sub:"Near-term fear gauge", color: vixColor2,
-                  status: vixColor2==="#ff6b88"?"Stress":vixColor2==="#fbbf24"?"Elevated":"Calm", posPct: vixPos,
-                  ticks: [{ pos:40, color:"#fbbf24" }, { pos:60, color:"#ff6b88" }],
+                  status: vixColor2==="#ff6b88"?"Stress":vixColor2==="#fbbf24"?"Elevated":"Calm", posPct: vixPos, bands: vixBands,
                   distance: vixValue==null?"—": vixColor2==="#4ade80"?`${(20-vixValue).toFixed(1)} pts to Elevated`:vixColor2==="#fbbf24"?`${(30-vixValue).toFixed(1)} pts to Stress`:"Past stress level" },
                 { rank:5,  label:"Buffett Indicator",   value: `${buffettSigma.toFixed(2)}σ`, sub:"Valuation vs GDP trend", color: buffettColor,
-                  status: buffettStatus, posPct: buffettPos,
-                  ticks: [{ pos:16.67, color: LIGHT_GREEN }, { pos:33.33, color: GRAY }, { pos:66.67, color:"#fbbf24" }, { pos:83.33, color:"#ff6b88" }],
+                  status: buffettStatus, posPct: buffettPos, bands: buffettBands,
                   distance: buffettDistance },
                 { rank:6,  label:"Ivy Portfolio",       value: `${ivyInvestedCount}/5`, sub:"Multi-asset trend confirmation", color: ivyColor,
                   status: ivyColor==="#4ade80"?"Fully Invested":ivyColor==="#fbbf24"?"Mixed":"Defensive" },
                 { rank:7,  label:"Schannep / Dow Theory", value: schannepLabel ?? "—", sub:"Economic confirmation, SPX + Transports", color: schannepColor,
                   status: schannepLabel ?? "—" },
                 { rank:8,  label:"Yield Curve",         value: `${yieldCurve>=0?"+":""}${yieldCurve.toFixed(2)}`, sub:"10Y-2Y spread · recession lead", color: ycColor,
-                  status: ycColor==="#ff6b88"?"Inverted":ycColor==="#fbbf24"?"Flat":"Healthy", posPct: ycPos,
-                  ticks: [{ pos:40, color:"#fbbf24" }, { pos:60, color:"#4ade80" }],
+                  status: ycColor==="#ff6b88"?"Inverted":ycColor==="#fbbf24"?"Flat":"Healthy", posPct: ycPos, bands: ycBands,
                   distance: ycColor==="#4ade80"?`${(yieldCurve-0.5).toFixed(2)} pts above Flat line`:ycColor==="#fbbf24"?`${(yieldCurve-0).toFixed(2)} pts above Inverted line`:"Already inverted" },
                 { rank:9,  label:"Fed Policy Stance",   value: fedStance==="tightening"?"Tightening":fedStance==="easing"?"Easing":"Holding", sub:"Rate policy backdrop", color: fedColor,
                   status: fedStance==="tightening"?"Headwind":fedStance==="easing"?"Tailwind":"Neutral" },
@@ -1127,16 +1133,14 @@ RESPONSE RULES:
                   status: "Watch" },
               ];
 
-              // Fill-to-marker style: plain dark track, solid fill in the
-              // current status color from the left edge to the current
-              // reading, colored tick lines at the trigger points. No
-              // moving dot, the edge of the fill is the marker.
-              const Bar = ({ posPct, fillColor, ticks }: { posPct: number; fillColor: string; ticks?: Tick[] }) => (
-                <div style={{ position:"relative", height:4, borderRadius:9999, background:"#2a2f45", marginTop:8, marginBottom:2, overflow:"hidden" }}>
-                  <div style={{ position:"absolute", top:0, left:0, bottom:0, width:`${posPct}%`, background:fillColor, borderRadius:9999 }} />
-                  {ticks?.map((t, i) => (
-                    <div key={i} style={{ position:"absolute", top:-2, left:`${t.pos}%`, width:2, height:8, background:t.color, transform:"translateX(-1px)", zIndex:1 }} />
-                  ))}
+              // CMV style: the full zone spectrum stays visible as static
+              // bands sized to their real proportion of the scale. A single
+              // marker line shows where the current reading sits. Only the
+              // marker moves, the bands never change.
+              const bandGradient = (bands: Band[]) => `linear-gradient(to right, ${bands.map(b => `${b.color} ${b.from}%, ${b.color} ${b.to}%`).join(", ")})`;
+              const Bar = ({ posPct, bands }: { posPct: number; bands: Band[] }) => (
+                <div style={{ position:"relative", height:5, borderRadius:9999, background: bandGradient(bands), marginTop:8, marginBottom:2 }}>
+                  <div style={{ position:"absolute", top:-2, left:`${Math.max(1,Math.min(posPct,99))}%`, width:2, height:9, background:"#0b0b2a", border:"1px solid #fff", transform:"translateX(-1px)", zIndex:2 }} />
                 </div>
               );
 
@@ -1149,7 +1153,7 @@ RESPONSE RULES:
                       <div className="lbl" style={{ marginBottom:6, paddingRight:18 }}>{s.label}</div>
                       <div className="valHero" style={{ fontSize:24 }}>{s.value}</div>
                       <div className="status" style={{ color:s.color, fontSize:12, marginTop:2 }}>{s.status}</div>
-                      {s.posPct != null && <Bar posPct={s.posPct} fillColor={s.color} ticks={s.ticks} />}
+                      {s.posPct != null && s.bands != null && <Bar posPct={s.posPct} bands={s.bands} />}
                       <div className="sub" style={{ marginTop:6 }}>{s.distance ?? s.sub}</div>
                     </div>
                   ))}
