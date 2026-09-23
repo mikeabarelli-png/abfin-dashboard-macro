@@ -1059,7 +1059,7 @@ RESPONSE RULES:
             </div>
             {(() => {
               type Band = { color: string; from: number; to: number };
-              type Sig = { rank: number; label: string; value: string; sub: string; color: string; status: string; posPct?: number; bands?: Band[]; distance?: string };
+              type Sig = { rank: number; label: string; value: string; sub: string; color: string; status: string; posPct?: number; bands?: Band[]; distance?: string; axisTicks?: { pos: number; label: string }[] };
 
               const robertsColor = regimeGate==="trend_broken" ? "#ff6b88" : regimeGate==="near_ma" ? "#fbbf24" : "#4ade80";
               const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<50 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
@@ -1110,16 +1110,16 @@ RESPONSE RULES:
                   status: regimeGate==="trend_broken"?"Trend Broken":regimeGate==="near_ma"?"At the Line":regimeGate==="reclaiming"?"Reclaiming":"Bull Trend" },
                 { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor,
                   status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos, bands: breadthBands,
-                  distance: breadthPct==null?"—": breadthColor==="#4ade80"?`${(breadthPct-70).toFixed(0)} pts above Mixed line`:breadthColor==="#fbbf24"?`${(breadthPct-50).toFixed(0)} pts above Narrow line`:"Already Narrow" },
+                  axisTicks: [{ pos:50, label:"50" }, { pos:70, label:"70" }] },
                 { rank:3,  label:"HY Spread",           value: `${Math.round(hySpreadBps)}bps`, sub:"Credit stress", color: hyColor,
                   status: hyColor==="#ff6b88"?"Stress":hyColor==="#fbbf24"?"Watch":"Tight", posPct: hyPos, bands: hyBands,
-                  distance: hyColor==="#4ade80"?`${Math.round(400-hySpreadBps)}bps to Watch`:hyColor==="#fbbf24"?`${Math.round(500-hySpreadBps)}bps to Stress`:"Past red line" },
+                  axisTicks: [{ pos:25, label:"400" }, { pos:37.5, label:"500" }] },
                 { rank:4,  label:"VIX",                 value: vixValue!=null?vixValue.toFixed(1):"—", sub:"Near-term fear gauge", color: vixColor2,
                   status: vixColor2==="#ff6b88"?"Stress":vixColor2==="#fbbf24"?"Elevated":"Calm", posPct: vixPos, bands: vixBands,
-                  distance: vixValue==null?"—": vixColor2==="#4ade80"?`${(20-vixValue).toFixed(1)} pts to Elevated`:vixColor2==="#fbbf24"?`${(30-vixValue).toFixed(1)} pts to Stress`:"Past stress level" },
+                  axisTicks: [{ pos:40, label:"20" }, { pos:60, label:"30" }] },
                 { rank:5,  label:"Buffett Indicator",   value: `${buffettSigma.toFixed(2)}σ`, sub:"Valuation vs GDP trend", color: buffettColor,
                   status: buffettStatus, posPct: buffettPos, bands: buffettBands,
-                  distance: buffettDistance },
+                  axisTicks: [{ pos:16.67, label:"-2" }, { pos:33.33, label:"-1" }, { pos:50, label:"0" }, { pos:66.67, label:"+1" }, { pos:83.33, label:"+2" }] },
                 { rank:6,  label:"Ivy Portfolio",       value: `${ivyInvestedCount}/5`, sub:"Multi-asset trend confirmation", color: ivyColor,
                   status: ivyColor==="#4ade80"?"Fully Invested":ivyColor==="#fbbf24"?"Mixed":"Defensive" },
                 { rank:7,  label:"Schannep / Dow Theory", value: schannepLabel ?? "—", sub:"Economic confirmation, SPX + Transports", color: schannepColor,
@@ -1154,7 +1154,15 @@ RESPONSE RULES:
                       <div className="valHero" style={{ fontSize:24 }}>{s.value}</div>
                       <div className="status" style={{ color:s.color, fontSize:12, marginTop:2 }}>{s.status}</div>
                       {s.posPct != null && s.bands != null && <Bar posPct={s.posPct} bands={s.bands} />}
-                      <div className="sub" style={{ marginTop:6 }}>{s.distance ?? s.sub}</div>
+                      {s.axisTicks ? (
+                        <div style={{ position:"relative", height:12, marginTop:2 }}>
+                          {s.axisTicks.map((t, i) => (
+                            <div key={i} style={{ position:"absolute", left:`${t.pos}%`, transform:"translateX(-50%)", fontSize:9, color:"#64748b" }}>{t.label}</div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="sub" style={{ marginTop:6 }}>{s.distance ?? s.sub}</div>
+                      )}
                     </div>
                   ))}
                 </div>
