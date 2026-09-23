@@ -203,6 +203,7 @@ export default function Page() {
   const fedFundsYearAgo = getNum(metrics?.fed_funds_year_ago, marketData?.fed_funds_year_ago);
   const fedTrendDirection: string = metrics?.fed_trend_direction ?? marketData?.fed_trend_direction ?? "flat";
   const fedNextMove = metrics?.fed_next_move ?? marketData?.fed_next_move ?? { lean: "neutral", hikeOdds: 50, meeting: "next FOMC" };
+  const aaiiBears = getNum(metrics?.aaii_bears, marketData?.aaii_bears) ?? 53.3;
   const djtPrice      = getNum(metrics?.djt_price,      marketData?.djt_price);
   const djtChangePct  = getNum(metrics?.djt_change_pct, marketData?.djt_change_pct);
   const djt200dma     = getNum(metrics?.djt_200dma,     marketData?.djt_200dma);
@@ -1083,6 +1084,17 @@ RESPONSE RULES:
               const fedPos = Math.max(0, Math.min(100, (fedFundsRate / 6) * 100));
               const fedLeanLabel = fedNextMove.lean === "hawkish" ? "Hawkish" : fedNextMove.lean === "dovish" ? "Dovish" : "Neutral";
 
+              // AAII Bears: plain reading, consistent with the rest of the
+              // panel (higher = red), not the contrarian read some analysts
+              // use (extreme fear = buy signal). 45% is the same threshold
+              // Roberts' own scorecard elsewhere in this dashboard uses as
+              // its "elevated" line. Scale runs 0-70%, comfortably above
+              // any reading likely to occur.
+              const aaiiColor = aaiiBears>45 ? "#ff6b88" : aaiiBears>35 ? "#fbbf24" : "#4ade80";
+              const aaiiStatus = aaiiBears>45 ? "Elevated" : aaiiBears>35 ? "Watch" : "Calm";
+              const aaiiBands: Band[] = [{ color:"#4ade80", from:0, to:50 }, { color:"#fbbf24", from:50, to:64.29 }, { color:"#ff6b88", from:64.29, to:100 }];
+              const aaiiPos = Math.max(0, Math.min(100, (aaiiBears / 70) * 100));
+
               // Buffett gets its own 5-zone palette, matching
               // currentmarketvaluation.com exactly: Strongly Overvalued
               // (red, >2.0σ), Overvalued (yellow, 1.0-2.0σ), Fairly
@@ -1159,8 +1171,10 @@ RESPONSE RULES:
                   status: fedStatus, posPct: fedPos, bands: fedBands,
                   axisTicks: [{ pos:33.33, label:"2%" }, { pos:66.67, label:"4%" }],
                   tickCaption: `Next: ${fedLeanLabel}, ${fedNextMove.hikeOdds}% hike odds (${fedNextMove.meeting}, Manual)` },
-                { rank:10, label:"AAII Bears",          value: "52%", sub:"Sentiment · Manual, updated weekly", color: "#fbbf24",
-                  status: "Watch" },
+                { rank:10, label:"AAII Bears",          value: `${aaiiBears.toFixed(1)}%`, sub:"Sentiment · Manual, updated weekly", color: aaiiColor,
+                  status: aaiiStatus, posPct: aaiiPos, bands: aaiiBands,
+                  axisTicks: [{ pos:50, label:"35" }, { pos:64.29, label:"45" }],
+                  tickCaption: "Sentiment · Manual, updated weekly" },
               ];
 
               // CMV style: the full zone spectrum stays visible as static
