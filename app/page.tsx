@@ -1174,7 +1174,42 @@ RESPONSE RULES:
                 </div>
               );
 
+              // Composite index: green +1, red -1, yellow 0. Equal-weighted
+              // on purpose, this answers "how many things are supportive
+              // vs. concerning right now," a different question than the
+              // force-rank above it, which already says which ones matter
+              // most. Reads off each tile's dot color, the same coarse
+              // 3-state summary the dot itself shows, not the richer 5-tier
+              // bar colors some tiles use internally (e.g. Ivy, Buffett).
+              const greenCount = signals.filter(s => (s.dotColor ?? s.color) === "#4ade80").length;
+              const yellowCount = signals.filter(s => (s.dotColor ?? s.color) === "#fbbf24").length;
+              const redCount = signals.filter(s => (s.dotColor ?? s.color) === "#ff6b88").length;
+              const compositeIndex = greenCount - redCount;
+              const compositeColor2 = compositeIndex > 0 ? "#4ade80" : compositeIndex < 0 ? "#ff6b88" : "#fbbf24";
+
               return (
+                <>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, padding:"10px 14px", background:"#161a33", borderRadius:10 }}>
+                    <div style={{ display:"flex", gap:18, alignItems:"center" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ width:9, height:9, borderRadius:"50%", background:"#4ade80" }} />
+                        <span style={{ fontSize:13, fontWeight:700, color:"#cbd5e1" }}>{greenCount} Green</span>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ width:9, height:9, borderRadius:"50%", background:"#fbbf24" }} />
+                        <span style={{ fontSize:13, fontWeight:700, color:"#cbd5e1" }}>{yellowCount} Yellow</span>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ width:9, height:9, borderRadius:"50%", background:"#ff6b88" }} />
+                        <span style={{ fontSize:13, fontWeight:700, color:"#cbd5e1" }}>{redCount} Red</span>
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
+                      <span style={{ fontSize:10, color:"#64748b", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Composite</span>
+                      <span style={{ fontSize:20, fontWeight:800, color:compositeColor2 }}>{compositeIndex > 0 ? "+" : ""}{compositeIndex}</span>
+                      <span style={{ fontSize:11, color:"#475569" }}>/ 10</span>
+                    </div>
+                  </div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
                   {signals.map(s => (
                     <div key={s.rank} className="tile" style={{ position:"relative" }}>
@@ -1199,6 +1234,7 @@ RESPONSE RULES:
                     </div>
                   ))}
                 </div>
+                </>
               );
             })()}
           </section>
