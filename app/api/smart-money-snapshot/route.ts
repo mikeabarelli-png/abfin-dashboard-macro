@@ -90,7 +90,7 @@ async function fetchChart(
   }
 }
 
-async function fetchFred(seriesId: string, limit = 1): Promise<{ value: number | null; prev: number | null; error?: string }> {
+async function fetchFred(seriesId: string, limit = 1, compareIndex = 1): Promise<{ value: number | null; prev: number | null; error?: string }> {
   const apiKey = process.env.FRED_API_KEY;
   if (!apiKey) return { value: null, prev: null, error: "FRED_API_KEY not set" };
   const url = `${FRED}?series_id=${seriesId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=${limit}`;
@@ -102,8 +102,8 @@ async function fetchFred(seriesId: string, limit = 1): Promise<{ value: number |
     const data = await res.json();
     const obs = data?.observations ?? [];
     const val  = obs[0]?.value && obs[0].value !== "." ? parseFloat(obs[0].value) : null;
-    const prev = limit >= 2 && obs[1]?.value && obs[1].value !== "." ? parseFloat(obs[1].value) : null;
-    console.log(`FRED ${seriesId}: ${val}${prev != null ? ` (prev: ${prev})` : ""}`);
+    const prev = limit > compareIndex && obs[compareIndex]?.value && obs[compareIndex].value !== "." ? parseFloat(obs[compareIndex].value) : null;
+    console.log(`FRED ${seriesId}: ${val}${prev != null ? ` (prev @-${compareIndex}: ${prev})` : ""}`);
     return { value: val, prev };
   } catch (err: any) {
     return { value: null, prev: null, error: `FRED ${seriesId}: ${err?.message}` };
@@ -420,7 +420,17 @@ export async function GET() {
   const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 26 2026
   const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
   const MANUAL_BREADTH_FALLBACK    = 57;       // macromicro $SPXA200R (%)       · Jun 26 2026
-  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "holding";
+  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "tightening"; // Sept 16, 2026 FOMC: 25bp hike, first since 2023, SEP signals further tightening
+  // Market-implied lean for the NEXT meeting — this is a genuine proxy,
+  // not a live feed. True meeting-by-meeting odds (CME FedWatch-style)
+  // come from Fed funds futures pricing, which isn't in this pipeline.
+  // Update this by hand, weekly, from Fed funds futures pricing or
+  // financial press coverage of the next FOMC meeting.
+  const MANUAL_FED_NEXT_MOVE = {
+    lean: "hawkish" as "hawkish" | "neutral" | "dovish",
+    hikeOdds: 58,                              // CME FedWatch-style Fed funds futures · Sep 21 2026
+    meeting: "Oct 28-29",
+  };
   //                                           · Jun 26 2026 · FOMC held 3.50-3.75%, dot plot turned hawkish (median 3.8% vs prior 3.4%)
   const MANUAL_AD = {                          // StockCharts $NYAD              · Jun 26 2026
     signal:      "neutral" as "bullish_divergence" | "neutral" | "confirming_weakness",
@@ -452,7 +462,7 @@ export async function GET() {
       fetchFred("DGS10"),
       fetchFred("BAMLH0A0HYM2"),
       fetchFred("T10Y2Y"),
-      fetchFred("FEDFUNDS"),
+      fetchFred("FEDFUNDS", 13, 12),
       fetchFred("T5YIE"),
       fetchPE(),
       fetchCape(),
@@ -1211,6 +1221,14 @@ export async function GET() {
 
   const yieldCurve: number = fredYC.value ?? 0.55;
   const fedFunds: number = fredFedFunds.value ?? 4.33;
+  const fedFundsYearAgo: number | null = fredFedFunds.prev;
+  // Direction is now derived from the actual 12-month move in the
+  // effective rate, live, not hand-set. 0.125 is half a standard 25bp
+  // hike, small enough to catch a single move without flagging noise.
+  const fedTrendDirection: "up" | "down" | "flat" =
+    fedFundsYearAgo == null ? "flat" :
+    fedFunds - fedFundsYearAgo > 0.125 ? "up" :
+    fedFundsYearAgo - fedFunds > 0.125 ? "down" : "flat";
   const breakeven5y: number = fredBreakeven.value ?? 2.45;
 
   const dxyPrice: number | null = dxy.meta.regularMarketPrice ?? dxy.closes[dxy.closes.length - 1] ?? null;
@@ -1397,6 +1415,8 @@ export async function GET() {
       real_10y: real10y,
       nom_10y: nom10y,
       fed_funds: fedFunds,
+      fed_funds_year_ago: fedFundsYearAgo,
+      fed_trend_direction: fedTrendDirection,
       breakeven_5y: breakeven5y,
       dxy: dxyPrice,
       dxy_change_pct: dxyChangePct,
@@ -1423,6 +1443,7 @@ export async function GET() {
       regime_gate: regimeGate,
       buffett_sigma: MANUAL_BUFFETT_SIGMA,
       fed_stance: MANUAL_FED_STANCE,
+      fed_next_move: MANUAL_FED_NEXT_MOVE,
       djt_price: djtPrice,
       djt_change_pct: djtChangePct,
       djt_trend_14d: djtCloses.slice(-14),
