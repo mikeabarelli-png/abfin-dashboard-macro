@@ -431,6 +431,7 @@ export async function GET() {
     hikeOdds: 58,                              // CME FedWatch-style Fed funds futures · Sep 21 2026
     meeting: "Oct 28-29",
   };
+  const MANUAL_AAII_BEARS = 53.3;              // AAII Sentiment Survey · Sep 18 2026 · +14.0pts w/w, bullish 28.8%
   //                                           · Jun 26 2026 · FOMC held 3.50-3.75%, dot plot turned hawkish (median 3.8% vs prior 3.4%)
   const MANUAL_AD = {                          // StockCharts $NYAD              · Jun 26 2026
     signal:      "neutral" as "bullish_divergence" | "neutral" | "confirming_weakness",
@@ -1444,6 +1445,7 @@ export async function GET() {
       buffett_sigma: MANUAL_BUFFETT_SIGMA,
       fed_stance: MANUAL_FED_STANCE,
       fed_next_move: MANUAL_FED_NEXT_MOVE,
+      aaii_bears: MANUAL_AAII_BEARS,
       djt_price: djtPrice,
       djt_change_pct: djtChangePct,
       djt_trend_14d: djtCloses.slice(-14),
