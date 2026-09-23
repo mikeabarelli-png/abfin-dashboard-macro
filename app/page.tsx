@@ -199,6 +199,10 @@ export default function Page() {
   const regimeGate: string = metrics?.regime_gate ?? marketData?.regime_gate ?? "hold";
   const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.52;
   const fedStance: string = metrics?.fed_stance ?? marketData?.fed_stance ?? "holding";
+  const fedFundsRate  = getNum(metrics?.fed_funds,          marketData?.fed_funds) ?? 4.33;
+  const fedFundsYearAgo = getNum(metrics?.fed_funds_year_ago, marketData?.fed_funds_year_ago);
+  const fedTrendDirection: string = metrics?.fed_trend_direction ?? marketData?.fed_trend_direction ?? "flat";
+  const fedNextMove = metrics?.fed_next_move ?? marketData?.fed_next_move ?? { lean: "neutral", hikeOdds: 50, meeting: "next FOMC" };
   const djtPrice      = getNum(metrics?.djt_price,      marketData?.djt_price);
   const djtChangePct  = getNum(metrics?.djt_change_pct, marketData?.djt_change_pct);
   const djt200dma     = getNum(metrics?.djt_200dma,     marketData?.djt_200dma);
@@ -318,7 +322,7 @@ export default function Page() {
     { ticker: "VTIP", weight: 20, job: "Inflation protection",                    sleeve: "defensive" as const },
     { ticker: "SGOV", weight: 20, job: "Capital preservation, yield",             sleeve: "defensive" as const },
     { ticker: "VEA",  weight: 15, job: "International equity",                    sleeve: "trend" as const },
-    { ticker: "VGIT", weight: 15, job: "Intermediate duration",                   sleeve: "defensive" as const },
+    { ticker: "BND",  weight: 10, job: "Core US bond, replaced VGIT",             sleeve: "defensive" as const },
     { ticker: "SCHD", weight: 15, job: "Quality equity, lower vol",               sleeve: "trend" as const },
     { ticker: "VTI",  weight: 10, job: "Broad US market exposure",                sleeve: "trend" as const },
     { ticker: "GLDM", weight: 5,  job: "Hard asset hedge — exit pending",         sleeve: "trend" as const },
@@ -1059,16 +1063,25 @@ RESPONSE RULES:
             </div>
             {(() => {
               type Band = { color: string; from: number; to: number };
-              type Sig = { rank: number; label: string; value: string; sub: string; color: string; status: string; posPct?: number; bands?: Band[]; distance?: string; axisTicks?: { pos: number; label: string }[] };
+              type Sig = { rank: number; label: string; value: string; sub: string; color: string; dotColor?: string; status: string; posPct?: number; bands?: Band[]; distance?: string; axisTicks?: { pos: number; label: string }[]; tickCaption?: string };
 
               const robertsColor = regimeGate==="trend_broken" ? "#ff6b88" : regimeGate==="near_ma" ? "#fbbf24" : "#4ade80";
               const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<50 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
               const hySpreadBps = hySpread*100;
               const hyColor = hySpread>=5 ? "#ff6b88" : hySpread>=4 ? "#fbbf24" : "#4ade80";
               const vixColor2 = vixValue==null ? "#94a3b8" : vixValue>=30 ? "#ff6b88" : vixValue>=20 ? "#fbbf24" : "#4ade80";
-              const ivyColor = ivyInvestedCount>=5 ? "#4ade80" : ivyInvestedCount>=3 ? "#fbbf24" : "#ff6b88";
               const ycColor = yieldCurve<0 ? "#ff6b88" : yieldCurve<0.5 ? "#fbbf24" : "#4ade80";
-              const fedColor = fedStance==="tightening" ? "#ff6b88" : fedStance==="easing" ? "#4ade80" : "#fbbf24";
+              // Dot/status color: driven by the LIVE 12-month trend
+              // direction (rising rates = headwind = red), not the
+              // absolute level. The bar below answers a different
+              // question, where the rate sits historically, with its
+              // own independent zone coloring.
+              const fedColor = fedTrendDirection==="up" ? "#ff6b88" : fedTrendDirection==="down" ? "#4ade80" : "#fbbf24";
+              const fedStatus = fedTrendDirection==="up" ? "Tightening" : fedTrendDirection==="down" ? "Easing" : "Holding";
+              const FED_ACCOM = "#4ade80", FED_NEUTRAL = "#94a3b8", FED_RESTRICT = "#ff6b88";
+              const fedBands: Band[] = [{ color:FED_ACCOM, from:0, to:33.33 }, { color:FED_NEUTRAL, from:33.33, to:66.67 }, { color:FED_RESTRICT, from:66.67, to:100 }];
+              const fedPos = Math.max(0, Math.min(100, (fedFundsRate / 6) * 100));
+              const fedLeanLabel = fedNextMove.lean === "hawkish" ? "Hawkish" : fedNextMove.lean === "dovish" ? "Dovish" : "Neutral";
 
               // Buffett gets its own 5-zone palette, matching
               // currentmarketvaluation.com exactly: Strongly Overvalued
@@ -1084,6 +1097,20 @@ RESPONSE RULES:
                 buffettSigma>=-1.0 ? `${(1.0-buffettSigma).toFixed(2)}σ to Overvalued` :
                 buffettSigma>=-2.0 ? `${(buffettSigma-(-2.0)).toFixed(2)}σ above Strongly Undervalued` :
                 "Past -2.0σ line";
+
+              // Ivy mirrors Buffett's 5-tier palette, reversed: here HIGH
+              // is good (more of the 5 assets confirmed invested), so dark
+              // green sits at 5 instead of at 0. Six points (0-5), each
+              // one its own color, bands colored by their upper point.
+              const ivyColor = ivyInvestedCount>=5 ? DARK_GREEN : ivyInvestedCount>=4 ? LIGHT_GREEN : ivyInvestedCount>=3 ? GRAY : ivyInvestedCount>=2 ? "#fbbf24" : "#ff6b88";
+              // The corner dot summarizes at a coarser, 3-state resolution
+              // than the 5-tier bar: green at 4-5, yellow at 2-3, red at
+              // 0-1, so the quick glance and the detailed bar can agree
+              // without forcing the bar itself down to 3 colors.
+              const ivyDotColor = ivyInvestedCount>=4 ? "#4ade80" : ivyInvestedCount>=2 ? "#fbbf24" : "#ff6b88";
+              const ivyStatus = ivyInvestedCount>=5 ? "Fully Invested" : ivyInvestedCount>=4 ? "Mostly Invested" : ivyInvestedCount>=3 ? "Mixed" : ivyInvestedCount>=2 ? "Defensive" : ivyInvestedCount>=1 ? "Mostly Cash" : "All Cash";
+              const ivyBands: Band[] = [{ color:"#ff6b88", from:0, to:20 }, { color:"#fbbf24", from:20, to:40 }, { color:GRAY, from:40, to:60 }, { color:LIGHT_GREEN, from:60, to:80 }, { color:DARK_GREEN, from:80, to:100 }];
+              const ivyPos = Math.max(0, Math.min(100, (ivyInvestedCount / 5) * 100));
 
               // Bar position, 0-100. Breadth/Yield Curve: low = bad (left).
               // HY/VIX: high = bad (right). Buffett: bidirectional, -3σ to
@@ -1120,15 +1147,18 @@ RESPONSE RULES:
                 { rank:5,  label:"Buffett Indicator",   value: `${buffettSigma.toFixed(2)}σ`, sub:"Valuation vs GDP trend", color: buffettColor,
                   status: buffettStatus, posPct: buffettPos, bands: buffettBands,
                   axisTicks: [{ pos:16.67, label:"-2" }, { pos:33.33, label:"-1" }, { pos:50, label:"0" }, { pos:66.67, label:"+1" }, { pos:83.33, label:"+2" }] },
-                { rank:6,  label:"Ivy Portfolio",       value: `${ivyInvestedCount}/5`, sub:"Multi-asset trend confirmation", color: ivyColor,
-                  status: ivyColor==="#4ade80"?"Fully Invested":ivyColor==="#fbbf24"?"Mixed":"Defensive" },
+                { rank:6,  label:"Ivy Portfolio",       value: `${ivyInvestedCount}/5`, sub:"Multi-asset trend confirmation", color: ivyColor, dotColor: ivyDotColor,
+                  status: ivyStatus, posPct: ivyPos, bands: ivyBands,
+                  axisTicks: [{ pos:0, label:"0" }, { pos:20, label:"1" }, { pos:40, label:"2" }, { pos:60, label:"3" }, { pos:80, label:"4" }, { pos:100, label:"5" }] },
                 { rank:7,  label:"Schannep / Dow Theory", value: schannepLabel ?? "—", sub:"Economic confirmation, SPX + Transports", color: schannepColor,
                   status: schannepLabel ?? "—" },
                 { rank:8,  label:"Yield Curve",         value: `${yieldCurve>=0?"+":""}${yieldCurve.toFixed(2)}`, sub:"10Y-2Y spread · recession lead", color: ycColor,
                   status: ycColor==="#ff6b88"?"Inverted":ycColor==="#fbbf24"?"Flat":"Healthy", posPct: ycPos, bands: ycBands,
-                  distance: ycColor==="#4ade80"?`${(yieldCurve-0.5).toFixed(2)} pts above Flat line`:ycColor==="#fbbf24"?`${(yieldCurve-0).toFixed(2)} pts above Inverted line`:"Already inverted" },
-                { rank:9,  label:"Fed Policy Stance",   value: fedStance==="tightening"?"Tightening":fedStance==="easing"?"Easing":"Holding", sub:"Rate policy backdrop", color: fedColor,
-                  status: fedStance==="tightening"?"Headwind":fedStance==="easing"?"Tailwind":"Neutral" },
+                  axisTicks: [{ pos:40, label:"0" }, { pos:60, label:"0.5" }] },
+                { rank:9,  label:"Fed Policy Stance",   value: `${fedFundsRate.toFixed(2)}%`, sub:"Rate policy backdrop", color: fedColor,
+                  status: fedStatus, posPct: fedPos, bands: fedBands,
+                  axisTicks: [{ pos:33.33, label:"2%" }, { pos:66.67, label:"4%" }],
+                  tickCaption: `Next: ${fedLeanLabel}, ${fedNextMove.hikeOdds}% hike odds (${fedNextMove.meeting}, Manual)` },
                 { rank:10, label:"AAII Bears",          value: "52%", sub:"Sentiment · Manual, updated weekly", color: "#fbbf24",
                   status: "Watch" },
               ];
@@ -1148,18 +1178,21 @@ RESPONSE RULES:
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
                   {signals.map(s => (
                     <div key={s.rank} className="tile" style={{ position:"relative" }}>
-                      <div style={{ position:"absolute", top:10, right:10, width:10, height:10, borderRadius:"50%", background:s.color, boxShadow:`0 0 6px ${s.color}88` }} />
+                      <div style={{ position:"absolute", top:10, right:10, width:10, height:10, borderRadius:"50%", background:s.dotColor ?? s.color, boxShadow:`0 0 6px ${s.dotColor ?? s.color}88` }} />
                       <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:2 }}>#{s.rank}</div>
                       <div className="lbl" style={{ marginBottom:6, paddingRight:18 }}>{s.label}</div>
                       <div className="valHero" style={{ fontSize:24 }}>{s.value}</div>
                       <div className="status" style={{ color:s.color, fontSize:12, marginTop:2 }}>{s.status}</div>
                       {s.posPct != null && s.bands != null && <Bar posPct={s.posPct} bands={s.bands} />}
-                      {s.axisTicks ? (
+                      {s.axisTicks && (
                         <div style={{ position:"relative", height:12, marginTop:2 }}>
                           {s.axisTicks.map((t, i) => (
                             <div key={i} style={{ position:"absolute", left:`${t.pos}%`, transform:"translateX(-50%)", fontSize:9, color:"#64748b" }}>{t.label}</div>
                           ))}
                         </div>
+                      )}
+                      {s.axisTicks ? (
+                        s.tickCaption && <div className="sub" style={{ marginTop:2 }}>{s.tickCaption}</div>
                       ) : (
                         <div className="sub" style={{ marginTop:6 }}>{s.distance ?? s.sub}</div>
                       )}
@@ -1709,7 +1742,7 @@ RESPONSE RULES:
               // consideration within the same row now (Mike's call — pure
               // sequencing, not a change to what's actually held). Equity:
               // VEA/SCHD/VTI are real; VTWO/VIGI are candidates. Fixed
-              // Income: VTIP/SGOV/VGIT, all real. Alternatives: GLDM is
+              // Income: VTIP/SGOV/BND, all real (BND replaced VGIT). Alternatives: GLDM is
               // real (hard-asset hedge, exit pending); DBMF/BTAL are
               // candidates. Real-vs-candidate status is called out in each
               // row's subtitle rather than a separate section, so nothing
@@ -1717,7 +1750,7 @@ RESPONSE RULES:
               const byTicker = (t: string) =>
                 positionCards.find(p => p.ticker === t) ?? candidateCards.find(p => p.ticker === t);
               const equityCards = ["VEA", "SCHD", "VTI", "VTWO", "VIGI", "VXUS"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
-              const incomeCards = ["VTIP", "SGOV", "VGIT", "VTEB"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              const incomeCards = ["VTIP", "SGOV", "BND", "VTEB"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
               const altCards = ["GLDM", "DBMF"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
 
               return (
@@ -1733,7 +1766,7 @@ RESPONSE RULES:
                   <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
                     Fixed Income
                   </div>
-                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>VTIP / SGOV / VGIT real holdings · VTEB under consideration</div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>VTIP / SGOV / BND real holdings · VTEB under consideration</div>
                   <div className="grid5" style={{ marginBottom:16 }}>
                     {incomeCards.map(renderPositionTile)}
                   </div>
