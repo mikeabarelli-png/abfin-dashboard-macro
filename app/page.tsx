@@ -1067,7 +1067,7 @@ RESPONSE RULES:
               type Sig = { rank: number; label: string; value: string; sub: string; color: string; dotColor?: string; status: string; posPct?: number; bands?: Band[]; distance?: string; axisTicks?: { pos: number; label: string }[]; tickCaption?: string };
 
               const robertsColor = regimeGate==="trend_broken" ? "#ff6b88" : regimeGate==="near_ma" ? "#fbbf24" : "#4ade80";
-              const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<50 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
+              const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<40 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
               const hySpreadBps = hySpread*100;
               const hyColor = hySpread>=5 ? "#ff6b88" : hySpread>=4 ? "#fbbf24" : "#4ade80";
               const vixColor2 = vixValue==null ? "#94a3b8" : vixValue>=30 ? "#ff6b88" : vixValue>=20 ? "#fbbf24" : "#4ade80";
@@ -1138,7 +1138,7 @@ RESPONSE RULES:
               // draws its gauges. The whole spectrum stays visible no
               // matter where the current reading sits, only the marker
               // line moves.
-              const breadthBands: Band[] = [{ color:"#ff6b88", from:0, to:50 }, { color:"#fbbf24", from:50, to:70 }, { color:"#4ade80", from:70, to:100 }];
+              const breadthBands: Band[] = [{ color:"#ff6b88", from:0, to:40 }, { color:"#fbbf24", from:40, to:70 }, { color:"#4ade80", from:70, to:100 }];
               const hyBands: Band[] = [{ color:"#4ade80", from:0, to:25 }, { color:"#fbbf24", from:25, to:37.5 }, { color:"#ff6b88", from:37.5, to:100 }];
               const vixBands: Band[] = [{ color:"#4ade80", from:0, to:40 }, { color:"#fbbf24", from:40, to:60 }, { color:"#ff6b88", from:60, to:100 }];
               const buffettBands: Band[] = [{ color:DARK_GREEN, from:0, to:16.67 }, { color:LIGHT_GREEN, from:16.67, to:33.33 }, { color:GRAY, from:33.33, to:66.67 }, { color:"#fbbf24", from:66.67, to:83.33 }, { color:"#ff6b88", from:83.33, to:100 }];
@@ -1149,7 +1149,7 @@ RESPONSE RULES:
                   status: regimeGate==="trend_broken"?"Trend Broken":regimeGate==="near_ma"?"At the Line":regimeGate==="reclaiming"?"Reclaiming":"Bull Trend" },
                 { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor,
                   status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos, bands: breadthBands,
-                  axisTicks: [{ pos:50, label:"50" }, { pos:70, label:"70" }] },
+                  axisTicks: [{ pos:40, label:"40" }, { pos:70, label:"70" }] },
                 { rank:3,  label:"HY Spread",           value: `${Math.round(hySpreadBps)}bps`, sub:"Credit stress", color: hyColor,
                   status: hyColor==="#ff6b88"?"Stress":hyColor==="#fbbf24"?"Watch":"Tight", posPct: hyPos, bands: hyBands,
                   axisTicks: [{ pos:25, label:"400" }, { pos:37.5, label:"500" }] },
