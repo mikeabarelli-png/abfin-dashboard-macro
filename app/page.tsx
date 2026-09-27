@@ -1064,7 +1064,7 @@ RESPONSE RULES:
             </div>
             {(() => {
               type Band = { color: string; from: number; to: number };
-              type Sig = { rank: number; label: string; value: string; sub: string; color: string; dotColor?: string; status: string; posPct?: number; bands?: Band[]; distance?: string; axisTicks?: { pos: number; label: string }[]; tickCaption?: string };
+              type Sig = { rank: number; label: string; value: string; sub: string; color: string; dotColor?: string; status: string; posPct?: number; bands?: Band[]; distance?: string; axisTicks?: { pos: number; label: string }[]; tickCaption?: string; centerPos?: number };
 
               const robertsColor = regimeGate==="trend_broken" ? "#ff6b88" : regimeGate==="near_ma" ? "#fbbf24" : "#4ade80";
               const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<40 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
@@ -1145,8 +1145,10 @@ RESPONSE RULES:
               const ycBands: Band[] = [{ color:"#ff6b88", from:0, to:40 }, { color:"#fbbf24", from:40, to:60 }, { color:"#4ade80", from:60, to:100 }];
 
               const signals: Sig[] = [
-                { rank:1,  label:"Roberts 40-Wk Trend", value: regimeLabel ?? "—", sub:"Primary trend gate · SPX vs 200-DMA", color: robertsColor,
-                  status: regimeGate==="trend_broken"?"Trend Broken":regimeGate==="near_ma"?"At the Line":regimeGate==="reclaiming"?"Reclaiming":"Bull Trend" },
+                { rank:1,  label:"Roberts 40-Wk", value: `${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}%`, sub:"", color: robertsColor,
+                  status: regimeGate==="trend_broken"?"Trend Broken":regimeGate==="near_ma"?"At the Line":regimeGate==="reclaiming"?"Reclaiming":"Bull Trend",
+                  centerPos: Math.max(0, Math.min(100, ((spx200Pct + 10) / 20) * 100)),
+                  axisTicks: [{ pos:0, label:"-10%" }, { pos:50, label:"0%" }, { pos:100, label:"+10%" }] },
                 { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor,
                   status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos, bands: breadthBands,
                   axisTicks: [{ pos:40, label:"40" }, { pos:70, label:"70" }] },
@@ -1233,6 +1235,12 @@ RESPONSE RULES:
                       <div className="valHero" style={{ fontSize:24 }}>{s.value}</div>
                       <div className="status" style={{ color:s.color, fontSize:12, marginTop:2 }}>{s.status}</div>
                       {s.posPct != null && s.bands != null && <Bar posPct={s.posPct} bands={s.bands} />}
+                      {s.centerPos != null && (
+                        <div style={{ position:"relative", height:5, borderRadius:9999, background:"#2a2f45", marginTop:8, marginBottom:2 }}>
+                          <div style={{ position:"absolute", top:-2, left:"50%", width:2, height:9, background:"#475569", transform:"translateX(-1px)", zIndex:1 }} />
+                          <div style={{ position:"absolute", top:-2, left:`${Math.max(1,Math.min(s.centerPos,99))}%`, width:2, height:9, background:"#0b0b2a", border:"1px solid #fff", transform:"translateX(-1px)", zIndex:2 }} />
+                        </div>
+                      )}
                       {s.axisTicks && (
                         <div style={{ position:"relative", height:12, marginTop:2 }}>
                           {s.axisTicks.map((t, i) => (
