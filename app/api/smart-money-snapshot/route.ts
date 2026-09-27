@@ -112,6 +112,29 @@ async function fetchFred(seriesId: string, limit = 1, compareIndex = 1): Promise
   }
 }
 
+// S&P 500 breadth (% of constituents above their 200-DMA). The ticker
+// this dashboard used to rely on, ^SPXA200R, is a ThinkorSwim symbol,
+// not a Yahoo Finance one, and has never actually resolved there. This
+// hits a real, free, no-key JSON endpoint instead. Attribution required
+// per their license: "History of Market · 美股编年史 (historyofmarket.com)".
+async function fetchBreadth(): Promise<{ value: number | null; error?: string }> {
+  const url = "https://historyofmarket.com/api/sp500/breadth.json";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return { value: null, error: `Breadth (historyofmarket.com): HTTP ${res.status}` };
+    const data = await res.json();
+    const val = typeof data?.latest?.pct200 === "number" ? data.latest.pct200 : null;
+    console.log(`Breadth (% above 200-DMA, historyofmarket.com): ${val} as of ${data?.latest?.date}`);
+    return { value: val };
+  } catch (err: any) {
+    return { value: null, error: `Breadth (historyofmarket.com): ${err?.message}` };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchPE(): Promise<{ value: number | null; error?: string }> {
   const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC&fields=trailingPE,forwardPE`;
   const controller = new AbortController();
@@ -419,7 +442,7 @@ export async function GET() {
   const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 26 2026
   const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 26 2026
   const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
-  const MANUAL_BREADTH_FALLBACK    = 0;        // Deliberately impossible. 0% means the live ^SPXA200R fetch failed, not a real reading
+  const MANUAL_BREADTH_FALLBACK    = 0;        // Deliberately impossible. 0% means the live historyofmarket.com fetch failed, not a real reading
   const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "tightening"; // Sept 16, 2026 FOMC: 25bp hike, first since 2023, SEP signals further tightening
   // Market-implied lean for the NEXT meeting — this is a genuine proxy,
   // not a live feed. True meeting-by-meeting odds (CME FedWatch-style)
@@ -443,7 +466,7 @@ export async function GET() {
   // ═══════════════════════════════════════════════════════════════════
 
   const [
-    [spx, qqq, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthChart],
+    [spx, qqq, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthResult],
     positionResults,
     benchmarkBND,
     brentLiveQuote,
@@ -476,7 +499,7 @@ export async function GET() {
       fetchFred("WALCL", 2),
       fetchChart("^DJT", 420),
       fetchChart("BZ=F", 5),
-      fetchChart("^SPXA200R", 5),
+      fetchBreadth(),
     ]),
     Promise.all(POSITION_TICKERS.map((t) => fetchPositionMetrics(t))),
     // Benchmark proxy — 60% VTI / 40% BND, tracking the same two indices
@@ -1011,11 +1034,9 @@ export async function GET() {
   if (fredWALCL.error) diagnostics["walcl"] = fredWALCL.error;
   if (djt.error) diagnostics["djt"] = djt.error;
   if (brent.error) diagnostics["brent"] = brent.error;
-  if (breadthChart.error) diagnostics["breadth"] = breadthChart.error;
+  if (breadthResult.error) diagnostics["breadth"] = breadthResult.error;
 
-  const breadthPct: number | null = breadthChart.closes.length > 0
-    ? breadthChart.closes[breadthChart.closes.length - 1]
-    : breadthChart.meta.regularMarketPrice ?? MANUAL_BREADTH_FALLBACK;
+  const breadthPct: number | null = breadthResult.value ?? MANUAL_BREADTH_FALLBACK;
   console.log(`Breadth (% above 200-DMA): ${breadthPct}%`);
 
   const brentPrice: number | null =
