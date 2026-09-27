@@ -1145,9 +1145,9 @@ RESPONSE RULES:
               const ycBands: Band[] = [{ color:"#ff6b88", from:0, to:40 }, { color:"#fbbf24", from:40, to:60 }, { color:"#4ade80", from:60, to:100 }];
 
               const signals: Sig[] = [
-                { rank:1,  label:"Roberts 40-Wk", value: `${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}%`, sub:"", color: robertsColor,
+                { rank:1,  label:"Roberts 40-Wk", value: spx200Pct!=null ? `${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}%` : "—", sub:"", color: robertsColor,
                   status: regimeGate==="trend_broken"?"Trend Broken":regimeGate==="near_ma"?"At the Line":regimeGate==="reclaiming"?"Reclaiming":"Bull Trend",
-                  centerPos: Math.max(0, Math.min(100, ((spx200Pct + 10) / 20) * 100)),
+                  centerPos: spx200Pct!=null ? Math.max(0, Math.min(100, ((spx200Pct + 10) / 20) * 100)) : 50,
                   axisTicks: [{ pos:0, label:"-10%" }, { pos:50, label:"0%" }, { pos:100, label:"+10%" }] },
                 { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor,
                   status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos, bands: breadthBands,
