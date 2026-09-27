@@ -419,7 +419,7 @@ export async function GET() {
   const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 26 2026
   const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 26 2026
   const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
-  const MANUAL_BREADTH_FALLBACK    = 57;       // macromicro $SPXA200R (%)       · Jun 26 2026
+  const MANUAL_BREADTH_FALLBACK    = 0;        // Deliberately impossible. 0% means the live ^SPXA200R fetch failed, not a real reading
   const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "tightening"; // Sept 16, 2026 FOMC: 25bp hike, first since 2023, SEP signals further tightening
   // Market-implied lean for the NEXT meeting — this is a genuine proxy,
   // not a live feed. True meeting-by-meeting odds (CME FedWatch-style)
