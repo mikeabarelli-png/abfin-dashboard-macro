@@ -329,6 +329,35 @@ export default function Page() {
     { ticker: "GLDM", weight: 5,  job: "Hard asset hedge — exit pending",         sleeve: "trend" as const },
   ];
 
+  // CUR 40/55/5 is meant to be a FROZEN snapshot of Mike's actual holdings
+  // through early September, before the M2 rebalance, kept solely so the
+  // "CUR vs M2" comparison tile has a stable "before" to compare against.
+  // Deliberately a separate array from PORTFOLIO_POSITIONS (the live
+  // Holdings list): that one gets edited as real positions actually
+  // change (VGIT -> BND, etc.), and CUR must never inherit those edits or
+  // it stops being a valid historical baseline. VGIT's price data is
+  // still fetched server-side even though it's no longer a live holding,
+  // so this can still compute real returns.
+  const CUR_PORTFOLIO_POSITIONS = [
+    { ticker: "SGOV", weight: 20 },
+    { ticker: "VGIT", weight: 20 },
+    { ticker: "VEA",  weight: 15 },
+    { ticker: "SCHD", weight: 15 },
+    { ticker: "VTIP", weight: 15 },
+    { ticker: "VTI",  weight: 10 },
+    { ticker: "GLDM", weight: 5  },
+  ];
+  const curPositionCards = CUR_PORTFOLIO_POSITIONS.map(p => {
+    const d = positionsData?.[p.ticker] ?? null;
+    return {
+      ...p,
+      dailyPct: d?.dailyChangePct ?? null,
+      ytdReturnPct: d?.ytdReturnPct ?? null,
+      oneYearReturnPct: d?.oneYearReturnPct ?? null,
+      fiveYearReturnPct: d?.fiveYearReturnPct ?? null,
+    };
+  });
+
   const positionCards = PORTFOLIO_POSITIONS.map(p => {
     const d = positionsData?.[p.ticker] ?? null;
     const price: number | null = d?.price ?? null;
@@ -386,25 +415,25 @@ export default function Page() {
   // return. This is an ESTIMATE: it assumes today's weights were held
   // constant since Jan 1 with no rebalancing and no cash flows, so it will
   // drift from the actual brokerage-reported return over time.
-  const portfolioHasAllYtd = positionCards.every(p => p.ytdReturnPct != null);
+  const portfolioHasAllYtd = curPositionCards.every(p => p.ytdReturnPct != null);
   const portfolioYtdPct: number | null = portfolioHasAllYtd
-    ? positionCards.reduce((sum, p) => sum + (p.ytdReturnPct as number) * (p.weight / 100), 0)
+    ? curPositionCards.reduce((sum, p) => sum + (p.ytdReturnPct as number) * (p.weight / 100), 0)
     : null;
 
   // Same blend, but for today's change — mirrors the "Today" column already
   // shown on each position tile, so the benchmark row speaks the same
   // language as the cards below it.
-  const portfolioHasAllToday = positionCards.every(p => p.dailyPct != null);
+  const portfolioHasAllToday = curPositionCards.every(p => p.dailyPct != null);
   const portfolioTodayPct: number | null = portfolioHasAllToday
-    ? positionCards.reduce((sum, p) => sum + (p.dailyPct as number) * (p.weight / 100), 0)
+    ? curPositionCards.reduce((sum, p) => sum + (p.dailyPct as number) * (p.weight / 100), 0)
     : null;
-  const portfolioHasAllOneYear = positionCards.every(p => p.oneYearReturnPct != null);
+  const portfolioHasAllOneYear = curPositionCards.every(p => p.oneYearReturnPct != null);
   const portfolioOneYearPct: number | null = portfolioHasAllOneYear
-    ? positionCards.reduce((sum, p) => sum + (p.oneYearReturnPct as number) * (p.weight / 100), 0)
+    ? curPositionCards.reduce((sum, p) => sum + (p.oneYearReturnPct as number) * (p.weight / 100), 0)
     : null;
-  const portfolioHasAllFiveYear = positionCards.every(p => p.fiveYearReturnPct != null);
+  const portfolioHasAllFiveYear = curPositionCards.every(p => p.fiveYearReturnPct != null);
   const portfolioFiveYearPct: number | null = portfolioHasAllFiveYear
-    ? positionCards.reduce((sum, p) => sum + (p.fiveYearReturnPct as number) * (p.weight / 100), 0)
+    ? curPositionCards.reduce((sum, p) => sum + (p.fiveYearReturnPct as number) * (p.weight / 100), 0)
     : null;
 
   // Benchmarks — SPX already computed elsewhere as spxYtd/spxDailyPct;
@@ -516,7 +545,7 @@ export default function Page() {
       title: "Your Current Portfolio",
       subtitle: "Weighted by actual allocation · estimate, not brokerage-reported return",
       ytd: portfolioYtdPct, today: portfolioTodayPct, oneYear: portfolioOneYearPct, fiveYear: portfolioFiveYearPct,
-      components: positionCards.map(p => ({ ticker: p.ticker, weight: p.weight, ytd: p.ytdReturnPct, today: p.dailyPct, oneYear: p.oneYearReturnPct, fiveYear: p.fiveYearReturnPct })),
+      components: curPositionCards.map(p => ({ ticker: p.ticker, weight: p.weight, ytd: p.ytdReturnPct, today: p.dailyPct, oneYear: p.oneYearReturnPct, fiveYear: p.fiveYearReturnPct })),
     },
     idx4060: {
       title: "40/60 Index Proxy",
