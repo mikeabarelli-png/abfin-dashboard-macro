@@ -1067,6 +1067,17 @@ RESPONSE RULES:
               type Sig = { rank: number; label: string; value: string; sub: string; color: string; dotColor?: string; status: string; posPct?: number; bands?: Band[]; distance?: string; axisTicks?: { pos: number; label: string }[]; tickCaption?: string; centerPos?: number };
 
               const robertsColor = regimeGate==="trend_broken" ? "#ff6b88" : regimeGate==="near_ma" ? "#fbbf24" : "#4ade80";
+              // Same thresholds already driving this tile's status word and
+              // dot: below 0% = red, 0% to +3% = yellow (the established
+              // "near MA, watch closely" zone), above +3% = green. On the
+              // -10%/+10% scale: pos(0%) = 50%, pos(+3%) = 65%.
+              const robertsBands: Band[] = [{ color:"#ff6b88", from:0, to:50 }, { color:"#fbbf24", from:50, to:65 }, { color:"#4ade80", from:65, to:100 }];
+              // DJT's own gap vs its 200-DMA, same -10%/+10% scale as
+              // Roberts, but DJT's established watch line is 2%, not
+              // SPX's 3% (already used elsewhere on this dashboard).
+              // pos(0%) = 50%, pos(+2%) = 60%.
+              const djtBands: Band[] = [{ color:"#ff6b88", from:0, to:50 }, { color:"#fbbf24", from:50, to:60 }, { color:"#4ade80", from:60, to:100 }];
+              const djtCenterPos = djtVs200!=null ? Math.max(0, Math.min(100, ((djtVs200 + 10) / 20) * 100)) : 50;
               const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<40 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
               const hySpreadBps = hySpread*100;
               const hyColor = hySpread>=5 ? "#ff6b88" : hySpread>=4 ? "#fbbf24" : "#4ade80";
@@ -1147,7 +1158,7 @@ RESPONSE RULES:
               const signals: Sig[] = [
                 { rank:1,  label:"Roberts 40-Wk", value: spx200Pct!=null ? `${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}%` : "—", sub:"", color: robertsColor,
                   status: regimeGate==="trend_broken"?"Trend Broken":regimeGate==="near_ma"?"At the Line":regimeGate==="reclaiming"?"Reclaiming":"Bull Trend",
-                  centerPos: spx200Pct!=null ? Math.max(0, Math.min(100, ((spx200Pct + 10) / 20) * 100)) : 50,
+                  centerPos: spx200Pct!=null ? Math.max(0, Math.min(100, ((spx200Pct + 10) / 20) * 100)) : 50, bands: robertsBands,
                   axisTicks: [{ pos:0, label:"-10%" }, { pos:50, label:"0%" }, { pos:100, label:"+10%" }] },
                 { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor,
                   status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos, bands: breadthBands,
@@ -1164,8 +1175,11 @@ RESPONSE RULES:
                 { rank:6,  label:"Ivy Portfolio",       value: `${ivyInvestedCount}/5`, sub:"Multi-asset trend confirmation", color: ivyColor, dotColor: ivyDotColor,
                   status: ivyStatus, posPct: ivyPos, bands: ivyBands,
                   axisTicks: [{ pos:0, label:"0" }, { pos:20, label:"1" }, { pos:40, label:"2" }, { pos:60, label:"3" }, { pos:80, label:"4" }, { pos:100, label:"5" }] },
-                { rank:7,  label:"Schannep / Dow Theory", value: schannepLabel ?? "—", sub:"Economic confirmation, SPX + Transports", color: schannepColor,
-                  status: schannepLabel ?? "—" },
+                { rank:7,  label:"Schannep / Dow Theory", value: djtVs200!=null ? `${djtVs200>=0?"+":""}${djtVs200.toFixed(1)}%` : "—", sub:"Economic confirmation, SPX + Transports", color: schannepColor,
+                  status: schannepLabel ?? "—",
+                  centerPos: djtCenterPos, bands: djtBands,
+                  axisTicks: [{ pos:0, label:"-10%" }, { pos:50, label:"0%" }, { pos:100, label:"+10%" }],
+                  tickCaption: "DJT gap vs its own 200-DMA" },
                 { rank:8,  label:"Yield Curve",         value: `${yieldCurve>=0?"+":""}${yieldCurve.toFixed(2)}`, sub:"10Y-2Y spread · recession lead", color: ycColor,
                   status: ycColor==="#ff6b88"?"Inverted":ycColor==="#fbbf24"?"Flat":"Healthy", posPct: ycPos, bands: ycBands,
                   axisTicks: [{ pos:40, label:"0" }, { pos:60, label:"0.5" }] },
@@ -1236,7 +1250,7 @@ RESPONSE RULES:
                       <div className="status" style={{ color:s.color, fontSize:12, marginTop:2 }}>{s.status}</div>
                       {s.posPct != null && s.bands != null && <Bar posPct={s.posPct} bands={s.bands} />}
                       {s.centerPos != null && (
-                        <div style={{ position:"relative", height:5, borderRadius:9999, background:"#2a2f45", marginTop:8, marginBottom:2 }}>
+                        <div style={{ position:"relative", height:5, borderRadius:9999, background: s.bands ? bandGradient(s.bands) : "#2a2f45", marginTop:8, marginBottom:2 }}>
                           <div style={{ position:"absolute", top:-2, left:"50%", width:2, height:9, background:"#475569", transform:"translateX(-1px)", zIndex:1 }} />
                           <div style={{ position:"absolute", top:-2, left:`${Math.max(1,Math.min(s.centerPos,99))}%`, width:2, height:9, background:"#0b0b2a", border:"1px solid #fff", transform:"translateX(-1px)", zIndex:2 }} />
                         </div>
