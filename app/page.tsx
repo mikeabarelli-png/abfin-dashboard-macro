@@ -63,12 +63,6 @@ export default function Page() {
   const [marketData, setMarketData] = useState<AnyObj | null>(null);
   const [lastUpdated, setLastUpdated] = useState("");
   const [feedError, setFeedError] = useState("");
-  const [aiTab, setAiTab] = useState("summary");
-  const [aiCache, setAiCache] = useState<Record<string, string>>({});
-  const [aiLoading, setAiLoading] = useState(false);
-  const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatHistory, setChatHistory] = useState<{ role: string; text: string }[]>([]);
   const chartRef = useRef<any>(null);
   const rsiRef = useRef<any>(null);
   const macdRef = useRef<any>(null);
@@ -197,7 +191,7 @@ export default function Page() {
   const compositeSignal: string = metrics?.composite_signal ?? marketData?.composite_signal ?? "SLIGHT TILT";
   const compositeColor: string = metrics?.composite_color ?? marketData?.composite_color ?? "#fbbf24";
   const regimeGate: string = metrics?.regime_gate ?? marketData?.regime_gate ?? "hold";
-  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.52;
+  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.41;
   const fedStance: string = metrics?.fed_stance ?? marketData?.fed_stance ?? "holding";
   const fedFundsRate  = getNum(metrics?.fed_funds,          marketData?.fed_funds) ?? 4.33;
   const fedFundsYearAgo = getNum(metrics?.fed_funds_year_ago, marketData?.fed_funds_year_ago);
@@ -222,13 +216,14 @@ export default function Page() {
   const positionsData: AnyObj = metrics?.positions ?? marketData?.positions ?? {};
 
   // Official last month-end signals — update each month when Advisor Perspectives publishes
-  // Source: advisorperspectives.com/dshort · Last updated: Aug 31, 2026 · Valid until Sep 30, 2026
-  // VTI: Invested (+8.0%) · VEU: Invested (+7.6%) · IEF: Cash (-1.7%, closed below 10-mo SMA) · VNQ: Invested (+4.1%) · DBC: Invested (+15.8%)
+  // Source: advisorperspectives.com/dshort · Last updated: Sep 30, 2026 · Valid until Oct 31, 2026
+  // VTI: Invested · VEU: Invested · IEF: Cash (still below 10-mo SMA) · VNQ: Cash (new, closed below 10-mo SMA) · DBC: Invested
+  // 12-mo SMA check: IEF below, VNQ within 2% of its line.
   const ivyOfficialSignals: Record<string, "Invest" | "Cash"> = {
-    vti: "Invest", veu: "Invest", ief: "Cash", vnq: "Invest", dbc: "Invest"
+    vti: "Invest", veu: "Invest", ief: "Cash", vnq: "Cash", dbc: "Invest"
   };
-  const ivyOfficialDate = "Aug 31";
-  const ivyEOMDate = "Sep 30";
+  const ivyOfficialDate = "Sep 30";
+  const ivyEOMDate = "Oct 31";
 
   const ivyPositions = [
     { ticker:"VTI", name:"US Stocks",     key:"vti" },
@@ -672,174 +667,6 @@ export default function Page() {
   const spx200Pct = spxVs(spx200);
   const is200Broken = spx200Pct != null && spx200Pct < 0;
   // ─────────────────────────────────────────────────────────────────────────
-
-  const investorProfile = `
-INVESTOR PROFILE — Filter ALL recommendations through this context:
-- Age: 54 years old. Target retirement: ~5 years (age ~59).
-- Priority: Sequence-of-returns risk management. Protecting 30 years of accumulated wealth in the final mile is the #1 objective. A catastrophic drawdown in the next 5 years cannot be recovered from on the retirement timeline.
-- Psychological profile: Resilient — would not panic-sell a 30% drawdown, might buy more. But intellectually understands that discipline at this stage means NOT needing to test that resolve.
-- Income: Strong external income still coming in. Portfolio does not need to generate income yet — it needs to survive and grow moderately.
-- Current positioning: Already defensively positioned at 40/60 equity/bond — an intentional, valuation-driven decision given CAPE at 40x. This is not fear — it is discipline.
-- Cash view: Treats SGOV (5% T-bills) as a legitimate asset class at current rates, not dead money. Aligned with Buffett's current $373B T-bill positioning.
-- Inflation awareness: VTIP position reflects explicit concern about inflation eroding purchasing power — a real risk at 5 years from retirement.
-- Future intent: Wants to shift more aggressive when valuations normalize — not a permanent bear, a disciplined opportunist waiting for better prices.
-- Key fear: Sequence-of-returns risk event (2008-style) in the 2–5 year window before retirement. A 40–50% drawdown at age 56–58 with no time to recover is the nightmare scenario.
-
-CURRENT PORTFOLIO (7 positions, 100%):
-EQUITY (40% total):
-  - VTI  10% — Vanguard Total Market (US broad exposure)
-  - SCHD 15% — Schwab Dividend Equity (quality/value tilt, lower vol)
-  - VEA  15% — Vanguard Developed Markets Intl (cheap on valuation, Grantham-approved)
-FIXED INCOME (55% total):
-  - SGOV 20% — iShares 0-3M T-Bills (~5% yield, zero duration risk, Buffett positioning)
-  - VTIP 20% — Vanguard Short-Term TIPS (inflation hedge, real return protection)
-  - VGIT 15% — Vanguard Intermediate Treasury (some duration, quality fixed income)
-REAL ASSETS (5%):
-  - GLDM 5% — SPDR Gold (Dalio all-weather tail risk hedge)
-
-PORTFOLIO INTERPRETATION FOR AI:
-- The 60% fixed income/cash is not timid — it is appropriate and sophisticated for a 54-year-old at CAPE 40x with a 5-year retirement horizon
-- SGOV + VTIP = 40% explicitly protecting against the two biggest retirement risks: market crash and inflation
-- SCHD and VEA represent quality equity exposure with lower drawdown profiles than pure growth
-- No long-duration bonds — avoided the 2022 bond massacre. Intermediate only (VGIT)
-- Gold at 5% provides uncorrelated tail hedge without being a speculative position
-- When triggers fire or conditions deteriorate further, defensive posture = reduce VTI first, hold SCHD and VEA, increase SGOV
-- When valuations normalize (CAPE toward 20–25x, ERP above 5%), the playbook shifts: gradually increase VTI, add domestic quality growth, reduce SGOV as T-bill rates fall
-
-FRAMING RULE: Every recommendation must answer "given that this investor is 5 years from retirement with a 40/60 portfolio already positioned defensively, does this change anything — and if so, specifically what and why?"`;
-
-  const systemPrompt = `You are a Personal Wealth Strategist — a single synthesized voice drawing from the frameworks of twelve of the world's most respected market thinkers: Lance Roberts (technical discipline, trend analysis), Howard Marks (risk-first, probabilistic thinking), Stanley Druckenmiller (asymmetric macro positioning), Warren Buffett (patience, valuation, burden of proof), Ray Dalio (debt cycle awareness, structural risk), John Hussman (valuation math, internals as timing filter), James Stack (capital preservation, checklist discipline), Rick Rieder (credit markets, dispersion regime), Jeremy Grantham (bubble anatomy, mean reversion gravity), Peter Leyden (secular bull case, productivity supercycle), Doug Noland (credit plumbing, leverage unwind risk), Pieter Slegers (quality framework, moat durability), and Henrik Zeberg (Elliott Wave structure, sentiment cycles, contrarian rally thesis).
-
-${investorProfile}
-
-YOUR VOICE AND APPROACH:
-You are not a data summarizer. The investor can read the dashboard numbers themselves. Your job is to tell them what those numbers mean — what's hiding beneath the surface, what the historical analogs suggest, what the market is pricing in that it probably shouldn't be, and where the real risk is coming from that isn't obvious. Think like Roberts writing his weekly Bull Bear Report or Noland writing his Credit Bubble Bulletin — you're connecting dots across credit, technicals, sentiment, and macro that most investors don't see until it's too late.
-
-You speak with calm authority, like a trusted advisor who has seen many cycles. You present the bull and bear case honestly but you don't hide behind false balance — when the weight of evidence leans one way, you say so directly. You anchor every insight to specific numbers but you go beyond the numbers to explain the mechanism: why does this level matter, what happens next when it breaks, what are market participants not pricing in. You never pretend to know what markets will do — but you define the probabilities and name the levels that would change your view.
-
-Most importantly: you write about what's really going on underneath, not what's on the surface. If breadth is deteriorating while the index holds — say what that means and why it matters. If credit spreads are widening while stocks rally — explain the tension and which market is right. If sentiment is at extremes — explain the mechanism by which that resolves. The investor already has the data. Give them the insight.
-
-CORE FRAMEWORKS YOU APPLY:
-1. VALUATION FIRST (Buffett/Hussman/Grantham): CAPE at ${capeRatio.toFixed(1)}x is in the top 5% of all historical readings. ERP at ${erpBps != null ? (erpBps/100).toFixed(2) : "~2.2"}% is below the 5% healthy threshold. 4/5 valuation models signal overvalued. The burden of proof is on the bull case. High CAPE does not predict timing — but it means the margin of safety is thin and 10-year forward returns are historically poor from this level. Grantham's warning: the Internet was real and still produced a 78% Nasdaq crash. Leyden's counterpoint: we may be early in a genuine productivity supercycle. Hold this tension — don't resolve it prematurely.
-2. TREND DISCIPLINE (Roberts/Stack): The 200-DMA is the line between a correction and a bear market. The 100-DMA is the short-term bull/bear line. The trend is your friend until it bends — but "resilience is not the same as safety." Defensive trigger = two consecutive Friday closes below SPX 200-DMA (${fmtWhole(spx200)}) AND VIX >30 OR HY >400bps. Rules exist so emotion doesn't override discipline.
-3. SUSTAINED vs BRIEF 200-DMA BREAK (Roberts — Mar 23 2026): The 200-DMA break is not a verdict. It is a question. Since 2000, there have been 12 breaks. Seven were sustained (avg 12-month return: -4.0%, zero positive first months). Five were brief whipsaws (avg 12-month return: +19.8%, 100% positive at 3/6/9/12 months). The difference is determined by a 6-indicator scorecard — when 3+ fire simultaneously, sustained decline follows; 0-1 firing = almost always a whipsaw. The six indicators: (1) 200-DMA slope direction — flat/falling = sustained, rising = whipsaw; (2) Weekly MACD — negative before price confirms = sustained; (3) RSI below 32 at break = fear capitulated = bullish contrarian signal; (4) AAII Bears above 45% = too much pessimism = contrarian buy; (5) Breadth below 40% of SPX members above their 200-DMA before the break = sustained; (6) 50-DMA converging toward 200-DMA (death cross forming) = sustained. CURRENT SCORECARD (Mar 23 2026): 200-DMA slope still rising ✅ bullish; Weekly MACD turned negative ❌ bearish; RSI in low 30s ✅ bullish; AAII Bears at 52% (above 45% threshold) ✅ bullish; Breadth at 46% ❌ bearish; No death cross forming ✅ bullish. Score: 2/6 sustained break indicators firing. Roberts' verdict: "CAUTION zone" — more like 2015 or Q4 2018 than 2008. A lower low is possible before recovery, but a reflexive rally is likely first. The goal is NOT to go to cash — it is to reduce the cost of being wrong while staying positioned for recovery. For this investor: trim VTI modestly if a second Friday close below ${fmtWhole(spx200)} confirms, hold SCHD/VEA/GLDM, keep SGOV/VTIP full. Watch the 200-DMA SLOPE — if it begins declining over the next 4-6 weeks while price stays below, the scorecard upgrades to 3-4 and the playbook shifts to full defense.
-3. MOVING AVERAGE HIERARCHY (Roberts): 20/50-DMA = short-term momentum. 100-DMA = intermediate trend support, if lost confirms topping process. 200-DMA = corrective process signal, sustained break = bear market likely. 52-week MA = cyclical bear confirmation. 208-week MA = if this fails, bears have full control.
-4. ROTATION VS DETERIORATION TEST (Roberts): Defensive sector outperformance is only truly bearish when BOTH earnings estimates are falling AND jobless claims are rising. Without both, defensive rotation may simply be healthy broadening, not distribution.
-5. CREDIT LEADS EQUITIES (Noland/Rieder): HY spreads, bank CDS, and swap spreads moving together signals systemic risk, not just technical weakness. Credit stress compounds non-linearly. Small spread moves are warnings. Spread moves accompanied by bank CDS widening are a different animal entirely. Watch the pipes before the flood.
-6. RISK PRICING (Marks): Always ask — what am I being paid to accept this risk? At current ERP of ${erpBps != null ? (erpBps/100).toFixed(2) : "~2.2"}%, T-bills at ~5% offer meaningful competition with zero equity risk. The asymmetry must favor the investor, not the market.
-7. CAPITAL PRESERVATION MATH (Stack/Buffett): A 50% loss requires a 100% gain to recover. Avoiding the big loss is mathematically more important than capturing the next 20% gain. Patience is a competitive advantage — "Often, nothing looks compelling; very infrequently, we find ourselves knee-deep in opportunities."
-8. DEBT CYCLE AWARENESS (Dalio): The most dangerous period for equities is 12-18 months AFTER the yield curve un-inverts, not during inversion. The lagged effects of prior tightening are still working through the economy. Foreign confidence in US assets (watch DXY) is a structural risk.
-9. DISPERSION REGIME (Rieder): The easy money from generic index investing is over. Labor softening is the key pothole to watch. Balance sheet quality — free cash flow, low debt — matters more in a higher-for-longer rate environment. Idiosyncratic risk is rising.
-10. LEVERAGE UNWIND RISK (Noland): When crowded levered trades break, correlations go to 1. Diversification fails exactly when needed. External shocks don't create vulnerabilities — they reveal ones already there.
-11. SENTIMENT & WAVE STRUCTURE (Zeberg): Markets move on expectations and positioning, not just fundamentals. When sentiment is extremely bearish and positioning is defensively crowded, the path of least resistance is often a sharp counter-trend rally — the "most hated rally" — before the fundamental thesis ultimately plays out. The 2007 analog: Nasdaq rallied 25% August–October while recession was already inevitable. Wave 5 structures in long-term bull markets are characterized by acceleration, narrative dominance, and overconfidence — then severe structural correction. Current tech bull market (2002–2026) shows Wave 5 exhaustion characteristics. The contrarian read: extreme fear and defensive positioning can fuel violent short-term rallies that feel like confirmation the system is holding — but are actually the final phase. Do not panic-sell into maximum fear, but do not interpret the resulting rally as an all-clear. Use Zeberg's framework to AVOID reactive decisions at emotional extremes in either direction.
-12. CDX / CREDIT LEADING INDICATOR (Roberts — Mar 21 2026): The CDX Index (credit default swaps) is the bond market's real stress gauge — harder to manipulate than equities, not susceptible to retail momentum. KEY SIGNAL: When CDX hits a 9-month high while SPX is within 5% of its all-time high, a bear market has followed every single time over 20 years (2007 → GFC, 2015 → correction, 2022 → -25% bear). This signal is currently ACTIVE in 2026. Direction of travel matters more than absolute level — don't wait for the spike, act on the trend. Current backdrop per Roberts (Mar 21 2026): S&P closed at 6,506, down 7.1% from January ATH of 7,002. Fourth consecutive weekly loss. 200-DMA (~6,620) decisively broken and failed every attempt to reclaim. Failed mid-week bull trap (Monday/Tuesday relief rally reversed violently on Fed Wednesday). PPI +0.7% MoM hottest since July 2025, pipeline inflation building. Fed hawkish hold at 3.5-3.75%, dot plot pointing to just 1 cut in 2026, 7 participants signaling zero cuts. Powell: "not as much progress as we had hoped." Private credit deteriorating quietly — Blackstone, Blue Owl, BlackRock redemption requests approaching 5% threshold. Iraq force majeure on oil fields broadening Hormuz disruption. Brent above $108. Technical composite at 23.98 — very oversold, reflexive rally odds increasing. Roberts' framework: "This is a shopping list market, not a buy-everything market. Accumulate quality at pre-defined levels (6,400 then 6,300). Treat every bounce as suspect until VIX sustains below 20 and oil finds a ceiling. Defense over offense." Oil is the master switch — Brent below $95 gives Fed breathing room; above $110 keeps Fed frozen and deepens the landing.
-13. ROBERTS 15 RULES — THE PROCESS GUARDRAILS (Roberts — May 2026): These rules govern every recommendation you make for this investor. They are not predictions. They are circuit breakers that prevent emotional decisions from overriding the framework. Apply them explicitly when generating recommendations.
-  RULE 4 — FOLLOW THE TREND: 80% of portfolio performance is determined by the long-term monthly trend. In a bull market, be LONG or NEUTRAL. In a bear market, be NEUTRAL or short. The 200-DMA defines the regime. Currently: 200-DMA rising at +1.6%, SPX +11% above it. Trend is BULL. Correct posture: Long + Neutral (currently 40% Long + 60% Neutral). Do NOT short the trend. Do NOT add aggressively at extremes.
-  RULE 8 — FUNDAMENTALS CONFIRMED BY PRICE: When fundamental story and price action diverge, sit on your hands. Currently: Price action is BULLISH (new ATH, momentum intact). Fundamentals are BEARISH (CAPE 42x, Buffett 2.6σ, ERP 2.07%). This divergence means hold current exposure — don't add and don't reduce unless the trigger fires.
-  RULE 10 — POSITION FOR THE REGIME: Long or Neutral in a bull market. Never short a bull trend. The regime is defined by the 200-DMA, not by valuation. This investor is correctly positioned: 40% Long (equity) + 60% Neutral (SGOV/VTIP/VGIT). That IS the rule in practice.
-  RULE 11 — AT EXTREMES, DO THE OPPOSITE: When cover of every magazine is bullish, take some off the table. When panic is maximum, start scaling in. Currently: Fear & Greed at 67 (Greed zone, not Extreme Greed yet). Consumer Confidence still at -2.40σ (still fearful, though less extreme than a month ago). Not yet at the extreme that triggers the fade. Watch for Fear & Greed approaching 85+ as the signal to reduce equity.
-  RULE 15 — MANAGE RISK FIRST, RETURNS ARE A BYPRODUCT: A 50% loss requires a 100% gain to recover. A 20% loss requires only 25%. This investor with 5 years to retirement cannot afford the 50% scenario. Every recommendation must answer: what is the maximum drawdown of this position, and can this investor recover from it on their timeline? SGOV at 60% of portfolio means maximum drawdown from fixed income is minimal. The equity sleeve at 40% in a 50% bear market = 20% total portfolio loss. Recoverable. At 60% equity in same bear = 30% total loss. Harder to recover with 5 years of runway.
-  RULE 3 — EMOTION VOIDS PROCESS: If the recommendation changes because the market just went up 18% in 8 weeks, that is an emotional decision. FOMO is not a framework. The planner saying "invest like a grandma" is social pressure, not data. The composite score is the framework. Follow it.
-  RULE 5 — TRADING OPPORTUNITY vs LONG-TERM INVESTMENT: SGOV at 5% yield is a tactical position tied to the current rate environment. When Fed cuts and T-bill yields fall to 3%, the calculus changes. SGOV is not a permanent allocation — it is the right allocation NOW. Monitor and adjust when the rate regime shifts.
-  SYNTHESIS FOR THIS INVESTOR: Long/Neutral posture at 40/60 is correct per Rule 10. No emotional override per Rule 3. No adding to equity at CAPE 42x with fundamental/price divergence per Rule 8. No shorting the trend per Rule 4. Manage the downside per Rule 15. Fade extreme euphoria per Rule 11 when F&G hits 85+. The rules say: hold the line.
-
-OUTPUT FORMAT — CRITICAL INSTRUCTION:
-Write in Lance Roberts' voice — direct, confident, data-anchored prose. NOT bullet points. Think of his weekly Bull Bear Report style: short punchy paragraphs, every claim backed by a specific number, clear narrative arc from tape → credit → valuation → action. 
-
-Structure your response as 3-4 short paragraphs maximum. Each paragraph should open with the key point, support it with specific data from the dashboard, and connect it to what it means for this investor. No filler. No hedging. No "it depends." Name the specific price level or indicator that would change your view. End with one clear sentence — the single most important thing to watch or do right now.
-
-Forbidden phrases: "it's important to note," "investors should consider," "in conclusion," "on the other hand." 
-Required elements: at least 3 specific numbers from the dashboard, the 200-DMA level by name, and one named position from the portfolio.
-
-CURRENT DASHBOARD DATA (live):
-- SPX: ${spxPrice != null ? fmtWhole(spxPrice) : "loading"} | Today: ${spxDailyPct != null ? spxDailyPct.toFixed(2) + "%" : "?"} | YTD: ${spxYtd.toFixed(2)}%
-- vs 20-DMA (${fmtWhole(spx20)}): ${spxVs(spx20) != null ? fmtSigned1(spxVs(spx20)!) : "?"}
-- vs 50-DMA (${fmtWhole(spx50)}): ${spxVs(spx50) != null ? fmtSigned1(spxVs(spx50)!) : "?"}
-- vs 100-DMA (${fmtWhole(spx100)}): ${spxVs(spx100) != null ? fmtSigned1(spxVs(spx100)!) : "?"}
-- vs 200-DMA (${fmtWhole(spx200)}): ${spxVs(spx200) != null ? fmtSigned1(spxVs(spx200)!) : "?"} ${is200Broken ? "⚠ BREACHED" : ""}
-- DMAs broken: ${damageCount}/4
-- VIX: ${vixValue != null ? fmt1(vixValue) : "loading"} ${vixValue != null && vixValue >= 30 ? "⚠ ABOVE TRIGGER" : ""}
-- HY Spread: ${hySpread.toFixed(2)}% ${hySpread >= 4 ? "⚠ ABOVE TRIGGER" : `(${Math.round((4-hySpread)*100)}bps to trigger)`}
-- Yield Curve (10Y-2Y): ${yieldCurve.toFixed(2)}%
-- Real 10Y: ${real10y.toFixed(2)}% | Nominal 10Y: ${nom10y.toFixed(2)}%
-- Fed Funds: ${fedFunds.toFixed(2)}% | 5Y Breakeven: ${breakeven5y.toFixed(2)}%
-- ERP: ${erpBps != null ? (erpBps/100).toFixed(2) + "%" : "unavailable"}
-- CAPE: ${capeRatio.toFixed(1)}x
-- Fear & Greed: ${Math.round(fearGreedScore)} — ${fearGreedRating} ${fearGreedScore <= 20 ? "⚠ EXTREME FEAR (contrarian rally setup — Zeberg)" : fearGreedScore >= 80 ? "⚠ EXTREME GREED (Grantham bubble warning)" : ""}
-- DXY: ${dxy != null ? dxy.toFixed(2) : "loading"}
-- Brent Crude: ${brentPrice != null ? `$${brentPrice.toFixed(2)}` : "loading"}${brentChangePct != null ? ` (${brentChangePct >= 0 ? "+" : ""}${brentChangePct.toFixed(1)}% today)` : ""} · ${brentRegime === "frozen" ? "⚠ Above $110 — Fed frozen, deepens landing risk" : brentRegime === "watch" ? "Watch zone $95-110 — Fed limited" : brentRegime === "neutral" ? "Neutral $80-95" : brentRegime === "room" ? "Below $80 — Fed has room to cut" : "loading"}
-- Fed Balance Sheet (WALCL): ${walclBn != null ? `$${(walclBn/1000).toFixed(2)}T` : "loading"}${walclChgBn != null ? ` · ${walclChgBn > 0 ? "▲" : "▼"} $${Math.abs(walclChgBn)}B WoW · ${walclDirection}` : ""}
-- Dow Transports (DJT): ${djtPrice != null ? fmtWhole(djtPrice) : "loading"} vs 200-DMA ${djt200dma != null ? fmtWhole(djt200dma) : "—"} (${djtVs200 != null ? `${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : "?"}) · Slope: ${djt200slope != null ? `${djt200slope > 0 ? "↗" : "↘"} ${djt200slope.toFixed(1)}%` : "—"}
-- Schannep 2-of-3 Signal: ${schannepLabel} — ${schannepSignal === "non_confirmation_bear" ? "SPX broken but DJT not confirming — watch closely" : schannepSignal === "bear" ? "Both indices below 200-DMA — strongest bear signal" : schannepSignal === "non_confirmation_bull" ? "DJT holding, potential recovery setup" : "Both confirming bull"}
-- Ivy Portfolio: ${ivyInvestedCount}/5 assets Invested · ${ivyPositions.filter(p => p.officialSignal === "Cash").map(p => p.ticker).join(", ") || "none"} in Cash as of ${ivyOfficialDate} close · ${ivyPositions.filter(p => p.variance != null && Math.abs(p.variance) < 2).map(p => p.ticker + " NEAR SIGNAL").join(", ") || "No positions near signal line"}
-- Valuation models: 5 of 6 overvalued (4 Strongly Overvalued, 1 Overvalued) · only Earnings Yield Gap reads Fairly Valued
-
-RESPONSE RULES:
-- Always use actual numbers from the dashboard — never speak in generalities
-- Lead with what the data says, then what the frameworks say, then what to do
-- Present the bull and bear case when the evidence supports both
-- Name the specific price level or indicator that would change your view
-- Never predict — assess probabilities and define the levels that resolve uncertainty
-- Be direct and concise — this investor is sophisticated, not a beginner
-- End every response with a clear action or watch item
-- The trend is your friend until it bends. The rules exist for a reason. Don't fight the tape, but don't ignore the price being paid for risk.`;
-
-  const callClaude = async (prompt: string, key: string, msgs?: { role: string; content: string }[]) => {
-    setAiLoading(true);
-    try {
-      const res = await fetch("/api/ai-strategist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ systemPrompt, messages: msgs ?? [{ role: "user", content: prompt }] }),
-      });
-      const data = await res.json();
-      const text = data.text ?? data.error ?? "Unable to load.";
-      if (!msgs) setAiCache(prev => ({ ...prev, [key]: text }));
-      return text;
-    } catch (err: any) {
-      const text = `Error: ${err?.message ?? "Request failed"}`;
-      if (!msgs) setAiCache(prev => ({ ...prev, [key]: text }));
-      return text;
-    } finally { setAiLoading(false); }
-  };
-
-  useEffect(() => {
-    callClaude(`Using the live dashboard data as context, write a market insight piece in the style of Lance Roberts' Bull Bear Report. Don't summarize the data — interpret it. What is the market really telling us right now that isn't obvious from the headline numbers? What is the tension between what equities are pricing and what credit markets are saying? What historical analog best fits the current setup and what does that analog predict about the path forward? What are most investors getting wrong about this moment? Write 3-4 paragraphs of genuine insight. End with the single most important thing to understand about this market right now.`, "summary");
-  }, []);
-
-  const handleAiTab = (tab: string) => {
-    setAiTab(tab);
-    const prompts: Record<string, string> = {
-      summary: `Using the live dashboard data as context, write a market insight piece in the style of Lance Roberts' Bull Bear Report. Don't summarize the data — interpret it. What is the market really telling us right now that isn't obvious from the headline numbers? What is the tension between what equities are pricing and what credit markets are saying? What historical analog best fits the current setup and what does that analog predict about the path forward? What are most investors getting wrong about this moment? Write 3-4 paragraphs of genuine insight. End with the single most important thing to understand about this market right now.`,
-      action: `Using the live dashboard data, write a portfolio strategy note in the style of Lance Roberts — not a to-do list, but a genuine strategic assessment of where this investor stands and what the framework is saying. This investor is 54 years old, 5 years from retirement, 40/60 equity/bond, holding VTI/SCHD/VEA/SGOV/VTIP/VGIT/GLDM. What is the current regime telling you about their positioning? What are the hidden risks in their portfolio that the headline allocation doesn't reveal? What would the framework need to see to change the posture — and what specifically would that look like in practice? Don't just list actions — explain the reasoning behind the framework and why discipline matters more than reaction at this stage of the market cycle.`,
-      triggers: `Using the live dashboard data, write a trigger and risk assessment in the style of Doug Noland's Credit Bubble Bulletin — focused on what's happening beneath the surface of the market that most investors aren't watching. Where is the stress building that hasn't shown up in equity prices yet? What does the credit market know that equities don't? Walk through the Roberts 6-indicator scorecard for sustained vs brief 200-DMA breaks — but go beyond listing the indicators to explain what each one is actually measuring and why it matters. What is the mechanism by which this correction either resolves or deepens? Name the specific tripwire that separates a 2015-style whipsaw recovery from a 2022-style sustained bear.`,
-    };
-    if (tab !== "chat" && !aiCache[tab]) callClaude(prompts[tab], tab);
-  };
-
-  const refreshAiTab = () => {
-    const prompts: Record<string, string> = {
-      summary: `Using the live dashboard data as context, write a market insight piece in the style of Lance Roberts' Bull Bear Report. Don't summarize the data — interpret it. What is the market really telling us right now that isn't obvious from the headline numbers? What is the tension between what equities are pricing and what credit markets are saying? What historical analog best fits the current setup and what does that analog predict about the path forward? What are most investors getting wrong about this moment? Write 3-4 paragraphs of genuine insight. End with the single most important thing to understand about this market right now.`,
-      action: `Using the live dashboard data, write a portfolio strategy note in the style of Lance Roberts — not a to-do list, but a genuine strategic assessment of where this investor stands and what the framework is saying. This investor is 54 years old, 5 years from retirement, 40/60 equity/bond, holding VTI/SCHD/VEA/SGOV/VTIP/VGIT/GLDM. What is the current regime telling you about their positioning? What are the hidden risks in their portfolio that the headline allocation doesn't reveal? What would the framework need to see to change the posture — and what specifically would that look like in practice? Don't just list actions — explain the reasoning behind the framework and why discipline matters more than reaction at this stage of the market cycle.`,
-      triggers: `Using the live dashboard data, write a trigger and risk assessment in the style of Doug Noland's Credit Bubble Bulletin — focused on what's happening beneath the surface of the market that most investors aren't watching. Where is the stress building that hasn't shown up in equity prices yet? What does the credit market know that equities don't? Walk through the Roberts 6-indicator scorecard for sustained vs brief 200-DMA breaks — but go beyond listing the indicators to explain what each one is actually measuring and why it matters. What is the mechanism by which this correction either resolves or deepens? Name the specific tripwire that separates a 2015-style whipsaw recovery from a 2022-style sustained bear.`,
-    };
-    if (aiTab !== "chat") {
-      setAiCache(prev => { const n = {...prev}; delete n[aiTab]; return n; });
-      callClaude(prompts[aiTab], aiTab);
-    }
-  };
-
-  const sendChat = async () => {
-    const q = chatInput.trim();
-    if (!q || aiLoading) return;
-    setChatInput("");
-    const newMsgs = [...chatMessages, { role: "user", content: q }];
-    setChatMessages(newMsgs);
-    setChatHistory(prev => [...prev, { role: "user", text: q }]);
-    const reply = await callClaude("", "chat", newMsgs);
-    setChatMessages([...newMsgs, { role: "assistant", content: reply }]);
-    setChatHistory(prev => [...prev, { role: "assistant", text: reply }]);
-  };
 
   const sparkline = (points: number[], color: string) => {
     const w = 100, h = 22;
@@ -3103,7 +2930,7 @@ RESPONSE RULES:
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Valuation, Recession &amp; Sentiment Models</div><div className="panelSub">Sigma scores vs historical norm · Standard deviation from mean</div></div>
-              <div style={{ textAlign:"right" }}><div className="pstamp">Updated Aug 14 · Next: Aug 22</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
+              <div style={{ textAlign:"right" }}><div className="pstamp">Updated Oct 2 · Next: Oct 10</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
             </div>
 
             {/* Valuation Models */}
@@ -3112,12 +2939,12 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.59", color:"#ff6b88" },
-                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.34", color:"#ff6b88" },
-                  { name:"Price/Sales",            rating:"Overvalued",          score:"1.90", color:"#fbbf24" },
-                  { name:"Interest Rate Model",    rating:"Strongly Overvalued", score:"2.18", color:"#ff6b88" },
-                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.57", color:"#ff6b88" },
-                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.27", color:"#94a3b8", muted:true },
+                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.41", color:"#ff6b88" },
+                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.18", color:"#ff6b88" },
+                  { name:"Price/Sales",            rating:"Overvalued",          score:"1.50", color:"#fbbf24" },
+                  { name:"Interest Rate Model",    rating:"Strongly Overvalued", score:"2.26", color:"#ff6b88" },
+                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.45", color:"#ff6b88" },
+                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.45", color:"#94a3b8", muted:true },
                 ].map(r => (
                   <tr key={r.name} style={{ opacity:(r as any).muted?0.4:1 }}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:(r as any).muted?"italic":"normal" }}>{r.name}</td>
@@ -3129,9 +2956,9 @@ RESPONSE RULES:
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Valuation Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>4 of 5 Strongly Overvalued · Aug 14 · Historically stretched</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>4 of 5 Strongly Overvalued · Oct 2 · Historically stretched</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Interest Rate Model moved back to Strongly Overvalued while Price/Sales eased to Overvalued, so the top tier is still 4 of 5 models with a different member. Buffett 2.59σ and CAPE 42.06x remain deep in Strongly Overvalued territory, still below but closing on the 2000 dot-com extremes.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Every model eased since mid-August, but the tiers held. Buffett slipped to 2.41σ, CAPE to 2.18σ, and Price/Sales to 1.50σ. Interest Rate Model rose to 2.26σ, the only one that moved up, consistent with the September Fed hike. Still historically stretched, just less extreme than six weeks ago.</span>
             </div>
 
             {/* Recession Models */}
@@ -3140,9 +2967,9 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Yield Curve",       rating:"Very High Risk", score:"2.38",  color:"#ff6b88", updated:"Aug 14" },
-                  { name:"Sahm Rule",         rating:"Normal",         score:"N/A",   color:"#4ade80", updated:"Jul 31" },
-                  { name:"State Coincidence", rating:"Normal",         score:"-0.24", color:"#4ade80", updated:"Jun 30" },
+                  { name:"Yield Curve",       rating:"High",           score:"1.98",  color:"#fbbf24", updated:"Oct 2" },
+                  { name:"Sahm Rule",         rating:"Low",            score:"N/A",   color:"#4ade80", updated:"Sep 30" },
+                  { name:"State Coincidence", rating:"Normal",         score:"-0.42", color:"#4ade80", updated:"Aug 31" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -3157,9 +2984,9 @@ RESPONSE RULES:
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Recession Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Mixed — Yield Curve elevated</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Mixed · Yield Curve easing</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Yield Curve eased slightly to 2.38σ but remains at Very High Risk — re-steepening after inversion historically precedes recession 12–18 months out. Sahm Rule and State Coincidence not yet confirming.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Yield Curve dropped from Very High Risk to High at 1.98σ (from 2.38σ). Re-steepening after inversion has historically preceded recession by 12 to 18 months, so this still warrants watching. Sahm Rule reads Low and State Coincidence is Normal at -0.42σ, so the labor and state-level data are not confirming.</span>
             </div>
 
             {/* Sentiment Models */}
@@ -3201,11 +3028,11 @@ RESPONSE RULES:
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Economic Uncertainty Index", rating:"Neutral",          score:"0.53",  color:"#94a3b8", updated:"Aug 14", note:"eased from pessimistic" },
-                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.60", color:"#4ade80", updated:"Aug 14", note:"contrarian bullish" },
-                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.21",  color:"#fbbf24", updated:"Jun 30", note:"still elevated" },
-                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.99",  color:"#94a3b8", updated:"Aug 14", note:"tightening" },
-                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.61", color:"#94a3b8", updated:"Aug 14", note:"below 20 — calm" },
+                  { name:"Economic Uncertainty Index", rating:"Pessimistic",      score:"1.04",  color:"#4ade80", updated:"Oct 2",  note:"back up from neutral" },
+                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.80", color:"#4ade80", updated:"Sep 25", note:"contrarian bullish" },
+                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.16",  color:"#fbbf24", updated:"Aug 31", note:"still elevated" },
+                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.77",  color:"#94a3b8", updated:"Oct 2",  note:"tightening" },
+                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.39", color:"#94a3b8", updated:"Oct 2",  note:"below 20, calm" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -3223,9 +3050,9 @@ RESPONSE RULES:
             </table>
             <div className="sumBar">
               <span className="sumBarLabel">Sentiment Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism — Contrarian Bullish · Aug 14</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism · Contrarian Bullish · Oct 2</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Consumer Confidence deepened to -2.60σ from -2.40σ, still historically pessimistic. Economic Uncertainty eased all the way to Neutral at 0.53σ from 1.55σ. VIX drifted to -0.61σ, still calm. Contrarian signal remains intact.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Consumer Confidence fell further to -2.80σ, its most pessimistic reading on this dashboard. Economic Uncertainty climbed back to Pessimistic at 1.04σ. Margin Debt cooled slightly to 1.16σ but is still Optimistic, so retail leverage hasn't unwound. VIX and junk spreads remain calm. Contrarian signal still intact.</span>
             </div>
           </section>
 
@@ -4071,7 +3898,6 @@ RESPONSE RULES:
         .meta{text-align:right;font-size:12px;font-weight:600;line-height:1.35;color:#e2e8f0;}
         .errorBar{margin-bottom:12px;border:1px solid rgba(255,79,114,0.5);background:rgba(127,29,29,0.45);color:#fecdd3;border-radius:12px;padding:10px 14px;font-size:12px;font-weight:600;}
         .panel{background:#23255a;border-radius:16px;padding:14px;margin-bottom:14px;}
-        .panelAI{background:#0a1628;border:1px solid rgba(99,179,237,0.2);}
         .panelHeader{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;}
         .panelTitle{font-size:17px;font-weight:700;}
         .panelSub{font-size:11px;font-weight:600;color:#cbd5e1;margin-top:2px;}
@@ -4118,22 +3944,6 @@ RESPONSE RULES:
         .ivyTable td{padding:9px 12px;border-bottom:0.5px solid rgba(255,255,255,0.05);}
         .sumBar{background:#030720;border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
         .sumBarLabel{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;flex-shrink:0;}
-        .aiHeader{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
-        .aiIcon{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
-        .aiSub{font-size:11px;color:#475569;margin-top:1px;}
-        .aiTabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
-        .aiTab{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;}
-        .aiTabOn{background:rgba(59,130,246,0.2)!important;border-color:rgba(59,130,246,0.4)!important;color:#93c5fd!important;}
-        .aiOut{background:#060e1c;border-radius:10px;padding:14px;font-size:13px;line-height:1.7;color:#cbd5e1;min-height:80px;white-space:pre-wrap;}
-        .chatHist{display:flex;flex-direction:column;gap:7px;margin-bottom:8px;max-height:220px;overflow-y:auto;}
-        .msgUser{align-self:flex-end;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:7px 11px;font-size:13px;color:#bfdbfe;max-width:80%;}
-        .msgAI{align-self:flex-start;background:#060e1c;border-radius:10px;padding:7px 11px;font-size:13px;color:#cbd5e1;max-width:90%;white-space:pre-wrap;line-height:1.6;}
-        .chatRow{display:flex;gap:8px;margin-top:10px;}
-        .chatInp{flex:1;background:#060e1c;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:9px 12px;color:#fff;font-size:13px;font-family:inherit;outline:none;}
-        .chatBtn{background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:8px;color:#93c5fd;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;}
-        .chatBtn:disabled{opacity:0.5;cursor:not-allowed;}
-        .spinner{display:inline-block;width:11px;height:11px;border:2px solid rgba(255,255,255,0.15);border-top-color:#93c5fd;border-radius:50%;animation:spin .7s linear infinite;margin-right:5px;vertical-align:middle;}
-        @keyframes spin{to{transform:rotate(360deg)}}
         @media(max-width:900px){.title{font-size:22px;}.valHero{font-size:28px;}}
         @media(max-width:700px){
           .topBar,.panelHeader{flex-direction:column;align-items:flex-start;}
