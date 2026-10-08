@@ -215,15 +215,16 @@ export default function Page() {
   // Live per-position 200-DMA data from route.ts
   const positionsData: AnyObj = metrics?.positions ?? marketData?.positions ?? {};
 
-  // Official last month-end signals — update each month when Advisor Perspectives publishes
-  // Source: advisorperspectives.com/dshort · Last updated: Sep 30, 2026 · Valid until Oct 31, 2026
-  // VTI: Invested · VEU: Invested · IEF: Cash (still below 10-mo SMA) · VNQ: Cash (new, closed below 10-mo SMA) · DBC: Invested
-  // 12-mo SMA check: IEF below, VNQ within 2% of its line.
-  const ivyOfficialSignals: Record<string, "Invest" | "Cash"> = {
-    vti: "Invest", veu: "Invest", ief: "Cash", vnq: "Cash", dbc: "Invest"
-  };
-  const ivyOfficialDate = "Sep 30";
-  const ivyEOMDate = "Oct 31";
+  // Official month-end Ivy signals now come from route.ts (MANUAL_IVY), the
+  // same source the composite score uses, so the score, the Top 10 tile and
+  // the Signal Inputs badge can never disagree. Update them there, not here.
+  // The fallback below only shows for the moment before the first fetch
+  // lands and does not need monthly upkeep.
+  const ivyOfficialFromApi = metrics?.ivy_official ?? marketData?.ivy_official ?? null;
+  const ivyOfficialSignals: Record<string, "Invest" | "Cash"> =
+    ivyOfficialFromApi?.signals ?? { vti: "Invest", veu: "Invest", ief: "Invest", vnq: "Invest", dbc: "Invest" };
+  const ivyOfficialDate: string = ivyOfficialFromApi?.asOf ?? "—";
+  const ivyEOMDate: string = ivyOfficialFromApi?.validUntil ?? "—";
 
   const ivyPositions = [
     { ticker:"VTI", name:"US Stocks",     key:"vti" },
