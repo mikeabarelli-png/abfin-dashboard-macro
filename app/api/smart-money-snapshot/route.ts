@@ -454,6 +454,17 @@ export async function GET() {
     hikeOdds: 58,                              // CME FedWatch-style Fed funds futures · Sep 21 2026
     meeting: "Oct 28-29",
   };
+  // Ivy Portfolio OFFICIAL month-end signals (Faber 10-mo SMA rule).
+  // Single source of truth: drives the composite score here AND the Top 10,
+  // Signal Inputs and Ivy table on the page. Update monthly after Advisor
+  // Perspectives publishes (advisorperspectives.com/dshort). The live
+  // price-vs-SMA reading from fetchIvyPosition() is a forecast only and
+  // no longer feeds the score.
+  const MANUAL_IVY = {
+    signals: { vti: "Invest", veu: "Invest", ief: "Cash", vnq: "Cash", dbc: "Invest" } as Record<"vti" | "veu" | "ief" | "vnq" | "dbc", "Invest" | "Cash">,
+    asOf:       "Sep 30",                       // month-end close the signals come from
+    validUntil: "Oct 31",                       // next month-end reading
+  };                                           // Sep 30 2026 · IEF + VNQ in Cash
   const MANUAL_AAII_BEARS = 53.3;              // AAII Sentiment Survey · Sep 18 2026 · +14.0pts w/w, bullish 28.8%
   //                                           · Jun 26 2026 · FOMC held 3.50-3.75%, dot plot turned hawkish (median 3.8% vs prior 3.4%)
   const MANUAL_AD = {                          // StockCharts $NYAD              · Jun 26 2026
@@ -1284,7 +1295,9 @@ export async function GET() {
   const scoreYC      = yieldCurve < -0.5 ? 2 : yieldCurve < 0.5 ? 1 : 0;
   const scoreBreadth = breadthPct != null ? (breadthPct < 50 ? 2 : breadthPct < 70 ? 1 : 0) : 1;
   const scoreERP     = erp != null ? (erp < 100 ? 2 : erp < 300 ? 1 : 0) : 1;
-  const ivyInvestedCount = [ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC].filter(p => p.signal === "Invest").length;
+  // Official month-end count, not the live forecast. The Ivy rule only acts
+  // at month-end, so mid-month dips should not move the composite score.
+  const ivyInvestedCount = Object.values(MANUAL_IVY.signals).filter(s => s === "Invest").length;
   const scoreIvy     = ivyInvestedCount <= 2 ? 2 : ivyInvestedCount <= 4 ? 1 : 0;
   const compositeScore = scoreCAFE + scoreBuffett + scoreVIX + scoreHY + scoreYC + scoreBreadth + scoreERP + scoreIvy;
 
@@ -1477,6 +1490,7 @@ export async function GET() {
       schannep_signal: schannepSignal,
       schannep_label: schannepLabel[schannepSignal],
       schannep_color: schannepColor[schannepSignal],
+      ivy_official: MANUAL_IVY,
       ivy: {
         vti: { price: ivyVTI.price, sma: ivyVTI.sma, variance: ivyVTI.variancePct, signal: ivyVTI.signal },
         veu: { price: ivyVEU.price, sma: ivyVEU.sma, variance: ivyVEU.variancePct, signal: ivyVEU.signal },
