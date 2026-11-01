@@ -905,6 +905,22 @@ export default function Page() {
 
           {feedError && <div className="errorBar">Feed error: {feedError}</div>}
 
+          {/* Stale-data notice: a live fetch failed and a manual fallback is
+              standing in. Shows the value and its as-of date so an old number
+              is never read as live. Hidden when everything is live. */}
+          {(() => {
+            const fb: { name: string; value: number; asOf: string }[] = marketData?.fallbacks_in_use ?? [];
+            if (!fb.length) return null;
+            return (
+              <div style={{ margin:"0 0 12px", padding:"8px 12px", borderRadius:8, border:"1px solid rgba(251,191,36,0.35)", background:"rgba(251,191,36,0.08)", color:"#fbbf24", fontSize:12, lineHeight:1.5 }}>
+                <strong>Stale data:</strong> live fetch failed, showing manual values for{" "}
+                {fb.map((f, i) => (
+                  <span key={f.name}>{i > 0 ? ", " : ""}{f.name} ({f.value}, as of {f.asOf})</span>
+                ))}
+              </div>
+            );
+          })()}
+
           {/* ⓪ TOP 10 SIGNALS — force-ranked scoreboard, #1 most critical to
               watch through #10 least urgent. Two rows of five. Each tile
               reuses the same live thresholds already computed elsewhere on
@@ -1803,19 +1819,20 @@ export default function Page() {
                     const spxWeekPct = spxWeekAgo != null && spxPrice != null ? ((spxPrice - spxWeekAgo) / spxWeekAgo) * 100 : null;
                     const spxWeekColor = spxWeekPct == null ? "#64748b" : spxWeekPct >= 0 ? "#4ade80" : "#ff6b88";
 
-                    // VIX direction vs prior week manual fallback (17.7 last week)
-                    const vixPrior = 17.7;
-                    const vixDelta = vixValue != null ? vixValue - vixPrior : null;
+                    // VIX vs 5 trading days ago, live from route.ts. If the
+                    // prior is unavailable the arrow hides (no hardcoded fallback).
+                    const vixPrior = getNum(metrics?.vix_week_ago, marketData?.vix_week_ago);
+                    const vixDelta = vixValue != null && vixPrior != null ? vixValue - vixPrior : null;
                     // VIX down = good (calmer), up = bad (more fear)
                     const vixColor = vixDelta == null ? "#64748b" : vixDelta <= 0 ? "#4ade80" : "#ff6b88";
                     const vixArrow = vixDelta == null ? "—" : vixDelta <= 0 ? "↓" : "↑";
 
-                    // HY direction vs prior week (279bps last week)
-                    const hyPrior = 2.79;
-                    const hyDelta = hySpread - hyPrior;
+                    // HY vs 5 business days ago (FRED), live from route.ts.
+                    const hyPrior = getNum(metrics?.hy_spread_week_ago, marketData?.hy_spread_week_ago);
+                    const hyDelta = hyPrior != null ? hySpread - hyPrior : null;
                     // HY tighter = good, wider = bad
-                    const hyColor = hyDelta <= 0 ? "#4ade80" : "#ff6b88";
-                    const hyArrow = hyDelta <= 0 ? "↓" : "↑";
+                    const hyColor = hyDelta == null ? "#64748b" : hyDelta <= 0 ? "#4ade80" : "#ff6b88";
+                    const hyArrow = hyDelta == null ? "—" : hyDelta <= 0 ? "↓" : "↑";
 
                     const weekLabel = spxWeekPct == null ? "—" : spxWeekPct >= 0 ? `+${spxWeekPct.toFixed(1)}%` : `${spxWeekPct.toFixed(1)}%`;
                     const weekSummary = spxWeekPct == null ? "Loading" : spxWeekPct >= 1 ? "Conditions improving" : spxWeekPct >= 0 ? "Holding steady" : spxWeekPct >= -1 ? "Slight deterioration" : "Conditions worsening";
@@ -1847,11 +1864,11 @@ export default function Page() {
                             <span style={{ fontSize:10, color:"#475569" }}>HY Spread</span>
                             <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                               <span style={{ fontSize:10, color:"#64748b" }}>{Math.round(hySpread*100)}bps</span>
-                              <span style={{ fontSize:11, fontWeight:700, color:hyColor }}>{hyArrow} {Math.abs(Math.round(hyDelta*100))}bps</span>
+                              <span style={{ fontSize:11, fontWeight:700, color:hyColor }}>{hyArrow} {hyDelta!=null?`${Math.abs(Math.round(hyDelta*100))}bps`:""}</span>
                             </div>
                           </div>
                         </div>
-                        <div style={{ marginTop:8, fontSize:9, color:"#334155" }}>vs prior Friday close</div>
+                        <div style={{ marginTop:8, fontSize:9, color:"#334155" }}>vs 5 trading days ago</div>
                       </div>
                     );
                   })()}
