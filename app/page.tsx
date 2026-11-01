@@ -169,7 +169,7 @@ export default function Page() {
   const adLine = metrics?.ad_line ?? marketData?.ad_line ?? null;
   const erpBps = getNum(metrics?.erp_bps, marketData?.erp_bps);
   const trailingPE = getNum(metrics?.trailing_pe, marketData?.trailing_pe);
-  const capeRatio = getNum(metrics?.cape_ratio, marketData?.cape_ratio) ?? 41.74;
+  const capeRatio = getNum(metrics?.cape_ratio, marketData?.cape_ratio) ?? 40.13;
   const fearGreedScore = getNum(metrics?.fear_greed_score, marketData?.fear_greed_score) ?? 15;
   const fearGreedRating: string = metrics?.fear_greed_rating ?? marketData?.fear_greed_rating ?? "Extreme Fear";
 
@@ -191,7 +191,7 @@ export default function Page() {
   const compositeSignal: string = metrics?.composite_signal ?? marketData?.composite_signal ?? "SLIGHT TILT";
   const compositeColor: string = metrics?.composite_color ?? marketData?.composite_color ?? "#fbbf24";
   const regimeGate: string = metrics?.regime_gate ?? marketData?.regime_gate ?? "hold";
-  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.41;
+  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.33;
   const fedStance: string = metrics?.fed_stance ?? marketData?.fed_stance ?? "holding";
   const fedFundsRate  = getNum(metrics?.fed_funds,          marketData?.fed_funds) ?? 4.33;
   const fedFundsYearAgo = getNum(metrics?.fed_funds_year_ago, marketData?.fed_funds_year_ago);
@@ -310,19 +310,22 @@ export default function Page() {
   };
   const toneColor = (tone: string) => ({ danger: "#ff6b88", warning: "#fbbf24", healthy: "#4ade80", neutral: "#94a3b8" }[tone] ?? "#94a3b8");
 
-  // Portfolio holdings — weights per current construction, GLDM exit pending
+  // Portfolio holdings at M2 weights (Mike's IRAs, 50/40/10). Sums to 100.
   // "trend" sleeve is judged against the 200-DMA, same as SPX.
   // "defensive" sleeve (capital preservation / cash-like) isn't supposed to
   // trend, so it skips the Bullish/Bearish verdict entirely and just shows
   // the numbers: price, YTD total return, and 200-DMA gap for reference.
   const PORTFOLIO_POSITIONS = [
-    { ticker: "VTIP", weight: 20, job: "Inflation protection",                    sleeve: "defensive" as const },
-    { ticker: "SGOV", weight: 20, job: "Capital preservation, yield",             sleeve: "defensive" as const },
-    { ticker: "VEA",  weight: 15, job: "International equity",                    sleeve: "trend" as const },
-    { ticker: "BND",  weight: 10, job: "Core US bond, replaced VGIT",             sleeve: "defensive" as const },
-    { ticker: "SCHD", weight: 15, job: "Quality equity, lower vol",               sleeve: "trend" as const },
-    { ticker: "VTI",  weight: 10, job: "Broad US market exposure",                sleeve: "trend" as const },
-    { ticker: "GLDM", weight: 5,  job: "Hard asset hedge — exit pending",         sleeve: "trend" as const },
+    { ticker: "SCHD", weight: 15, job: "Quality equity, lower vol",        sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "VEA",  weight: 15, job: "International equity",             sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "VTI",  weight: 10, job: "Broad US market exposure",         sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "VTWO", weight: 5,  job: "Small cap, Russell 2000",          sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "VIGI", weight: 5,  job: "Int'l dividend growth",            sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "VTIP", weight: 15, job: "Inflation protection",             sleeve: "defensive" as const, acct: "M2" },
+    { ticker: "SGOV", weight: 15, job: "Capital preservation, yield",      sleeve: "defensive" as const, acct: "M2" },
+    { ticker: "BND",  weight: 10, job: "Core US bond, replaced VGIT",      sleeve: "defensive" as const, acct: "M2" },
+    { ticker: "GLDM", weight: 5,  job: "Hard asset hedge",                 sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "DBMF", weight: 5,  job: "Managed futures, trend-following", sleeve: "defensive" as const, acct: "M2" },
   ];
 
   // CUR 40/55/5 is meant to be a FROZEN snapshot of Mike's actual holdings
@@ -374,20 +377,13 @@ export default function Page() {
     return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, oneYearReturnPct, fiveYearReturnPct, state, tone, color, barPos };
   });
 
-  // Candidate positions Mike is watching alongside real holdings — the four
-  // new tickers Chris's rough-draft Noelle IRA mockup introduced (VTWO/VIGI
-  // are straightforward equity beta, so "trend" sleeve fits; DBMF/BTAL are
-  // diversifying strategies explicitly designed to zig when equities zag,
-  // so a bullish/bearish-vs-200-DMA equity framing would be misleading —
-  // "defensive" sleeve just shows the numbers, same treatment VTIP/SGOV/VGIT
-  // get). Not part of PORTFOLIO_POSITIONS — nothing here is a real holding.
+  // TOD-only holdings (Noelle's taxable account). Shown at their CURRENT
+  // TOD weights (40 VTI / 15 VXUS / 45 VTEB), not M2 weights. The tile label
+  // reads "TOD" so they aren't confused with the M2 percentages. Target is
+  // Chris's C1 TAX 25/15/60. Update VTEB as the Dec/Jan tranches complete.
   const CANDIDATE_POSITIONS = [
-    { ticker: "VTWO", weight: 10, job: "Small cap, Russell 2000",              sleeve: "trend" as const },
-    { ticker: "VIGI", weight: 5,  job: "Int'l dividend growth",                sleeve: "trend" as const },
-    { ticker: "DBMF", weight: 5,  job: "Managed futures, trend-following",     sleeve: "defensive" as const },
-    { ticker: "BTAL", weight: 5,  job: "Mkt-neutral anti-beta — TBD L/S manager", sleeve: "defensive" as const },
-    { ticker: "VXUS", weight: 15, job: "Total intl (dev + EM) — Chris's C1 tax pick", sleeve: "trend" as const },
-    { ticker: "VTEB", weight: 60, job: "Muni bonds, tax-exempt — Chris's C1 tax pick", sleeve: "defensive" as const },
+    { ticker: "VXUS", weight: 15, job: "Total intl (dev + EM), TOD",       sleeve: "trend" as const,     acct: "TOD" },
+    { ticker: "VTEB", weight: 45, job: "Muni bonds, tax-exempt, TOD",      sleeve: "defensive" as const, acct: "TOD" },
   ];
   const candidateCards = CANDIDATE_POSITIONS.map(p => {
     const d = positionsData?.[p.ticker] ?? null;
@@ -1612,7 +1608,7 @@ export default function Page() {
                   return (
                     <div key={p.ticker} className="tile" style={{ position:"relative", borderTop:"2px solid rgba(148,163,184,0.35)" }}>
                       <div className="tileTop">
-                        <span className="lbl">{p.ticker} · {p.weight}%</span>
+                        <span className="lbl">{p.ticker} · {p.acct === "TOD" ? `TOD ${p.weight}%` : `${p.weight}%`}</span>
                       </div>
                       <div className="valHero" style={{ fontSize:24, color:"#fff" }}>{ytdLabel}</div>
                       {statsGrid}
@@ -1646,7 +1642,7 @@ export default function Page() {
                   >
                     <div style={{ position:"absolute", top:11, right:11, width:9, height:9, borderRadius:"50%", background:p.color, boxShadow:`0 0 6px ${p.color}99` }} />
                     <div className="tileTop" style={{ paddingRight:20 }}>
-                      <span className="lbl">{p.ticker} · {p.weight}%</span>
+                      <span className="lbl">{p.ticker} · {p.acct === "TOD" ? `TOD ${p.weight}%` : `${p.weight}%`}</span>
                     </div>
                     <div className="valHero" style={{ fontSize:24, color:"#fff" }}>{ytdLabel}</div>
                     {statsGrid}
@@ -1666,15 +1662,9 @@ export default function Page() {
                 );
               };
 
-              // Three sleeves, mixing real holdings with candidates under
-              // consideration within the same row now (Mike's call — pure
-              // sequencing, not a change to what's actually held). Equity:
-              // VEA/SCHD/VTI are real; VTWO/VIGI are candidates. Fixed
-              // Income: VTIP/SGOV/BND, all real (BND replaced VGIT). Alternatives: GLDM is
-              // real (hard-asset hedge, exit pending); DBMF/BTAL are
-              // candidates. Real-vs-candidate status is called out in each
-              // row's subtitle rather than a separate section, so nothing
-              // reads as an actual holding that isn't one.
+              // Three sleeves at M2 weights (Mike's IRAs). VXUS and VTEB are
+              // TOD-only holdings, shown at their TOD weights and labeled
+              // "TOD" on the tile so the two sets of percentages don't mix.
               const byTicker = (t: string) =>
                 positionCards.find(p => p.ticker === t) ?? candidateCards.find(p => p.ticker === t);
               const equityCards = ["VEA", "SCHD", "VTI", "VTWO", "VIGI", "VXUS"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
@@ -1686,7 +1676,7 @@ export default function Page() {
                   <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
                     Equity Sleeve
                   </div>
-                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>VEA / SCHD / VTI real holdings · VTWO / VIGI / VXUS under consideration</div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>M2 weights (Mike's IRAs) · VXUS shown at its TOD weight</div>
                   <div className="grid5" style={{ marginBottom:16 }}>
                     {equityCards.map(renderPositionTile)}
                   </div>
@@ -1694,7 +1684,7 @@ export default function Page() {
                   <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
                     Fixed Income
                   </div>
-                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>VTIP / SGOV / BND real holdings · VTEB under consideration</div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>M2 weights · VTEB shown at its TOD weight (target 60%)</div>
                   <div className="grid5" style={{ marginBottom:16 }}>
                     {incomeCards.map(renderPositionTile)}
                   </div>
@@ -1702,7 +1692,7 @@ export default function Page() {
                   <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
                     Alternatives Sleeve
                   </div>
-                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>GLDM real holding, exit pending · DBMF under consideration</div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>M2 weights · both held</div>
                   <div className="grid5">
                     {altCards.map(renderPositionTile)}
                   </div>
@@ -2289,8 +2279,8 @@ export default function Page() {
                 {(() => {
                   const adDir = adLine?.adTrend === "higher_lows" ? "up"
                     : adLine?.adTrend === "lower_lows" ? "down" : "flat";
-                  const spxDir = adLine?.adVsSpx === "diverging_up" ? "up"
-                    : adLine?.adVsSpx === "diverging_down" ? "down" : "flat";
+                  const spxDir = adLine?.spxTrend === "rising" ? "up"
+                    : adLine?.spxTrend === "falling" ? "down" : "flat";
                   const isDiverging = adDir !== spxDir;
                   const adColor = adDir === "up" ? "#4ade80" : adDir === "down" ? "#ff6b88" : "#fbbf24";
                   const spxColor = spxDir === "up" ? "#4ade80" : spxDir === "down" ? "#ff6b88" : "#fbbf24";
@@ -2331,9 +2321,10 @@ export default function Page() {
                 {(() => {
                   // Map signal to position: bullish_divergence=10, neutral=50, confirming_weakness=90
                   const barPos = adLine?.signal === "bullish_divergence" ? 10
-                    : adLine?.signal === "confirming_weakness" ? 90 : 50;
+                    : adLine?.signal === "confirming_weakness" ? 90
+                    : adLine?.signal === "bearish_divergence" ? 80 : 50;
                   const sigColor = adLine?.signal === "bullish_divergence" ? "#4ade80"
-                    : adLine?.signal === "confirming_weakness" ? "#ff6b88" : "#fbbf24";
+                    : (adLine?.signal === "confirming_weakness" || adLine?.signal === "bearish_divergence") ? "#ff6b88" : "#fbbf24";
                   return (
                     <div style={{ marginBottom:8 }}>
                       <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", overflow:"visible" }}>
@@ -2349,7 +2340,7 @@ export default function Page() {
                       <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155", marginTop:4 }}>
                         <span style={{ color:"#4ade80" }}>Hidden Strength</span>
                         <span style={{ color:"#fbbf24" }}>Neutral</span>
-                        <span style={{ color:"#ff6b88" }}>Broad Selling</span>
+                        <span style={{ color:"#ff6b88" }}>Weak Breadth</span>
                       </div>
                     </div>
                   );
@@ -2931,7 +2922,7 @@ export default function Page() {
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Valuation, Recession &amp; Sentiment Models</div><div className="panelSub">Sigma scores vs historical norm · Standard deviation from mean</div></div>
-              <div style={{ textAlign:"right" }}><div className="pstamp">Updated Oct 2 · Next: Oct 10</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
+              <div style={{ textAlign:"right" }}><div className="pstamp">Updated Oct 31 · Next: Nov 8</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
             </div>
 
             {/* Valuation Models */}
@@ -2940,12 +2931,12 @@ export default function Page() {
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.41", color:"#ff6b88" },
-                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.18", color:"#ff6b88" },
-                  { name:"Price/Sales",            rating:"Overvalued",          score:"1.50", color:"#fbbf24" },
-                  { name:"Interest Rate Model",    rating:"Strongly Overvalued", score:"2.26", color:"#ff6b88" },
-                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.45", color:"#ff6b88" },
-                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.45", color:"#94a3b8", muted:true },
+                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.33", color:"#ff6b88" },
+                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.07", color:"#ff6b88" },
+                  { name:"Price/Sales",            rating:"Overvalued",          score:"1.40", color:"#fbbf24" },
+                  { name:"Interest Rate Model",    rating:"Strongly Overvalued", score:"2.04", color:"#ff6b88" },
+                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.32", color:"#ff6b88" },
+                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.27", color:"#94a3b8", muted:true },
                 ].map(r => (
                   <tr key={r.name} style={{ opacity:(r as any).muted?0.4:1 }}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:(r as any).muted?"italic":"normal" }}>{r.name}</td>
@@ -2957,9 +2948,9 @@ export default function Page() {
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Valuation Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>4 of 5 Strongly Overvalued · Oct 2 · Historically stretched</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>4 of 5 Strongly Overvalued · Oct 31 · Historically stretched</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Every model eased since mid-August, but the tiers held. Buffett slipped to 2.41σ, CAPE to 2.18σ, and Price/Sales to 1.50σ. Interest Rate Model rose to 2.26σ, the only one that moved up, consistent with the September Fed hike. Still historically stretched, just less extreme than six weeks ago.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>All five models eased again in October as the S&P fell for a second straight month. Buffett slipped to 2.33σ, CAPE to 2.07σ (40.1x) and Price/Sales to 1.40σ. Interest Rate Model gave back its September jump, falling to 2.04σ after the Fed held. The tiers haven't changed, so this is still historically stretched, just less extreme than in August.</span>
             </div>
 
             {/* Recession Models */}
@@ -2968,9 +2959,9 @@ export default function Page() {
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Yield Curve",       rating:"High",           score:"1.98",  color:"#fbbf24", updated:"Oct 2" },
+                  { name:"Yield Curve",       rating:"Very High Risk", score:"2.00",  color:"#ff6b88", updated:"Oct 31" },
                   { name:"Sahm Rule",         rating:"Low",            score:"N/A",   color:"#4ade80", updated:"Sep 30" },
-                  { name:"State Coincidence", rating:"Normal",         score:"-0.42", color:"#4ade80", updated:"Aug 31" },
+                  { name:"State Coincidence", rating:"Normal",         score:"0.21",  color:"#4ade80", updated:"Sep 30" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -2985,9 +2976,9 @@ export default function Page() {
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Recession Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Mixed · Yield Curve easing</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Mixed · Yield Curve back to Very High</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Yield Curve dropped from Very High Risk to High at 1.98σ (from 2.38σ). Re-steepening after inversion has historically preceded recession by 12 to 18 months, so this still warrants watching. Sahm Rule reads Low and State Coincidence is Normal at -0.42σ, so the labor and state-level data are not confirming.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Yield Curve ticked back up to Very High Risk at 2.00σ (from 1.98σ). Re-steepening after inversion has historically preceded recession by 12 to 18 months. Sahm Rule (Low, as of Sep 30) and State Coincidence (Normal at 0.21σ, up from -0.42σ) aren't confirming yet, but September payrolls rose only 29k with July revised negative, so the Nov 6 jobs report matters.</span>
             </div>
 
             {/* Sentiment Models */}
@@ -3029,11 +3020,11 @@ export default function Page() {
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Economic Uncertainty Index", rating:"Pessimistic",      score:"1.04",  color:"#4ade80", updated:"Oct 2",  note:"back up from neutral" },
-                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.80", color:"#4ade80", updated:"Sep 25", note:"contrarian bullish" },
-                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.16",  color:"#fbbf24", updated:"Aug 31", note:"still elevated" },
-                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.77",  color:"#94a3b8", updated:"Oct 2",  note:"tightening" },
-                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.39", color:"#94a3b8", updated:"Oct 2",  note:"below 20, calm" },
+                  { name:"Economic Uncertainty Index", rating:"Very Pessimistic", score:"2.00",  color:"#4ade80", updated:"Oct 31", note:"jumped from 1.04σ" },
+                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.80", color:"#4ade80", updated:"Oct 31", note:"contrarian bullish" },
+                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.00",  color:"#fbbf24", updated:"Sep 30", note:"cooling, still elevated" },
+                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.76",  color:"#94a3b8", updated:"Oct 31", note:"tight, no stress" },
+                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.28", color:"#94a3b8", updated:"Oct 31", note:"below 20, calm" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -3051,9 +3042,9 @@ export default function Page() {
             </table>
             <div className="sumBar">
               <span className="sumBarLabel">Sentiment Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism · Contrarian Bullish · Oct 2</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism · Contrarian Bullish · Oct 31</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Consumer Confidence fell further to -2.80σ, its most pessimistic reading on this dashboard. Economic Uncertainty climbed back to Pessimistic at 1.04σ. Margin Debt cooled slightly to 1.16σ but is still Optimistic, so retail leverage hasn't unwound. VIX and junk spreads remain calm. Contrarian signal still intact.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Economic Uncertainty jumped to Very Pessimistic at 2.00σ (from 1.04σ), and Consumer Confidence held at -2.80σ. Both are at the pessimistic extreme together. Margin Debt cooled to 1.00σ but is still Optimistic, so retail leverage hasn't unwound. VIX and junk spreads remain calm, so the fear is in surveys, not in markets. Contrarian signal still intact.</span>
             </div>
           </section>
 
@@ -3711,7 +3702,7 @@ export default function Page() {
                 {capeRatio.toFixed(1)}<span style={{ fontSize:22 }}>x</span>
               </div>
               <Tag label={capeRatio>35?"Extreme — Historically Dangerous":capeRatio>25?"Overvalued — Watch":"Elevated"} color={capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80"} bg={capeRatio>35?"rgba(255,79,114,0.15)":capeRatio>25?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
-              <BC>At {capeRatio.toFixed(1)}x, CAPE is {(capeRatio/16).toFixed(1)}x the historical average of ~16x. Only the 2000 dot-com peak ({">"}44x) and late 2021 (~38x) have been higher. This level has historically preceded below-average 10-year forward returns.</BC>
+              <BC>At {capeRatio.toFixed(1)}x, CAPE is {(capeRatio/16).toFixed(1)}x the historical average of ~16x. Only the 2000 dot-com peak (~44x) has been higher. Late 2021 peaked near 38x. This level has historically preceded below-average 10-year forward returns.</BC>
               <BandTrack
                 segs={[{w:"33%",color:"#047857"},{w:"22%",color:"#4ade80"},{w:"22%",color:"#f59e0b"},{w:"23%",color:"#ef4444"}]}
                 needle={Math.max(0,Math.min(((capeRatio-5)/45)*100,99))}
@@ -3813,41 +3804,41 @@ export default function Page() {
             left={<>
               <SH>Current signal</SH>
               <div style={{ fontSize:32, fontWeight:700, lineHeight:1.1, marginBottom:8, color:
-                adLine?.signal==="bullish_divergence"?"#4ade80":adLine?.signal==="confirming_weakness"?"#ff6b88":"#fbbf24" }}>
-                {adLine?.signal==="bullish_divergence"?"Bullish Divergence ↑":adLine?.signal==="confirming_weakness"?"Confirming Weakness ↓":"Neutral — Tracking"}
+                adLine?.signal==="bullish_divergence"?"#4ade80":(adLine?.signal==="confirming_weakness"||adLine?.signal==="bearish_divergence")?"#ff6b88":"#fbbf24" }}>
+                {adLine?.signal==="bullish_divergence"?"Bullish Divergence ↑":adLine?.signal==="bearish_divergence"?"Bearish Divergence ↓":adLine?.signal==="confirming_weakness"?"Confirming Weakness ↓":"Neutral, Tracking"}
               </div>
               <Tag
-                label={adLine?.signal==="bullish_divergence"?"Hidden Strength — Buy the Dip Setup":adLine?.signal==="confirming_weakness"?"Broad Selling — Defense Mode":"Neutral — Moving With SPX"}
-                color={adLine?.signal==="bullish_divergence"?"#4ade80":adLine?.signal==="confirming_weakness"?"#ff6b88":"#fbbf24"}
-                bg={adLine?.signal==="bullish_divergence"?"rgba(74,222,128,0.15)":adLine?.signal==="confirming_weakness"?"rgba(255,79,114,0.15)":"rgba(245,158,11,0.15)"}
+                label={adLine?.signal==="bullish_divergence"?"Hidden Strength, Buy the Dip Setup":adLine?.signal==="bearish_divergence"?"Narrow Market, Index Masking Weakness":adLine?.signal==="confirming_weakness"?"Broad Selling, Defense Mode":"Neutral, Moving With SPX"}
+                color={adLine?.signal==="bullish_divergence"?"#4ade80":(adLine?.signal==="confirming_weakness"||adLine?.signal==="bearish_divergence")?"#ff6b88":"#fbbf24"}
+                bg={adLine?.signal==="bullish_divergence"?"rgba(74,222,128,0.15)":(adLine?.signal==="confirming_weakness"||adLine?.signal==="bearish_divergence")?"rgba(255,79,114,0.15)":"rgba(245,158,11,0.15)"}
               />
               <BC>{adLine?.note ?? "NYSE Advance/Decline line shows whether breadth is confirming or diverging from price."}</BC>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:14 }}>
                 <div style={{ background:"#141b47", borderRadius:10, padding:14 }}>
-                  <SH>A/D Trend (4 weeks)</SH>
+                  <SH>A/D Trend (3 months)</SH>
                   <div style={{ fontSize:20, fontWeight:700, marginTop:6, color:
                     adLine?.adTrend==="higher_lows"?"#4ade80":adLine?.adTrend==="lower_lows"?"#ff6b88":"#fbbf24" }}>
                     {adLine?.adTrend==="higher_lows"?"↗ Higher Lows":adLine?.adTrend==="lower_lows"?"↘ Lower Lows":"→ Flat"}
                   </div>
                   <div style={{ fontSize:11, color:"#64748b", marginTop:4, lineHeight:1.5 }}>
-                    {adLine?.adTrend==="higher_lows"?"Breadth improving — broad participation":"Breadth deteriorating — narrow market"}
+                    {adLine?.adTrend==="higher_lows"?"Breadth improving, broad participation":adLine?.adTrend==="lower_lows"?"Breadth deteriorating, narrow market":"Breadth stalling"}
                   </div>
                 </div>
                 <div style={{ background:"#141b47", borderRadius:10, padding:14 }}>
                   <SH>vs SPX</SH>
                   <div style={{ fontSize:20, fontWeight:700, marginTop:6, color:
                     adLine?.adVsSpx==="diverging_up"?"#4ade80":adLine?.adVsSpx==="diverging_down"?"#ff6b88":"#94a3b8" }}>
-                    {adLine?.adVsSpx==="diverging_up"?"↑ Diverging Up":adLine?.adVsSpx==="diverging_down"?"↓ Confirming Down":"→ Tracking"}
+                    {adLine?.adVsSpx==="diverging_up"?"↑ Diverging Up":adLine?.adVsSpx==="diverging_down"?"↓ Diverging Down":"→ Tracking"}
                   </div>
                   <div style={{ fontSize:11, color:"#64748b", marginTop:4, lineHeight:1.5 }}>
-                    {adLine?.adVsSpx==="diverging_up"?"A/D strong while SPX weak — dip opportunity":adLine?.adVsSpx==="diverging_down"?"Broad selling confirms move — not a dip":"Breadth and price aligned"}
+                    {adLine?.adVsSpx==="diverging_up"?"A/D strong while SPX weak, dip opportunity":adLine?.adVsSpx==="diverging_down"?"A/D weak while SPX holds up, few stocks carrying the index":"Breadth and price aligned"}
                   </div>
                 </div>
               </div>
               <div style={{ marginTop:12, background:"#141b47", border:"1px solid rgba(148,163,184,0.2)", borderRadius:10, padding:12 }}>
                 <div style={{ fontSize:10, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>Data source</div>
                 <div style={{ fontSize:12, color:"#94a3b8", marginTop:4, lineHeight:1.6 }}>
-                  Manual weekly update · NYSE $NYAD via StockCharts · Updated {adLine?.updatedDate ?? "—"}
+                  Manual monthly update · NYSE $NYAD cumulative via StockCharts · Updated {adLine?.updatedDate ?? "—"}
                 </div>
               </div>
             </>}
@@ -3867,12 +3858,14 @@ export default function Page() {
                   <HistRow val="2021" event="Late bull warning" note="A/D diverged lower while SPX at highs — signal" />
                   <HistRow val="2022" event="Bear market" note="A/D confirmed — broad selling top to bottom" />
                   <HistRow val="2020" event="COVID recovery" note="A/D diverged up quickly — predicted recovery" />
-                  <HistRow val="Today" event={`Mar ${adLine?.updatedDate ?? "21"} 2026`} note={adLine?.note ?? "Manual reading"} active />
+                  <HistRow val="Today" event={`${adLine?.updatedDate ?? "—"} 2026`} note={adLine?.signal==="bearish_divergence"?"A/D falling while SPX near highs, similar setup to 2021":"Manual reading"} active />
                 </div>
               </MCard>
               <ActionCard>
                 {adLine?.signal==="bullish_divergence"
                   ?"A/D line diverging bullishly — the broad market is holding up even as SPX tests the 200-DMA. This is a classic head-fake signal. The large-cap weakness may not reflect what most stocks are doing. Treat as a potential dip opportunity, not a defensive trigger."
+                  :adLine?.signal==="bearish_divergence"
+                  ?"A/D line diverging bearishly. The S&P is holding near its highs, but most NYSE stocks have been falling since mid-August. A few large names are carrying the index. This isn't a sell signal by itself, since divergences can run for months, but it's a classic late-cycle warning. Watch for the S&P to break its 40-week average, which would turn the divergence into confirmed weakness."
                   :adLine?.signal==="confirming_weakness"
                   ?"A/D line confirming the selloff — broad-based selling across the NYSE. This is not a head-fake. The weakness extends beyond large-caps into the broad market. This supports a defensive posture alongside the other stress signals."
                   :"A/D line neutral and tracking SPX. No divergence signal currently. Monitor weekly for any change in direction relative to price."}
