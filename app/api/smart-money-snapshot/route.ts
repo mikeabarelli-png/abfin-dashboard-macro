@@ -437,13 +437,13 @@ export async function GET() {
   // ═══════════════════════════════════════════════════════════════════
   // SATURDAY MANUAL UPDATE CHECKLIST — update every weekend
   // ═══════════════════════════════════════════════════════════════════
-  const MANUAL_CAPE_FALLBACK       = 41.74;    // multpl.com/shiller-pe          · Aug 31 2026
-  const MANUAL_BUFFETT_SIGMA       = 2.41;     // currentmarketvaluation.com     · Oct 2 2026
+  const MANUAL_CAPE_FALLBACK       = 40.13;    // multpl.com/shiller-pe          · Oct 31 2026
+  const MANUAL_BUFFETT_SIGMA       = 2.33;     // currentmarketvaluation.com     · Oct 31 2026
   const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 26 2026
   const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 26 2026
   const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
   const MANUAL_BREADTH_FALLBACK    = 0;        // Deliberately impossible. 0% means the live historyofmarket.com fetch failed, not a real reading
-  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "tightening"; // Sept 16, 2026 FOMC: 25bp hike, first since 2023, SEP signals further tightening
+  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "tightening"; // Oct 28, 2026 FOMC: hawkish hold at 3.75-4.00%, 10-2 vote (Cook, Hammack dissented for a hike). Still a tightening cycle.
   // Market-implied lean for the NEXT meeting — this is a genuine proxy,
   // not a live feed. True meeting-by-meeting odds (CME FedWatch-style)
   // come from Fed funds futures pricing, which isn't in this pipeline.
@@ -451,8 +451,8 @@ export async function GET() {
   // financial press coverage of the next FOMC meeting.
   const MANUAL_FED_NEXT_MOVE = {
     lean: "hawkish" as "hawkish" | "neutral" | "dovish",
-    hikeOdds: 58,                              // CME FedWatch-style Fed funds futures · Sep 21 2026
-    meeting: "Oct 28-29",
+    hikeOdds: 85,                              // CME FedWatch, Dec hike odds after Oct 28 hold (84.6%) · Oct 28 2026
+    meeting: "Dec 8-9",
   };
   // Ivy Portfolio OFFICIAL month-end signals (Faber 10-mo SMA rule).
   // Single source of truth: drives the composite score here AND the Top 10,
@@ -461,18 +461,21 @@ export async function GET() {
   // price-vs-SMA reading from fetchIvyPosition() is a forecast only and
   // no longer feeds the score.
   const MANUAL_IVY = {
-    signals: { vti: "Invest", veu: "Invest", ief: "Cash", vnq: "Cash", dbc: "Invest" } as Record<"vti" | "veu" | "ief" | "vnq" | "dbc", "Invest" | "Cash">,
-    asOf:       "Sep 30",                       // month-end close the signals come from
-    validUntil: "Oct 31",                       // next month-end reading
-  };                                           // Sep 30 2026 · IEF + VNQ in Cash
-  const MANUAL_AAII_BEARS = 53.3;              // AAII Sentiment Survey · Sep 18 2026 · +14.0pts w/w, bullish 28.8%
+    signals: { vti: "Invest", veu: "Cash", ief: "Cash", vnq: "Invest", dbc: "Invest" } as Record<"vti" | "veu" | "ief" | "vnq" | "dbc", "Invest" | "Cash">,
+    asOf:       "Oct 31",                       // month-end close the signals come from
+    validUntil: "Nov 30",                       // next month-end reading
+  };                                           // Oct 31 2026 · VEU (-0.7%) + IEF (-0.9%) in Cash, VNQ back to Invest (+1.0%)
+  const MANUAL_AAII_BEARS = 41.4;              // AAII Sentiment Survey · week ending Oct 28 2026 · -4.4pts w/w, bullish 37.8%
   //                                           · Jun 26 2026 · FOMC held 3.50-3.75%, dot plot turned hawkish (median 3.8% vs prior 3.4%)
-  const MANUAL_AD = {                          // StockCharts $NYAD              · Jun 26 2026
-    signal:      "neutral" as "bullish_divergence" | "neutral" | "confirming_weakness",
-    adTrend:     "higher_lows" as "higher_lows" | "flat" | "lower_lows",
-    adVsSpx:     "tracking" as "diverging_up" | "tracking" | "diverging_down",
-    note:        "A/D line tracking market recovery, all 5 valuation models still overvalued",
-    updatedDate: "Jun 26",
+  const MANUAL_AD = {                          // StockCharts $NYAD cumulative, daily, 1Y · Oct 30 2026 · update MONTHLY
+    // signal: bearish_divergence = A/D falling while SPX holds near highs (narrow market)
+    //         confirming_weakness = A/D and SPX falling together (broad selling)
+    signal:      "bearish_divergence" as "bullish_divergence" | "neutral" | "bearish_divergence" | "confirming_weakness",
+    adTrend:     "lower_lows" as "higher_lows" | "flat" | "lower_lows",        // A/D line's own swing lows, last ~3 months
+    spxTrend:    "flat" as "rising" | "flat" | "falling",                       // S&P 500 over the same window
+    adVsSpx:     "diverging_down" as "diverging_up" | "tracking" | "diverging_down",
+    note:        "A/D line peaked mid-Aug near 76,500 and fell about 13% to 66,300 by Oct 30, while the S&P sits roughly 2% off its high. A/D is below both its 50-day and 200-day averages, and the 50-day is about to cross under the 200-day. Breadth is not confirming the index.",
+    updatedDate: "Oct 30",
   };
   // ═══════════════════════════════════════════════════════════════════
 
