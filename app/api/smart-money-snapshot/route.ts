@@ -442,6 +442,16 @@ export async function GET() {
   const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 26 2026
   const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 26 2026
   const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
+  // As-of dates for the fallbacks above. When a live fetch fails and a
+  // fallback is used, the page shows the value WITH this date so a stale
+  // number is never mistaken for a live one. Update the date whenever you
+  // update the value.
+  const FALLBACK_ASOF = {
+    cape:       "Oct 31 2026",
+    hy:         "Jun 26 2026",
+    fear_greed: "Jun 26 2026",
+    pe:         "May 3 2026",
+  };
   const MANUAL_BREADTH_FALLBACK    = 0;        // Deliberately impossible. 0% means the live historyofmarket.com fetch failed, not a real reading
   const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "tightening"; // Oct 28, 2026 FOMC: hawkish hold at 3.75-4.00%, 10-2 vote (Cook, Hammack dissented for a hike). Still a tightening cycle.
   // Market-implied lean for the NEXT meeting — this is a genuine proxy,
@@ -466,7 +476,6 @@ export async function GET() {
     validUntil: "Nov 30",                       // next month-end reading
   };                                           // Oct 31 2026 · VEU (-0.7%) + IEF (-0.9%) in Cash, VNQ back to Invest (+1.0%)
   const MANUAL_AAII_BEARS = 41.4;              // AAII Sentiment Survey · week ending Oct 28 2026 · -4.4pts w/w, bullish 37.8%
-  //                                           · Jun 26 2026 · FOMC held 3.50-3.75%, dot plot turned hawkish (median 3.8% vs prior 3.4%)
   const MANUAL_AD = {                          // StockCharts $NYAD cumulative, daily, 1Y · Oct 30 2026 · update MONTHLY
     // signal: bearish_divergence = A/D falling while SPX holds near highs (narrow market)
     //         confirming_weakness = A/D and SPX falling together (broad selling)
@@ -493,12 +502,12 @@ export async function GET() {
     Promise.all([
       fetchChart("^GSPC", 420),
       fetchChart("QQQ", 420),
-      fetchChart("^VIX", 5),
+      fetchChart("^VIX", 14),                  // 14 calendar days so a 5-trading-day-ago close is always available
       fetchChart("DX-Y.NYB", 5),
       fetchChart("^CPCE", 5),
       fetchFred("DFII10"),
       fetchFred("DGS10"),
-      fetchFred("BAMLH0A0HYM2"),
+      fetchFred("BAMLH0A0HYM2", 6, 5),        // latest + the reading 5 business days back (week-over-week)
       fetchFred("T10Y2Y"),
       fetchFred("FEDFUNDS", 13, 12),
       fetchFred("T5YIE"),
@@ -1255,6 +1264,12 @@ export async function GET() {
 
   const hySpread: number = fredHY.value ?? MANUAL_HY_FALLBACK;
 
+  // Week-over-week priors, live. Same method as the S&P (close from 5
+  // trading days back). Null when history is short or the fetch failed,
+  // and the page hides the arrow rather than inventing a comparison.
+  const vixWeekAgo: number | null = vix.closes.length >= 6 ? vix.closes[vix.closes.length - 6] ?? null : null;
+  const hyWeekAgo: number | null = fredHY.value != null ? fredHY.prev : null;
+
   const yieldCurve: number = fredYC.value ?? 0.55;
   const fedFunds: number = fredFedFunds.value ?? 4.33;
   const fedFundsYearAgo: number | null = fredFedFunds.prev;
@@ -1397,6 +1412,14 @@ export async function GET() {
     diagnostics["spx_five_year"] = err?.message ?? "5-YR fetch failed";
   }
 
+  // Any manual fallback currently standing in for a failed live fetch.
+  // Surfaced on the page with its as-of date.
+  const fallbacksInUse: { name: string; value: number; asOf: string }[] = [];
+  if (fredHY.value == null) fallbacksInUse.push({ name: "HY spread", value: MANUAL_HY_FALLBACK, asOf: FALLBACK_ASOF.hy });
+  if (capeData.value == null) fallbacksInUse.push({ name: "CAPE", value: MANUAL_CAPE_FALLBACK, asOf: FALLBACK_ASOF.cape });
+  if (fearGreedData.value == null) fallbacksInUse.push({ name: "Fear & Greed", value: MANUAL_FEAR_GREED_FALLBACK, asOf: FALLBACK_ASOF.fear_greed });
+  if (peData.value == null && spx.meta.trailingPE == null) fallbacksInUse.push({ name: "S&P trailing P/E", value: MANUAL_PE_FALLBACK, asOf: FALLBACK_ASOF.pe });
+
   const hasPartialData = spxPrice != null;
   const status = Object.keys(diagnostics).length === 0 ? "ok" : hasPartialData ? "partial" : "error";
 
@@ -1414,6 +1437,7 @@ export async function GET() {
     spx_trend_14d: spxTrend14d,
     spx_history: spxCloses,
     vix: vixPrice,
+    fallbacks_in_use: fallbacksInUse,
     metrics: {
       spx_price: spxPrice,
       spx_change_pct: spxChangePct,
@@ -1424,6 +1448,7 @@ export async function GET() {
       spx_trend_14d: spxTrend14d,
       spx_history: spxCloses,
       vix: vixPrice,
+      vix_week_ago: vixWeekAgo,
       spx_20dma: { level: spx20dma, slope: spx20slope },
       spx_50dma: { level: spx50dma, slope: spx50slope },
       spx_100dma: { level: spx100dma, slope: spx100slope },
@@ -1449,6 +1474,7 @@ export async function GET() {
       regime_color: regimeColor[regime],
       regime_emoji: regimeEmoji[regime],
       hy_spread: hySpread,
+      hy_spread_week_ago: hyWeekAgo,
       yield_curve_10y_2y: yieldCurve,
       real_10y: real10y,
       nom_10y: nom10y,
