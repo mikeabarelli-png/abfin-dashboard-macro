@@ -29,7 +29,8 @@ function serializeComponents(
 
 async function fetchChart(
   ticker: string,
-  days: number
+  days: number,
+  interval: "1d" | "1wk" | "1mo" = "1d"
 ): Promise<{
   closes: number[];
   meta: Record<string, any>;
@@ -39,11 +40,11 @@ async function fetchChart(
 }> {
   const end = Math.floor(Date.now() / 1000);
   const start = end - days * 24 * 60 * 60;
-  const url = `${BASE}/${encodeURIComponent(ticker)}?period1=${start}&period2=${end}&interval=1d&includePrePost=false`;
+  const url = `${BASE}/${encodeURIComponent(ticker)}?period1=${start}&period2=${end}&interval=${interval}&includePrePost=false`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    console.log(`Fetching ${ticker} chart...`);
+    console.log(`Fetching ${ticker} chart (${interval})...`);
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
@@ -263,6 +264,156 @@ function computeMonthEndSma(
   return { sma: Math.round(sma * 100) / 100, monthEndCloses };
 }
 
+// ─── Graded Ivy (S&P trend) → target equity % ───────────────────────────
+// Ivy's 10-month rule graded across five lookbacks instead of one yes/no.
+// Score = weighted share of month-end SMAs the S&P sits above (10m and 12m
+// count double, since they are the core of the Ivy rule). The score is then
+// placed inside the personal allocation band (MANUAL_ALLOC_BAND):
+//   equity % = floor + score × (ceiling − floor)
+// Backtest 2002-2026, 30/60 band: 6.7%/yr est. total return, -21% max
+// drawdown, ~3 allocation changes a year (vs -31% for a static mix at the
+// same average equity). Official = last completed month-end (act on this).
+// Live = current price vs SMAs that include this month's latest close
+// (forecast only, same convention as the Ivy table).
+const GRADED_IVY_WEIGHTS = [
+  { months: 3, weight: 1 },
+  { months: 6, weight: 1 },
+  { months: 8, weight: 1 },
+  { months: 10, weight: 2 },
+  { months: 12, weight: 2 },
+];
+
+type GradedIvyReading = {
+  asOf: string;
+  price: number;
+  score: number;
+  equityPct: number;
+  mas: { months: number; weight: number; sma: number; above: boolean; gapPct: number }[];
+};
+
+function gradedIvyReading(
+  monthEnds: { key: string; close: number; ts: number }[],
+  price: number,
+  asOfTs: number,
+  floor: number,
+  ceiling: number
+): GradedIvyReading | null {
+  const maxMonths = Math.max(...GRADED_IVY_WEIGHTS.map(w => w.months));
+  if (monthEnds.length < maxMonths || !Number.isFinite(price)) return null;
+  const totalWeight = GRADED_IVY_WEIGHTS.reduce((s, w) => s + w.weight, 0);
+  let bullWeight = 0;
+  const mas = GRADED_IVY_WEIGHTS.map(({ months, weight }) => {
+    const window = monthEnds.slice(-months);
+    const sma = window.reduce((s, m) => s + m.close, 0) / months;
+    const above = price > sma;
+    if (above) bullWeight += weight;
+    return { months, weight, sma: Math.round(sma * 100) / 100, above, gapPct: Math.round(((price - sma) / sma) * 1000) / 10 };
+  });
+  const score = bullWeight / totalWeight;
+  const equityPct = Math.round((floor + score * (ceiling - floor)) * 10) / 10;
+  const asOf = new Date(asOfTs * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return { asOf, price: Math.round(price * 100) / 100, score: Math.round(score * 1000) / 1000, equityPct, mas };
+}
+
+function computeGradedIvy(
+  closes: number[],
+  timestamps: number[],
+  livePrice: number | null,
+  floor: number,
+  ceiling: number
+): { official: GradedIvyReading | null; live: GradedIvyReading | null; floor: number; ceiling: number } {
+  const empty = { official: null, live: null, floor, ceiling };
+  if (closes.length === 0 || timestamps.length !== closes.length) return empty;
+  // Last close of each calendar month, oldest first.
+  const byMonth = new Map<string, { key: string; close: number; ts: number }>();
+  for (let i = 0; i < closes.length; i++) {
+    const d = new Date(timestamps[i] * 1000);
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    byMonth.set(key, { key, close: closes[i], ts: timestamps[i] });
+  }
+  const months = Array.from(byMonth.values()).sort((a, b) => a.key.localeCompare(b.key));
+  // The month of the latest close is still in progress. Everything before
+  // it is a completed month-end.
+  const completed = months.slice(0, -1);
+  const lastDone = completed[completed.length - 1];
+  const official = lastDone ? gradedIvyReading(completed, lastDone.close, lastDone.ts, floor, ceiling) : null;
+  const current = months[months.length - 1];
+  const live = gradedIvyReading(months, livePrice ?? current.close, timestamps[timestamps.length - 1], floor, ceiling);
+  return { official, live, floor, ceiling };
+}
+
+// ─── Roberts Risk Signals (Lance Roberts' weekly/monthly framework) ──────
+// Four yes/no checks on the S&P, graded and placed in the allocation band:
+//   weekly MACD 12/26/9 buy (x1), slower weekly MACD 26/52/18 buy (x2),
+//   close above the 40-week SMA (x2), monthly MACD 12/26/9 buy (x2).
+// Inspired by his published process, not his exact model (he doesn't
+// publish the slower MACD settings). Backtest 2002-2026, 30/60 band:
+// 6.6%/yr, -22% max drawdown, -8.7% in 2022 (best of the models tested),
+// ~6 allocation changes a year. Needs 10y of weekly and 15y of monthly
+// bars so the slow EMAs are fully warmed up.
+function ema(values: number[], span: number): number[] {
+  const alpha = 2 / (span + 1);
+  const out: number[] = [];
+  values.forEach((v, i) => out.push(i === 0 ? v : alpha * v + (1 - alpha) * out[i - 1]));
+  return out;
+}
+function macdBuy(closes: number[], fast: number, slow: number, signal: number): boolean {
+  const f = ema(closes, fast), s = ema(closes, slow);
+  const line = closes.map((_, i) => f[i] - s[i]);
+  const sig = ema(line, signal);
+  return line[line.length - 1] > sig[sig.length - 1];
+}
+// One close per period (Yahoo can append an extra intraday row to the
+// current weekly/monthly bar), oldest first.
+function lastClosePerPeriod(closes: number[], timestamps: number[], period: "week" | "month"): number[] {
+  const byKey = new Map<string, number>();
+  for (let i = 0; i < closes.length; i++) {
+    const d = new Date(timestamps[i] * 1000);
+    let key: string;
+    if (period === "month") {
+      key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    } else {
+      const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7)));
+      key = monday.toISOString().slice(0, 10);
+    }
+    byKey.set(key, closes[i]);
+  }
+  return Array.from(byKey.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(e => e[1]);
+}
+function computeRobertsRisk(
+  weekly: { closes: number[]; timestamps: number[] },
+  monthly: { closes: number[]; timestamps: number[] },
+  floor: number,
+  ceiling: number
+): { equityPct: number; score: number; signals: { key: string; label: string; weight: number; buy: boolean }[] } | null {
+  const w = lastClosePerPeriod(weekly.closes, weekly.timestamps, "week");
+  const m = lastClosePerPeriod(monthly.closes, monthly.timestamps, "month");
+  if (w.length < 150 || m.length < 60) return null;
+  const sma40 = w.slice(-40).reduce((s, v) => s + v, 0) / 40;
+  const signals = [
+    { key: "wMacd",     label: "Weekly MACD",      weight: 1, buy: macdBuy(w, 12, 26, 9) },
+    { key: "wMacdSlow", label: "Slow weekly MACD", weight: 2, buy: macdBuy(w, 26, 52, 18) },
+    { key: "wk40",      label: "40-week SMA",      weight: 2, buy: w[w.length - 1] > sma40 },
+    { key: "mMacd",     label: "Monthly MACD",     weight: 2, buy: macdBuy(m, 12, 26, 9) },
+  ];
+  const total = signals.reduce((s, x) => s + x.weight, 0);
+  const score = signals.reduce((s, x) => s + (x.buy ? x.weight : 0), 0) / total;
+  return { equityPct: Math.round((floor + score * (ceiling - floor)) * 10) / 10, score: Math.round(score * 1000) / 1000, signals };
+}
+
+// ─── Credit (HY spread) → target equity % ───────────────────────────────
+// Ceiling at 300 bps or tighter, straight line down to the floor at 500 bps
+// (the industry red line). No smoothing and no automated capitulation
+// re-entry: deploying into fear stays a human call. Long-history test on
+// BAA10Y (2002-2026): exits early (floor by Jan 2008), re-enters late,
+// correlation with the trend models only 0.35, so it earns its own vote.
+const CREDIT_CEILING_BPS = 300;
+const CREDIT_FLOOR_BPS = 500;
+function computeCredit(hyBps: number, floor: number, ceiling: number) {
+  const score = Math.max(0, Math.min(1, 1 - (hyBps - CREDIT_CEILING_BPS) / (CREDIT_FLOOR_BPS - CREDIT_CEILING_BPS)));
+  return { equityPct: Math.round((floor + score * (ceiling - floor)) * 10) / 10, score: Math.round(score * 1000) / 1000, hyBps: Math.round(hyBps), ceilingBps: CREDIT_CEILING_BPS, floorBps: CREDIT_FLOOR_BPS };
+}
+
 async function fetchIvyPosition(ticker: string): Promise<{
   price: number | null;
   sma: number | null;
@@ -475,7 +626,24 @@ export async function GET() {
     asOf:       "Oct 31",                       // month-end close the signals come from
     validUntil: "Nov 30",                       // next month-end reading
   };                                           // Oct 31 2026 · VEU (-0.7%) + IEF (-0.9%) in Cash, VNQ back to Invest (+1.0%)
-  const MANUAL_AAII_BEARS = 41.4;              // AAII Sentiment Survey · week ending Oct 28 2026 · -4.4pts w/w, bullish 37.8%
+  // Personal equity allocation band. Every allocation model tile resolves to
+  // a % inside floor-ceiling. Baseline 50% with a wide 30-70% band so the
+  // models can show when they want to go past the 40-60% comfort range
+  // instead of being capped. "actual" is the blended equity across Mike's
+  // and Noelle's accounts, update when the real allocation changes.
+  // Backtest 2002-2026, Consensus in 30/70: 7.1%/yr, -22% max drawdown,
+  // ~5 allocation changes a year.
+  const MANUAL_ALLOC_BAND = { floor: 30, ceiling: 70, baseline: 50, comfortLow: 40, comfortHigh: 60, actual: 45 };
+  // PiTrade ROAR Score (Rob Isbitts), market level, shown as published
+  // (40 = 40% equity).
+  // OUTSIDE VIEW ONLY: not a tested model, keep it out of any composite.
+  // Add a new row each time he publishes (newest last, never edit old rows).
+  // Review in Nov 2027: compare each call with Graded Ivy and what the S&P
+  // did next, then promote the tile or drop it.
+  const MANUAL_ROAR_LOG: { date: string; score: number }[] = [
+    { date: "2026-11-14", score: 40 },
+  ];
+  const MANUAL_AAII_BEARS = 41.4;             // AAII Sentiment Survey · week ending Oct 28 2026 · -4.4pts w/w, bullish 37.8%
   const MANUAL_AD = {                          // StockCharts $NYAD cumulative, daily, 1Y · Oct 30 2026 · update MONTHLY
     // signal: bearish_divergence = A/D falling while SPX holds near highs (narrow market)
     //         confirming_weakness = A/D and SPX falling together (broad selling)
@@ -488,6 +656,9 @@ export async function GET() {
   };
   // ═══════════════════════════════════════════════════════════════════
 
+  // Started before the main batch so they run in parallel with it.
+  const spxWeeklyP = fetchChart("^GSPC", 3660, "1wk");
+  const spxMonthlyP = fetchChart("^GSPC", 5480, "1mo");
   const [
     [spx, qqq, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthResult],
     positionResults,
@@ -1124,6 +1295,24 @@ export async function GET() {
   const spx100dma = spxCloses.length >= 100 ? avg(spxCloses.slice(-100)) : null;
   const spx200dma = spxCloses.length >= 200 ? avg(spxCloses.slice(-200)) : null;
   const spxTrend14d = spxCloses.slice(-14);
+  // 420 calendar days of daily closes covers 12 completed month-ends plus
+  // the current month, enough for both the official and live readings.
+  const gradedIvy = {
+    ...computeGradedIvy(spxCloses, spx.timestamps, spxPrice, MANUAL_ALLOC_BAND.floor, MANUAL_ALLOC_BAND.ceiling),
+    actual: MANUAL_ALLOC_BAND.actual,
+  };
+  const roarLatest = MANUAL_ROAR_LOG[MANUAL_ROAR_LOG.length - 1] ?? null;
+  const roarPrior = MANUAL_ROAR_LOG.length >= 2 ? MANUAL_ROAR_LOG[MANUAL_ROAR_LOG.length - 2] : null;
+  const roar = roarLatest == null ? null : {
+    score: roarLatest.score,
+    date: roarLatest.date,
+    priorScore: roarPrior?.score ?? null,
+    equityPct: roarLatest.score,   // shown as published, not rescaled into the band
+    daysOld: Math.floor((Date.now() - Date.parse(`${roarLatest.date}T12:00:00Z`)) / 86400000),
+    trackingSince: MANUAL_ROAR_LOG[0].date,
+    entries: MANUAL_ROAR_LOG.length,
+    log: MANUAL_ROAR_LOG,
+  };
 
   const spxAbove200 = spxPrice != null && spx200dma != null && spxPrice > spx200dma;
   type SchanenpSignal = "bull" | "bear" | "non_confirmation_bull" | "non_confirmation_bear";
@@ -1263,6 +1452,22 @@ export async function GET() {
   const nom10y: number = fredNom10y.value ?? 4.30;
 
   const hySpread: number = fredHY.value ?? MANUAL_HY_FALLBACK;
+
+  // ─── Equity Allocation models (hero group) ──────────────────────────────
+  // Consensus = simple average of the scored models. ROAR is tracked
+  // separately and never enters it.
+  const [spxWeekly, spxMonthly] = await Promise.all([spxWeeklyP, spxMonthlyP]);
+  const robertsRisk = computeRobertsRisk(spxWeekly, spxMonthly, MANUAL_ALLOC_BAND.floor, MANUAL_ALLOC_BAND.ceiling);
+  const creditModel = computeCredit(hySpread * 100, MANUAL_ALLOC_BAND.floor, MANUAL_ALLOC_BAND.ceiling);
+  const scoredModels = [gradedIvy.official?.equityPct ?? null, robertsRisk?.equityPct ?? null, creditModel.equityPct]
+    .filter((v): v is number => v != null);
+  const equityAllocation = {
+    ...MANUAL_ALLOC_BAND,
+    consensus: scoredModels.length ? Math.round((scoredModels.reduce((a, b) => a + b, 0) / scoredModels.length) * 10) / 10 : null,
+    modelsInConsensus: scoredModels.length,
+    roberts: robertsRisk,
+    credit: { ...creditModel, isFallback: fredHY.value == null },
+  };
 
   // Week-over-week priors, live. Same method as the S&P (close from 5
   // trading days back). Null when history is short or the fetch failed,
@@ -1520,6 +1725,9 @@ export async function GET() {
       schannep_label: schannepLabel[schannepSignal],
       schannep_color: schannepColor[schannepSignal],
       ivy_official: MANUAL_IVY,
+      graded_ivy: gradedIvy,
+      equity_allocation: equityAllocation,
+      roar,
       ivy: {
         vti: { price: ivyVTI.price, sma: ivyVTI.sma, variance: ivyVTI.variancePct, signal: ivyVTI.signal },
         veu: { price: ivyVEU.price, sma: ivyVEU.sma, variance: ivyVEU.variancePct, signal: ivyVEU.signal },
