@@ -921,6 +921,115 @@ export default function Page() {
             );
           })()}
 
+          {/* ⓪-A EQUITY ALLOCATION — hero group. Each scored model resolves to a
+              target equity % inside the personal band (MANUAL_ALLOC_BAND in
+              route.ts). Consensus = average of the scored models (Graded Ivy,
+              Roberts Risk Signals, Credit). PiTrade ROAR is tracked beside
+              them and never enters Consensus. Tile anatomy, bar, ticks and
+              colors mirror the Top 10 Signals tiles below on purpose. */}
+          <section className="panel" style={{ marginBottom:16 }}>
+            <div className="panelHeader">
+              <div><div className="panelTitle">Equity Allocation</div><div className="panelSub">Each model resolves to a target equity % · Consensus = average of the scored models</div></div>
+            </div>
+            {(() => {
+              const ea = metrics?.equity_allocation ?? marketData?.equity_allocation ?? null;
+              const gi = metrics?.graded_ivy ?? marketData?.graded_ivy ?? null;
+              const roar = metrics?.roar ?? marketData?.roar ?? null;
+              const floor: number = ea?.floor ?? gi?.floor ?? 30;
+              const ceiling: number = ea?.ceiling ?? gi?.ceiling ?? 60;
+              const actual: number | null = ea?.actual ?? gi?.actual ?? null;
+              const baseline: number = ea?.baseline ?? (floor + ceiling) / 2;
+              const comfortLow: number | null = ea?.comfortLow ?? null;
+              const comfortHigh: number | null = ea?.comfortHigh ?? null;
+              const span = ceiling - floor;
+              const toPos = (pct: number) => Math.max(0, Math.min(100, ((pct - floor) / span) * 100));
+
+              // One zone scheme for every allocation tile, centered on the
+              // baseline: within 5 pts = Neutral (yellow), below = Underweight
+              // (red), above = Overweight (green). Readings outside the
+              // 40-60 comfort range get flagged in the status, not capped.
+              const RED = "#ff6b88", YELLOW = "#fbbf24", GREEN = "#4ade80", GRAY = "#94a3b8";
+              const nLo = toPos(baseline - 5), nHi = toPos(baseline + 5);
+              const allocBands = [{ color:RED, from:0, to:nLo }, { color:YELLOW, from:nLo, to:nHi }, { color:GREEN, from:nHi, to:100 }];
+              const zoneColor = (pct: number | null) => pct == null ? GRAY : pct > baseline + 5 ? GREEN : pct >= baseline - 5 ? YELLOW : RED;
+              const zoneStatus = (pct: number | null) => {
+                if (pct == null) return "Loading";
+                const word = pct > baseline + 5 ? "Overweight" : pct >= baseline - 5 ? "Neutral" : "Underweight";
+                if (comfortHigh != null && pct > comfortHigh) return `${word} · Past ${comfortHigh}`;
+                if (comfortLow != null && pct < comfortLow) return `${word} · Below ${comfortLow}`;
+                return word;
+              };
+              const ticks = Array.from({ length: Math.round(span / 10) + 1 }, (_, i) => floor + i * 10).filter(v => v <= ceiling)
+                .map(v => ({ pos: toPos(v), label: `${v}` }));
+              const bandGradient = `linear-gradient(to right, ${allocBands.map(b => `${b.color} ${b.from}%, ${b.color} ${b.to}%`).join(", ")})`;
+              const fmtDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month:"short", day:"numeric", timeZone:"UTC" });
+
+              const ivyPct: number | null = gi?.official?.equityPct ?? null;
+              const ivyAbove = gi?.official?.mas ? gi.official.mas.filter((m: { above: boolean }) => m.above).length : null;
+              const rob = ea?.roberts ?? null;
+              const robBuys: string[] = rob?.signals ? rob.signals.filter((x: { buy: boolean }) => x.buy).map((x: { label: string }) => x.label) : [];
+              const cr = ea?.credit ?? null;
+              const consensus: number | null = ea?.consensus ?? null;
+              const gap = consensus != null && actual != null ? Math.round(consensus - actual) : null;
+              const roarStale = roar != null && roar.daysOld > 10;
+
+              type ATile = { family: string; label: string; pct: number | null; status: string; color: string; dot: string; sub: string };
+              const tiles: ATile[] = [
+                { family:"Trend", label:"Graded Ivy", pct: ivyPct, status: zoneStatus(ivyPct), color: zoneColor(ivyPct), dot: zoneColor(ivyPct),
+                  sub: gi?.official ? `${ivyAbove}/5 SMAs above · ${gi.official.asOf} close${gi.live ? ` · live ${Math.round(gi.live.equityPct)}%` : ""}` : "Waiting for month-end data" },
+                { family:"Momentum", label:"Roberts Risk Signals", pct: rob?.equityPct ?? null, status: zoneStatus(rob?.equityPct ?? null), color: zoneColor(rob?.equityPct ?? null), dot: zoneColor(rob?.equityPct ?? null),
+                  sub: rob ? (robBuys.length ? `Buy: ${robBuys.join(", ")}` : "All four signals on sell") : "Loading weekly data" },
+                { family:"Credit", label:"HY Credit", pct: cr?.equityPct ?? null, status: zoneStatus(cr?.equityPct ?? null), color: zoneColor(cr?.equityPct ?? null), dot: zoneColor(cr?.equityPct ?? null),
+                  sub: cr ? `${cr.hyBps}bps · ceiling ≤${cr.ceilingBps} · floor ${cr.floorBps}${cr.isFallback ? " · manual" : ""}` : "Loading" },
+                { family:"Outside view", label:"PiTrade ROAR", pct: roar?.equityPct ?? null, status: roar == null ? "No Entry" : roarStale ? `Stale · ${roar.daysOld}d` : "Not Scored",
+                  color: roarStale ? YELLOW : GRAY, dot: GRAY,
+                  sub: roar ? `Published ${fmtDate(roar.date)} · tracking since ${fmtDate(roar.trackingSince)}` : "Add a reading in MANUAL_ROAR_LOG" },
+              ];
+
+              return (
+                <>
+                  {/* Summary strip, same anatomy as the Top 10 strip */}
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, padding:"10px 14px", background:"#161a33", borderRadius:10 }}>
+                    <div style={{ display:"flex", gap:18, alignItems:"center" }}>
+                      <span style={{ fontSize:13, fontWeight:700, color:"#cbd5e1", whiteSpace:"nowrap" }}>Baseline {baseline}%</span>
+                      <span className="hideMobile" style={{ fontSize:13, fontWeight:700, color:"#cbd5e1", whiteSpace:"nowrap" }}>Band {floor}–{ceiling}%{comfortLow != null && comfortHigh != null ? ` · range ${comfortLow}–${comfortHigh}%` : ""}</span>
+                      {actual != null && <span style={{ fontSize:13, fontWeight:700, color:"#cbd5e1", whiteSpace:"nowrap" }}>You {actual}%</span>}
+                      {gap != null && <span className="hideMobile" style={{ fontSize:12, color:"#64748b" }}>Consensus {gap > 0 ? "+" : ""}{gap} pts vs you</span>}
+                    </div>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
+                      <span style={{ fontSize:10, color:"#64748b", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Consensus</span>
+                      <span style={{ fontSize:20, fontWeight:800, color: zoneColor(consensus) }}>{consensus != null ? `${Math.round(consensus)}%` : "—"}</span>
+                      <span style={{ fontSize:11, color:"#475569" }}>{ea?.modelsInConsensus ?? 0} models</span>
+                    </div>
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:8 }} className="allocGrid">
+                    {tiles.map(t => (
+                      <div key={t.label} className="tile" style={{ position:"relative" }}>
+                        <div style={{ position:"absolute", top:10, right:10, width:10, height:10, borderRadius:"50%", background:t.dot, boxShadow:`0 0 6px ${t.dot}88` }} />
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:2, textTransform:"uppercase", letterSpacing:"0.04em" }}>{t.family}</div>
+                        <div className="lbl" style={{ marginBottom:6, paddingRight:18 }}>{t.label}</div>
+                        <div className="valHero" style={{ fontSize:24 }}>{t.pct != null ? `${Math.round(t.pct)}%` : "—"}</div>
+                        <div className="status" style={{ color:t.color, fontSize:12, marginTop:2 }}>{t.status}</div>
+                        {/* Bar = the allocation band. Gray tick = your actual
+                            allocation, white marker = this model's target. */}
+                        <div style={{ position:"relative", height:5, borderRadius:9999, background: bandGradient, marginTop:8, marginBottom:2 }}>
+                          {actual != null && <div style={{ position:"absolute", top:-2, left:`${toPos(actual)}%`, width:2, height:9, background:"#475569", transform:"translateX(-1px)", zIndex:1 }} />}
+                          {t.pct != null && <div style={{ position:"absolute", top:-2, left:`${Math.max(1, Math.min(toPos(t.pct), 99))}%`, width:2, height:9, background:"#0b0b2a", border:"1px solid #fff", transform:"translateX(-1px)", zIndex:2 }} />}
+                        </div>
+                        <div style={{ position:"relative", height:12, marginTop:2 }}>
+                          {ticks.map((k, i) => (
+                            <div key={i} style={{ position:"absolute", left:`${k.pos}%`, transform: i === 0 ? "none" : i === ticks.length - 1 ? "translateX(-100%)" : "translateX(-50%)", fontSize:9, color:"#64748b" }}>{k.label}</div>
+                          ))}
+                        </div>
+                        <div className="sub" style={{ marginTop:2 }}>{t.sub}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+          </section>
+
           {/* ⓪ TOP 10 SIGNALS — force-ranked scoreboard, #1 most critical to
               watch through #10 least urgent. Two rows of five. Each tile
               reuses the same live thresholds already computed elsewhere on
@@ -3959,6 +4068,7 @@ export default function Page() {
         @media(max-width:700px){
           .topBar,.panelHeader{flex-direction:column;align-items:flex-start;}
           .grid5,.grid4{grid-template-columns:repeat(2,minmax(0,1fr));}
+          .allocGrid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}
           .grid3{grid-template-columns:1fr;}
           .alertStrip,.alertStripCritical{flex-direction:column;align-items:flex-start;gap:4px;}
           .title{font-size:20px;}
