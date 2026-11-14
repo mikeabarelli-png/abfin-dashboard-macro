@@ -634,6 +634,11 @@ export async function GET() {
   // Backtest 2002-2026, Consensus in 30/70: 7.1%/yr, -22% max drawdown,
   // ~5 allocation changes a year.
   const MANUAL_ALLOC_BAND = { floor: 30, ceiling: 70, baseline: 50, comfortLow: 40, comfortHigh: 60, actual: 45 };
+  // US vs international share of the equity sleeve (M2: SCHD/VTI/VTWO 30
+  // vs VEA/VIGI 20; Noelle TOD: VTI 25 vs VXUS 15). Blends the two Graded
+  // Ivy tiles into ONE trend vote in Consensus, so trend never outweighs
+  // momentum and credit. Update if the equity mix changes.
+  const MANUAL_EQUITY_MIX = { us: 60, intl: 40 };
   // PiTrade ROAR Score (Rob Isbitts), market level, shown as published
   // (40 = 40% equity).
   // OUTSIDE VIEW ONLY: not a tested model, keep it out of any composite.
@@ -658,6 +663,7 @@ export async function GET() {
 
   // Started before the main batch so they run in parallel with it.
   const spxWeeklyP = fetchChart("^GSPC", 3660, "1wk");
+  const veaDailyP = fetchChart("VEA", 420);   // Graded Ivy · Intl
   const spxMonthlyP = fetchChart("^GSPC", 5480, "1mo");
   const [
     [spx, qqq, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthResult],
@@ -1454,18 +1460,34 @@ export async function GET() {
   const hySpread: number = fredHY.value ?? MANUAL_HY_FALLBACK;
 
   // ─── Equity Allocation models (hero group) ──────────────────────────────
-  // Consensus = simple average of the scored models. ROAR is tracked
-  // separately and never enters it.
-  const [spxWeekly, spxMonthly] = await Promise.all([spxWeeklyP, spxMonthlyP]);
+  // Consensus = simple average of the scored models: trend (Graded Ivy US
+  // and Intl blended by MANUAL_EQUITY_MIX), Roberts and Credit. ROAR is
+  // tracked separately and never enters it.
+  const [spxWeekly, spxMonthly, veaDaily] = await Promise.all([spxWeeklyP, spxMonthlyP, veaDailyP]);
+  // Graded Ivy · Intl: same method as the S&P tile, run on VEA (the main
+  // international holding). Not separately backtested.
+  const gradedIvyIntl = computeGradedIvy(
+    veaDaily.closes, veaDaily.timestamps,
+    veaDaily.meta?.regularMarketPrice ?? veaDaily.closes[veaDaily.closes.length - 1] ?? null,
+    MANUAL_ALLOC_BAND.floor, MANUAL_ALLOC_BAND.ceiling
+  );
+  const ivyUsPct = gradedIvy.official?.equityPct ?? null;
+  const ivyIntlPct = gradedIvyIntl.official?.equityPct ?? null;
+  const trendBlendPct =
+    ivyUsPct != null && ivyIntlPct != null
+      ? Math.round(((ivyUsPct * MANUAL_EQUITY_MIX.us + ivyIntlPct * MANUAL_EQUITY_MIX.intl) / (MANUAL_EQUITY_MIX.us + MANUAL_EQUITY_MIX.intl)) * 10) / 10
+      : ivyUsPct ?? ivyIntlPct;
   const robertsRisk = computeRobertsRisk(spxWeekly, spxMonthly, MANUAL_ALLOC_BAND.floor, MANUAL_ALLOC_BAND.ceiling);
   const creditModel = computeCredit(hySpread * 100, MANUAL_ALLOC_BAND.floor, MANUAL_ALLOC_BAND.ceiling);
-  const scoredModels = [gradedIvy.official?.equityPct ?? null, robertsRisk?.equityPct ?? null, creditModel.equityPct]
+  const scoredModels = [trendBlendPct, robertsRisk?.equityPct ?? null, creditModel.equityPct]
     .filter((v): v is number => v != null);
   const equityAllocation = {
     ...MANUAL_ALLOC_BAND,
     consensus: scoredModels.length ? Math.round((scoredModels.reduce((a, b) => a + b, 0) / scoredModels.length) * 10) / 10 : null,
     modelsInConsensus: scoredModels.length,
     roberts: robertsRisk,
+    ivyIntl: { ...gradedIvyIntl, ticker: "VEA" },
+    trend: { blendPct: trendBlendPct, usPct: ivyUsPct, intlPct: ivyIntlPct, mix: MANUAL_EQUITY_MIX },
     credit: { ...creditModel, isFallback: fredHY.value == null },
   };
 
