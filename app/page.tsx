@@ -1,1883 +1,4089 @@
-import { NextResponse } from "next/server";
+"use client";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-export const revalidate = 0;
+import { useEffect, useState, useRef } from "react";
 
-const BASE = "https://query1.finance.yahoo.com/v8/finance/chart";
-const FRED = "https://api.stlouisfed.org/fred/series/observations";
-const TIMEOUT_MS = 9000;
+type AnyObj = Record<string, any>;
+type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | "dxy" | "ad" | "roberts40w" | "portfolioDetail" | null;
 
-function avg(arr: number[]): number {
-  const clean = arr.filter((n) => Number.isFinite(n));
-  return clean.reduce((s, n) => s + n, 0) / clean.length;
+// Single source of truth for Equity Risk Premium thresholds. Every ERP
+// tile/modal on the dashboard should read from this instead of carrying
+// its own inline cutoffs — that drift is what caused the composite-grid
+// tile and the secondary tile to disagree at the same erpBps value.
+// Thresholds: <200bps Danger, 200-499bps Watch, 500bps+ Healthy.
+function erpStatus(bps: number | null): {
+  label: string;
+  shortLabel: string;
+  color: string;
+  bg: string;
+  tier: "loading" | "danger" | "watch" | "healthy";
+} {
+  if (bps == null) {
+    return { label: "Loading", shortLabel: "Loading", color: "#475569", bg: "rgba(148,163,184,0.12)", tier: "loading" };
+  }
+  if (bps < 200) {
+    return { label: "Danger — Near Zero", shortLabel: "Danger", color: "#ff6b88", bg: "rgba(255,79,114,0.15)", tier: "danger" };
+  }
+  if (bps < 500) {
+    return { label: "Watch — Below 5%", shortLabel: "Watch", color: "#fbbf24", bg: "rgba(245,158,11,0.15)", tier: "watch" };
+  }
+  return { label: "Healthy Premium", shortLabel: "Healthy", color: "#4ade80", bg: "rgba(74,222,128,0.15)", tier: "healthy" };
 }
 
-// Converts an internal { ticker, weight (decimal), ytd, today } component
-// list into the clean shape the drill-down modal on the dashboard reads,
-// weight expressed as a whole percentage instead of a 0-1 decimal.
-function serializeComponents(
-  comps: { ticker: string; weight: number; ytd: number | null; today: number | null }[]
-) {
-  return comps.map((c) => ({
-    ticker: c.ticker,
-    weight_pct: Math.round(c.weight * 1000) / 10,
-    ytd_pct: c.ytd,
-    today_pct: c.today,
-  }));
-}
+export default function Page() {
+  // Compact 1-2 word asset-class label per ticker, for the portfolio
+  // drill-down modal — a quick "what is this fund" reference, since not
+  // every hypothetical portfolio's holdings are as familiar as the real one.
+  const TICKER_LABELS: Record<string, string> = {
+    VTIP: "US TIPS",
+    SGOV: "T-Bills",
+    VEA:  "Intl Equity",
+    VGIT: "US Treasuries",
+    SCHD: "US Value",
+    VTI:  "US Broad",
+    GLDM: "Gold",
+    BND:  "US Bonds",
+    PDBC: "Commodities",
+    DBMF: "Managed Futures",
+    VUG:  "US Growth",
+    VTV:  "US Value",
+    VWO:  "Emerging Mkts",
+    VCIT: "US Credit",
+    VMBS: "US MBS",
+    IGF:  "Infrastructure",
+    BNDX: "Intl Bonds",
+    SPX:  "US Index",
+    VTWO: "Small Cap",
+    VIGI: "Intl Dividend",
+    VXUS: "Total Intl",
+    VTEB: "Muni Bonds",
+  };
 
-async function fetchChart(
-  ticker: string,
-  days: number,
-  interval: "1d" | "1wk" | "1mo" = "1d"
-): Promise<{
-  closes: number[];
-  meta: Record<string, any>;
-  timestamps: number[];
-  adjcloses: (number | null)[];
-  error?: string;
-}> {
-  const end = Math.floor(Date.now() / 1000);
-  const start = end - days * 24 * 60 * 60;
-  const url = `${BASE}/${encodeURIComponent(ticker)}?period1=${start}&period2=${end}&interval=${interval}&includePrePost=false`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    console.log(`Fetching ${ticker} chart (${interval})...`);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Accept": "application/json",
-      },
-    });
-    console.log(`${ticker} status: ${res.status}`);
-    if (!res.ok) {
-      const preview = await res.text().catch(() => "");
-      console.error(`${ticker} error body: ${preview.slice(0, 200)}`);
-      return { closes: [], meta: {}, timestamps: [], adjcloses: [], error: `Yahoo ${ticker}: HTTP ${res.status}` };
-    }
-    const data = await res.json();
-    const result = data?.chart?.result?.[0];
-    if (!result) return { closes: [], meta: {}, timestamps: [], adjcloses: [], error: `${ticker}: no chart result` };
-    const rawTimestamps: number[] = result.timestamp ?? [];
-    const rawCloses: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
-    // Dividend/split-adjusted close — only reliable input for a total-return
-    // calculation. NOT used for DMA/slope math, which needs the raw close
-    // a chart actually shows.
-    const rawAdjCloses: (number | null)[] = result.indicators?.adjclose?.[0]?.adjclose ?? [];
+  const [modal, setModal] = useState<Modal>(null);
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+  const [marketData, setMarketData] = useState<AnyObj | null>(null);
+  const [lastUpdated, setLastUpdated] = useState("");
+  const [feedError, setFeedError] = useState("");
+  const chartRef = useRef<any>(null);
+  const rsiRef = useRef<any>(null);
+  const macdRef = useRef<any>(null);
+  const [activeRange, setActiveRange] = useState(126);
 
-    const closes: number[] = [];
-    const timestamps: number[] = [];
-    const adjcloses: (number | null)[] = [];
-    for (let i = 0; i < rawCloses.length; i++) {
-      const c = rawCloses[i];
-      if (c != null && Number.isFinite(c)) {
-        closes.push(Math.round(c * 100) / 100);
-        timestamps.push(rawTimestamps[i]);
-        const ac = rawAdjCloses[i];
-        adjcloses.push(ac != null && Number.isFinite(ac) ? Math.round(ac * 100) / 100 : null);
+  useEffect(() => {
+    let mounted = true;
+    const fetchMarket = async () => {
+      try {
+        const res = await fetch(`/api/smart-money-snapshot?ts=${Date.now()}`, { cache: "no-store" });
+        const text = await res.text();
+        let json: AnyObj;
+        try { json = JSON.parse(text); } catch { throw new Error(`Non-JSON: ${text.slice(0, 120)}`); }
+        if (!mounted) return;
+        if (!res.ok || json?.ok === false) { setFeedError(json?.detail || json?.error || `HTTP ${res.status}`); return; }
+        setMarketData(json);
+        setFeedError("");
+        setLastUpdated(new Date().toLocaleTimeString());
+      } catch (err: any) {
+        if (!mounted) return;
+        setFeedError(err?.message || "Unknown fetch error");
       }
-    }
-    console.log(`${ticker} closes: ${closes.length} points`);
-    return { closes, meta: result.meta ?? {}, timestamps, adjcloses };
-  } catch (err: any) {
-    const msg = err?.name === "AbortError" ? `${ticker}: request timed out` : `${ticker}: ${err?.message}`;
-    console.error(msg);
-    return { closes: [], meta: {}, timestamps: [], adjcloses: [], error: msg };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function fetchFred(seriesId: string, limit = 1, compareIndex = 1): Promise<{ value: number | null; prev: number | null; error?: string }> {
-  const apiKey = process.env.FRED_API_KEY;
-  if (!apiKey) return { value: null, prev: null, error: "FRED_API_KEY not set" };
-  const url = `${FRED}?series_id=${seriesId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=${limit}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) return { value: null, prev: null, error: `FRED ${seriesId}: HTTP ${res.status}` };
-    const data = await res.json();
-    const obs = data?.observations ?? [];
-    const val  = obs[0]?.value && obs[0].value !== "." ? parseFloat(obs[0].value) : null;
-    const prev = limit > compareIndex && obs[compareIndex]?.value && obs[compareIndex].value !== "." ? parseFloat(obs[compareIndex].value) : null;
-    console.log(`FRED ${seriesId}: ${val}${prev != null ? ` (prev @-${compareIndex}: ${prev})` : ""}`);
-    return { value: val, prev };
-  } catch (err: any) {
-    return { value: null, prev: null, error: `FRED ${seriesId}: ${err?.message}` };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// S&P 500 breadth (% of constituents above their 200-DMA). The ticker
-// this dashboard used to rely on, ^SPXA200R, is a ThinkorSwim symbol,
-// not a Yahoo Finance one, and has never actually resolved there. This
-// hits a real, free, no-key JSON endpoint instead. Attribution required
-// per their license: "History of Market · 美股编年史 (historyofmarket.com)".
-async function fetchBreadth(): Promise<{ value: number | null; error?: string }> {
-  const url = "https://historyofmarket.com/api/sp500/breadth.json";
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) return { value: null, error: `Breadth (historyofmarket.com): HTTP ${res.status}` };
-    const data = await res.json();
-    const val = typeof data?.latest?.pct200 === "number" ? data.latest.pct200 : null;
-    console.log(`Breadth (% above 200-DMA, historyofmarket.com): ${val} as of ${data?.latest?.date}`);
-    return { value: val };
-  } catch (err: any) {
-    return { value: null, error: `Breadth (historyofmarket.com): ${err?.message}` };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function fetchPE(): Promise<{ value: number | null; error?: string }> {
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EGSPC&fields=trailingPE,forwardPE`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Accept": "application/json",
-      },
-    });
-    if (!res.ok) return { value: null, error: `Yahoo v7 PE: HTTP ${res.status}` };
-    const data = await res.json();
-    const result = data?.quoteResponse?.result?.[0];
-    const pe = result?.trailingPE ?? result?.forwardPE ?? null;
-    console.log(`PE ratio: ${pe}`);
-    return { value: pe };
-  } catch (err: any) {
-    return { value: null, error: `PE fetch: ${err?.message}` };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Live intraday quote — the chart endpoint's daily closes only update once a
-// session settles, so mid-day they can lag by a full trading day for fast-
-// moving futures symbols. This endpoint carries an actual real-time quote.
-async function fetchLiveQuote(
-  ticker: string
-): Promise<{ price: number | null; changePct: number | null; error?: string }> {
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}&fields=regularMarketPrice,regularMarketChangePercent`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Accept": "application/json",
-      },
-    });
-    if (!res.ok) return { price: null, changePct: null, error: `Yahoo v7 quote ${ticker}: HTTP ${res.status}` };
-    const data = await res.json();
-    const result = data?.quoteResponse?.result?.[0];
-    const price = typeof result?.regularMarketPrice === "number" ? result.regularMarketPrice : null;
-    const changePct = typeof result?.regularMarketChangePercent === "number" ? result.regularMarketChangePercent : null;
-    console.log(`${ticker} live quote: $${price} (${changePct?.toFixed(2)}%)`);
-    return { price, changePct };
-  } catch (err: any) {
-    const msg = err?.name === "AbortError" ? `${ticker} live quote: timed out` : `${ticker} live quote: ${err?.message}`;
-    return { price: null, changePct: null, error: msg };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function fetchCape(): Promise<{ value: number | null; error?: string }> {
-  const apiKey = process.env.NASDAQ_API_KEY;
-  if (!apiKey) return { value: null, error: "NASDAQ_API_KEY not set" };
-  const url = `https://data.nasdaq.com/api/v3/datasets/MULTPL/SP500_SHILLER_PE_RATIO_MONTH.json?rows=1&api_key=${apiKey}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) return { value: null, error: `Nasdaq CAPE: HTTP ${res.status}` };
-    const data = await res.json();
-    const latest = data?.dataset?.data?.[0]?.[1];
-    const val = latest != null ? parseFloat(latest) : null;
-    console.log(`CAPE: ${val}`);
-    return { value: val };
-  } catch (err: any) {
-    return { value: null, error: `CAPE fetch: ${err?.message}` };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function fetchFearGreed(): Promise<{ value: number | null; rating: string | null; error?: string }> {
-  const url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata";
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Accept": "application/json",
-        "Referer": "https://www.cnn.com/",
-        "Origin": "https://www.cnn.com",
-      },
-    });
-    if (!res.ok) return { value: null, rating: null, error: `CNN F&G: HTTP ${res.status}` };
-    const data = await res.json();
-    const score = data?.fear_and_greed?.score;
-    const rating = data?.fear_and_greed?.rating;
-    const value = score != null ? Math.round(parseFloat(score)) : null;
-    console.log(`Fear & Greed: ${value} (${rating})`);
-    return { value, rating: rating ?? null };
-  } catch (err: any) {
-    return { value: null, rating: null, error: `Fear & Greed: ${err?.message}` };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function computeMonthEndSma(
-  closes: number[],
-  timestamps: number[],
-  months: number = 10
-): { sma: number | null; monthEndCloses: number[] } {
-  if (closes.length < months || timestamps.length !== closes.length) {
-    return { sma: null, monthEndCloses: [] };
-  }
-  const monthMap: Record<string, number> = {};
-  for (let i = 0; i < closes.length; i++) {
-    const d = new Date(timestamps[i] * 1000);
-    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    monthMap[key] = closes[i];
-  }
-  const sortedKeys = Object.keys(monthMap).sort().reverse();
-  const recentKeys = sortedKeys.slice(0, months);
-  if (recentKeys.length < months) return { sma: null, monthEndCloses: [] };
-  const monthEndCloses = recentKeys.map(k => monthMap[k]);
-  const sma = monthEndCloses.reduce((s, v) => s + v, 0) / months;
-  return { sma: Math.round(sma * 100) / 100, monthEndCloses };
-}
-
-// ─── Graded Ivy (S&P trend) → target equity % ───────────────────────────
-// Ivy's 10-month rule graded across five lookbacks instead of one yes/no.
-// Score = weighted share of month-end SMAs the S&P sits above (10m and 12m
-// count double, since they are the core of the Ivy rule). The score is then
-// placed inside the personal allocation band (MANUAL_ALLOC_BAND):
-//   equity % = floor + score × (ceiling − floor)
-// Backtest 2002-2026, 30/60 band: 6.7%/yr est. total return, -21% max
-// drawdown, ~3 allocation changes a year (vs -31% for a static mix at the
-// same average equity). Official = last completed month-end (act on this).
-// Live = current price vs SMAs that include this month's latest close
-// (forecast only, same convention as the Ivy table).
-const GRADED_IVY_WEIGHTS = [
-  { months: 3, weight: 1 },
-  { months: 6, weight: 1 },
-  { months: 8, weight: 1 },
-  { months: 10, weight: 2 },
-  { months: 12, weight: 2 },
-];
-
-type GradedIvyReading = {
-  asOf: string;
-  price: number;
-  score: number;
-  equityPct: number;
-  mas: { months: number; weight: number; sma: number; above: boolean; gapPct: number }[];
-};
-
-function gradedIvyReading(
-  monthEnds: { key: string; close: number; ts: number }[],
-  price: number,
-  asOfTs: number,
-  floor: number,
-  ceiling: number
-): GradedIvyReading | null {
-  const maxMonths = Math.max(...GRADED_IVY_WEIGHTS.map(w => w.months));
-  if (monthEnds.length < maxMonths || !Number.isFinite(price)) return null;
-  const totalWeight = GRADED_IVY_WEIGHTS.reduce((s, w) => s + w.weight, 0);
-  let bullWeight = 0;
-  const mas = GRADED_IVY_WEIGHTS.map(({ months, weight }) => {
-    const window = monthEnds.slice(-months);
-    const sma = window.reduce((s, m) => s + m.close, 0) / months;
-    const above = price > sma;
-    if (above) bullWeight += weight;
-    return { months, weight, sma: Math.round(sma * 100) / 100, above, gapPct: Math.round(((price - sma) / sma) * 1000) / 10 };
-  });
-  const score = bullWeight / totalWeight;
-  const equityPct = Math.round((floor + score * (ceiling - floor)) * 10) / 10;
-  const asOf = new Date(asOfTs * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-  return { asOf, price: Math.round(price * 100) / 100, score: Math.round(score * 1000) / 1000, equityPct, mas };
-}
-
-function computeGradedIvy(
-  closes: number[],
-  timestamps: number[],
-  livePrice: number | null,
-  floor: number,
-  ceiling: number
-): { official: GradedIvyReading | null; live: GradedIvyReading | null; floor: number; ceiling: number } {
-  const empty = { official: null, live: null, floor, ceiling };
-  if (closes.length === 0 || timestamps.length !== closes.length) return empty;
-  // Last close of each calendar month, oldest first.
-  const byMonth = new Map<string, { key: string; close: number; ts: number }>();
-  for (let i = 0; i < closes.length; i++) {
-    const d = new Date(timestamps[i] * 1000);
-    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    byMonth.set(key, { key, close: closes[i], ts: timestamps[i] });
-  }
-  const months = Array.from(byMonth.values()).sort((a, b) => a.key.localeCompare(b.key));
-  // The month of the latest close is still in progress. Everything before
-  // it is a completed month-end.
-  const completed = months.slice(0, -1);
-  const lastDone = completed[completed.length - 1];
-  const official = lastDone ? gradedIvyReading(completed, lastDone.close, lastDone.ts, floor, ceiling) : null;
-  const current = months[months.length - 1];
-  const live = gradedIvyReading(months, livePrice ?? current.close, timestamps[timestamps.length - 1], floor, ceiling);
-  return { official, live, floor, ceiling };
-}
-
-// ─── Roberts Risk Signals (Lance Roberts' weekly/monthly framework) ──────
-// Four yes/no checks on the S&P, graded and placed in the allocation band:
-//   weekly MACD 12/26/9 buy (x1), slower weekly MACD 26/52/18 buy (x2),
-//   close above the 40-week SMA (x2), monthly MACD 12/26/9 buy (x2).
-// Inspired by his published process, not his exact model (he doesn't
-// publish the slower MACD settings). Backtest 2002-2026, 30/60 band:
-// 6.6%/yr, -22% max drawdown, -8.7% in 2022 (best of the models tested),
-// ~6 allocation changes a year. Needs 10y of weekly and 15y of monthly
-// bars so the slow EMAs are fully warmed up.
-function ema(values: number[], span: number): number[] {
-  const alpha = 2 / (span + 1);
-  const out: number[] = [];
-  values.forEach((v, i) => out.push(i === 0 ? v : alpha * v + (1 - alpha) * out[i - 1]));
-  return out;
-}
-function macdBuy(closes: number[], fast: number, slow: number, signal: number): boolean {
-  const f = ema(closes, fast), s = ema(closes, slow);
-  const line = closes.map((_, i) => f[i] - s[i]);
-  const sig = ema(line, signal);
-  return line[line.length - 1] > sig[sig.length - 1];
-}
-// One close per period (Yahoo can append an extra intraday row to the
-// current weekly/monthly bar), oldest first.
-function lastClosePerPeriod(closes: number[], timestamps: number[], period: "week" | "month"): number[] {
-  const byKey = new Map<string, number>();
-  for (let i = 0; i < closes.length; i++) {
-    const d = new Date(timestamps[i] * 1000);
-    let key: string;
-    if (period === "month") {
-      key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    } else {
-      const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7)));
-      key = monday.toISOString().slice(0, 10);
-    }
-    byKey.set(key, closes[i]);
-  }
-  return Array.from(byKey.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(e => e[1]);
-}
-function computeRobertsRisk(
-  weekly: { closes: number[]; timestamps: number[] },
-  monthly: { closes: number[]; timestamps: number[] },
-  floor: number,
-  ceiling: number
-): { equityPct: number; score: number; signals: { key: string; label: string; weight: number; buy: boolean }[] } | null {
-  const w = lastClosePerPeriod(weekly.closes, weekly.timestamps, "week");
-  const m = lastClosePerPeriod(monthly.closes, monthly.timestamps, "month");
-  if (w.length < 150 || m.length < 60) return null;
-  const sma40 = w.slice(-40).reduce((s, v) => s + v, 0) / 40;
-  const signals = [
-    { key: "wMacd",     label: "Weekly MACD",      weight: 1, buy: macdBuy(w, 12, 26, 9) },
-    { key: "wMacdSlow", label: "Slow weekly MACD", weight: 2, buy: macdBuy(w, 26, 52, 18) },
-    { key: "wk40",      label: "40-week SMA",      weight: 2, buy: w[w.length - 1] > sma40 },
-    { key: "mMacd",     label: "Monthly MACD",     weight: 2, buy: macdBuy(m, 12, 26, 9) },
-  ];
-  const total = signals.reduce((s, x) => s + x.weight, 0);
-  const score = signals.reduce((s, x) => s + (x.buy ? x.weight : 0), 0) / total;
-  return { equityPct: Math.round((floor + score * (ceiling - floor)) * 10) / 10, score: Math.round(score * 1000) / 1000, signals };
-}
-
-// ─── Credit (HY spread) → target equity % ───────────────────────────────
-// Ceiling at 300 bps or tighter, straight line down to the floor at 500 bps
-// (the industry red line). No smoothing and no automated capitulation
-// re-entry: deploying into fear stays a human call. Long-history test on
-// BAA10Y (2002-2026): exits early (floor by Jan 2008), re-enters late,
-// correlation with the trend models only 0.35, so it earns its own vote.
-const CREDIT_CEILING_BPS = 300;
-const CREDIT_FLOOR_BPS = 500;
-function computeCredit(hyBps: number, floor: number, ceiling: number) {
-  const score = Math.max(0, Math.min(1, 1 - (hyBps - CREDIT_CEILING_BPS) / (CREDIT_FLOOR_BPS - CREDIT_CEILING_BPS)));
-  return { equityPct: Math.round((floor + score * (ceiling - floor)) * 10) / 10, score: Math.round(score * 1000) / 1000, hyBps: Math.round(hyBps), ceilingBps: CREDIT_CEILING_BPS, floorBps: CREDIT_FLOOR_BPS };
-}
-
-async function fetchIvyPosition(ticker: string): Promise<{
-  price: number | null;
-  sma: number | null;
-  variancePct: number | null;
-  signal: "Invest" | "Cash" | null;
-  error?: string;
-}> {
-  const end = Math.floor(Date.now() / 1000);
-  const start = end - 320 * 24 * 60 * 60;
-  const url = `${BASE}/${encodeURIComponent(ticker)}?period1=${start}&period2=${end}&interval=1d&includePrePost=false`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Accept": "application/json",
-      },
-    });
-    if (!res.ok) return { price: null, sma: null, variancePct: null, signal: null, error: `Yahoo ${ticker}: HTTP ${res.status}` };
-    const data = await res.json();
-    const result = data?.chart?.result?.[0];
-    if (!result) return { price: null, sma: null, variancePct: null, signal: null, error: `${ticker}: no result` };
-
-    const timestamps: number[] = result.timestamp ?? [];
-    const rawCloses: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
-    const closes = rawCloses.map((c, i) => ({ c, t: timestamps[i] }))
-      .filter(x => x.c != null && Number.isFinite(x.c!))
-      .map(x => ({ c: Math.round(x.c! * 100) / 100, t: x.t }));
-
-    if (closes.length < 20) return { price: null, sma: null, variancePct: null, signal: null, error: `${ticker}: insufficient data` };
-
-    const price = result.meta.regularMarketPrice ?? closes[closes.length - 1].c;
-    const { sma } = computeMonthEndSma(closes.map(x => x.c), closes.map(x => x.t));
-
-    if (sma == null || price == null) return { price, sma: null, variancePct: null, signal: null };
-
-    const variancePct = Math.round(((price - sma) / sma) * 1000) / 10;
-    const signal: "Invest" | "Cash" = price >= sma ? "Invest" : "Cash";
-    console.log(`Ivy ${ticker}: price=${price} sma=${sma} variance=${variancePct}% → ${signal}`);
-    return { price, sma, variancePct, signal };
-  } catch (err: any) {
-    const msg = err?.name === "AbortError" ? `${ticker}: timeout` : `${ticker}: ${err?.message}`;
-    return { price: null, sma: null, variancePct: null, signal: null, error: msg };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// PORTFOLIO POSITION HEALTH — price vs 200-DMA, slope, daily change
-// Reuses the exact same avg/slope math already proven on the SPX tiles.
-// ═══════════════════════════════════════════════════════════════════
-
-type PositionMetrics = {
-  ticker: string;
-  price: number | null;
-  dailyChangePct: number | null;
-  dma200: number | null;
-  slope200: number | null;
-  pctVs200: number | null;
-  ytdReturnPct: number | null;
-  oneYearReturnPct: number | null;
-  fiveYearReturnPct: number | null; // live, same technique as YTD/1-YR — see fetchPositionMetrics
-  error?: string;
-};
-
-
-async function fetchPositionMetrics(ticker: string): Promise<PositionMetrics> {
-  // 1830 calendar days (~5 years) covers the 200-DMA (needs ~380 days),
-  // YTD (needs back to Jan 1), 1-YR (needs back 365 days), AND 5-YR (needs
-  // back ~1825 days) from one single fetch. Tickers with less than 5 years
-  // of actual trading history (e.g. BTAL's current strategy only dates to
-  // Feb 2022) simply won't have a timestamp that far back — the 5-YR calc
-  // below handles that by returning null rather than guessing.
-  const chart = await fetchChart(ticker, 1830);
-
-  if (chart.error || chart.closes.length < 220) {
-    return {
-      ticker,
-      price: null,
-      dailyChangePct: null,
-      dma200: null,
-      slope200: null,
-      pctVs200: null,
-      ytdReturnPct: null,
-      oneYearReturnPct: null,
-      fiveYearReturnPct: null,
-      error: chart.error ?? `${ticker}: insufficient price history for 200-DMA`,
     };
-  }
-
-  const closes = chart.closes;
-  const price: number | null = chart.meta.regularMarketPrice ?? closes[closes.length - 1] ?? null;
-  const prevClose: number | null =
-    closes.length >= 2 ? closes[closes.length - 2] : chart.meta.chartPreviousClose ?? null;
-  const dailyChangePct: number | null =
-    price != null && prevClose != null ? ((price - prevClose) / prevClose) * 100 : null;
-
-  const dma200: number = avg(closes.slice(-200));
-  const dma200_prev: number | null = closes.length >= 220 ? avg(closes.slice(-220, -20)) : null;
-  const slope200: number | null =
-    dma200_prev != null ? ((dma200 - dma200_prev) / dma200_prev) * 100 : null;
-  const pctVs200: number | null = price != null ? ((price - dma200) / dma200) * 100 : null;
-
-  // YTD total return — dividend-adjusted close at the first trading day of
-  // the current calendar year, vs today's live price. Using adjclose at the
-  // start and live price at the end is the standard total-return method:
-  // the most recent adjclose already equals the most recent raw close, so
-  // pairing live price with it loses nothing and stays maximally current.
-  const currentYear = new Date().getUTCFullYear();
-  const ytdStartIdx = chart.timestamps.findIndex(
-    (t) => new Date(t * 1000).getUTCFullYear() === currentYear
-  );
-  const startAdjClose = ytdStartIdx >= 0 ? chart.adjcloses[ytdStartIdx] : null;
-  const ytdReturnPct: number | null =
-    startAdjClose != null && price != null && startAdjClose !== 0
-      ? ((price - startAdjClose) / startAdjClose) * 100
-      : null;
-
-  // 1-YR total return — same technique as YTD above, just anchored 365
-  // calendar days back instead of Jan 1. The 380-day fetch window already
-  // covers this with no second network call, unlike the 5-YR figure below.
-  const oneYearAgoMs = Date.now() - 365 * 24 * 60 * 60 * 1000;
-  let oneYearStartIdx = -1;
-  for (let i = 0; i < chart.timestamps.length; i++) {
-    if (chart.timestamps[i] * 1000 >= oneYearAgoMs) { oneYearStartIdx = i; break; }
-  }
-  const oneYearStartAdjClose = oneYearStartIdx >= 0 ? chart.adjcloses[oneYearStartIdx] : null;
-  const oneYearReturnPct: number | null =
-    oneYearStartAdjClose != null && price != null && oneYearStartAdjClose !== 0
-      ? ((price - oneYearStartAdjClose) / oneYearStartAdjClose) * 100
-      : null;
-
-  // 5-YR total return — same technique again, anchored 5*365 days back.
-  // Now possible with zero extra network calls since the fetch window
-  // above was widened to 1830 days specifically for this. Tickers with
-  // under 5 years of actual trading history (BTAL's current strategy only
-  // dates to Feb 2022) simply have no timestamp that old — the loop below
-  // never finds a match, fiveYearStartIdx stays -1, and this correctly
-  // returns null rather than guessing at a return the fund never had.
-  const fiveYearAgoMs = Date.now() - 5 * 365 * 24 * 60 * 60 * 1000;
-  let fiveYearStartIdx = -1;
-  for (let i = 0; i < chart.timestamps.length; i++) {
-    if (chart.timestamps[i] * 1000 >= fiveYearAgoMs) { fiveYearStartIdx = i; break; }
-  }
-  const fiveYearStartAdjClose = fiveYearStartIdx >= 0 ? chart.adjcloses[fiveYearStartIdx] : null;
-  const fiveYearReturnPct: number | null =
-    fiveYearStartAdjClose != null && price != null && fiveYearStartAdjClose !== 0
-      ? ((price - fiveYearStartAdjClose) / fiveYearStartAdjClose) * 100
-      : null;
-
-  console.log(
-    `${ticker}: price=${price} 200dma=${dma200.toFixed(2)} slope=${slope200?.toFixed(2)}% vs200=${pctVs200?.toFixed(2)}% ytd=${ytdReturnPct?.toFixed(2)}% 1yr=${oneYearReturnPct?.toFixed(2)}% 5yr=${fiveYearReturnPct?.toFixed(2)}%`
-  );
-
-  return {
-    ticker, price, dailyChangePct, dma200, slope200, pctVs200, ytdReturnPct,
-    oneYearReturnPct,
-    fiveYearReturnPct,
-    error: chart.error,
-  };
-}
-
-// Update this list when the GLDM → SCHD swap executes.
-const POSITION_TICKERS = ["VTI", "SCHD", "VEA", "SGOV", "VTIP", "VGIT", "GLDM"] as const;
-
-export async function GET() {
-  const diagnostics: Record<string, string> = {};
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SATURDAY MANUAL UPDATE CHECKLIST — update every weekend
-  // ═══════════════════════════════════════════════════════════════════
-  const MANUAL_CAPE_FALLBACK       = 40.13;    // multpl.com/shiller-pe          · Oct 31 2026
-  const MANUAL_BUFFETT_SIGMA       = 2.33;     // currentmarketvaluation.com     · Oct 31 2026
-  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 26 2026
-  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 26 2026
-  const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
-  // As-of dates for the fallbacks above. When a live fetch fails and a
-  // fallback is used, the page shows the value WITH this date so a stale
-  // number is never mistaken for a live one. Update the date whenever you
-  // update the value.
-  const FALLBACK_ASOF = {
-    cape:       "Oct 31 2026",
-    hy:         "Jun 26 2026",
-    fear_greed: "Jun 26 2026",
-    pe:         "May 3 2026",
-  };
-  const MANUAL_BREADTH_FALLBACK    = 0;        // Deliberately impossible. 0% means the live historyofmarket.com fetch failed, not a real reading
-  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "tightening"; // Oct 28, 2026 FOMC: hawkish hold at 3.75-4.00%, 10-2 vote (Cook, Hammack dissented for a hike). Still a tightening cycle.
-  // Market-implied lean for the NEXT meeting — this is a genuine proxy,
-  // not a live feed. True meeting-by-meeting odds (CME FedWatch-style)
-  // come from Fed funds futures pricing, which isn't in this pipeline.
-  // Update this by hand, weekly, from Fed funds futures pricing or
-  // financial press coverage of the next FOMC meeting.
-  const MANUAL_FED_NEXT_MOVE = {
-    lean: "hawkish" as "hawkish" | "neutral" | "dovish",
-    hikeOdds: 85,                              // CME FedWatch, Dec hike odds after Oct 28 hold (84.6%) · Oct 28 2026
-    meeting: "Dec 8-9",
-  };
-  // Ivy Portfolio OFFICIAL month-end signals (Faber 10-mo SMA rule).
-  // Single source of truth: drives the composite score here AND the Top 10,
-  // Signal Inputs and Ivy table on the page. Update monthly after Advisor
-  // Perspectives publishes (advisorperspectives.com/dshort). The live
-  // price-vs-SMA reading from fetchIvyPosition() is a forecast only and
-  // no longer feeds the score.
-  const MANUAL_IVY = {
-    signals: { vti: "Invest", veu: "Cash", ief: "Cash", vnq: "Invest", dbc: "Invest" } as Record<"vti" | "veu" | "ief" | "vnq" | "dbc", "Invest" | "Cash">,
-    asOf:       "Oct 31",                       // month-end close the signals come from
-    validUntil: "Nov 30",                       // next month-end reading
-  };                                           // Oct 31 2026 · VEU (-0.7%) + IEF (-0.9%) in Cash, VNQ back to Invest (+1.0%)
-  // Personal equity allocation band. Every allocation model tile resolves to
-  // a % inside floor-ceiling. Baseline 50% with a wide 30-70% band so the
-  // models can show when they want to go past the 40-60% comfort range
-  // instead of being capped. "actual" is the blended equity across Mike's
-  // and Noelle's accounts, update when the real allocation changes.
-  // Backtest 2002-2026, Consensus in 30/70: 7.1%/yr, -22% max drawdown,
-  // ~5 allocation changes a year.
-  const MANUAL_ALLOC_BAND = { floor: 30, ceiling: 70, baseline: 50, comfortLow: 40, comfortHigh: 60, actual: 45 };
-  // US vs international share of the equity sleeve (M2: SCHD/VTI/VTWO 30
-  // vs VEA/VIGI 20; Noelle TOD: VTI 25 vs VXUS 15). Blends the two Graded
-  // Ivy tiles into ONE trend vote in Consensus, so trend never outweighs
-  // momentum and credit. Update if the equity mix changes.
-  const MANUAL_EQUITY_MIX = { us: 60, intl: 40 };
-  // PiTrade ROAR Score (Rob Isbitts), market level, shown as published
-  // (40 = 40% equity).
-  // OUTSIDE VIEW ONLY: not a tested model, keep it out of any composite.
-  // Add a new row each time he publishes (newest last, never edit old rows).
-  // Review in Nov 2027: compare each call with Graded Ivy and what the S&P
-  // did next, then promote the tile or drop it.
-  const MANUAL_ROAR_LOG: { date: string; score: number }[] = [
-    { date: "2026-11-14", score: 40 },
-  ];
-  const MANUAL_AAII_BEARS = 41.4;             // AAII Sentiment Survey · week ending Oct 28 2026 · -4.4pts w/w, bullish 37.8%
-  const MANUAL_AD = {                          // StockCharts $NYAD cumulative, daily, 1Y · Oct 30 2026 · update MONTHLY
-    // signal: bearish_divergence = A/D falling while SPX holds near highs (narrow market)
-    //         confirming_weakness = A/D and SPX falling together (broad selling)
-    signal:      "bearish_divergence" as "bullish_divergence" | "neutral" | "bearish_divergence" | "confirming_weakness",
-    adTrend:     "lower_lows" as "higher_lows" | "flat" | "lower_lows",        // A/D line's own swing lows, last ~3 months
-    spxTrend:    "flat" as "rising" | "flat" | "falling",                       // S&P 500 over the same window
-    adVsSpx:     "diverging_down" as "diverging_up" | "tracking" | "diverging_down",
-    note:        "A/D line peaked mid-Aug near 76,500 and fell about 13% to 66,300 by Oct 30, while the S&P sits roughly 2% off its high. A/D is below both its 50-day and 200-day averages, and the 50-day is about to cross under the 200-day. Breadth is not confirming the index.",
-    updatedDate: "Oct 30",
-  };
-  // ═══════════════════════════════════════════════════════════════════
-
-  // Started before the main batch so they run in parallel with it.
-  const spxWeeklyP = fetchChart("^GSPC", 3660, "1wk");
-  const veaDailyP = fetchChart("VEA", 420);   // Graded Ivy · Intl
-  const spxMonthlyP = fetchChart("^GSPC", 5480, "1mo");
-  const [
-    [spx, qqq, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthResult],
-    positionResults,
-    benchmarkBND,
-    brentLiveQuote,
-    cleanSlateExtras,
-    lplImgExtras,
-    vgBNDX,
-    noelleExtras,
-    c1TaxExtras,
-  ] = await Promise.all([
-    Promise.all([
-      fetchChart("^GSPC", 420),
-      fetchChart("QQQ", 420),
-      fetchChart("^VIX", 14),                  // 14 calendar days so a 5-trading-day-ago close is always available
-      fetchChart("DX-Y.NYB", 5),
-      fetchChart("^CPCE", 5),
-      fetchFred("DFII10"),
-      fetchFred("DGS10"),
-      fetchFred("BAMLH0A0HYM2", 6, 5),        // latest + the reading 5 business days back (week-over-week)
-      fetchFred("T10Y2Y"),
-      fetchFred("FEDFUNDS", 13, 12),
-      fetchFred("T5YIE"),
-      fetchPE(),
-      fetchCape(),
-      fetchFearGreed(),
-      fetchIvyPosition("VTI"),
-      fetchIvyPosition("VEU"),
-      fetchIvyPosition("IEF"),
-      fetchIvyPosition("VNQ"),
-      fetchIvyPosition("DBC"),
-      fetchFred("WALCL", 2),
-      fetchChart("^DJT", 420),
-      fetchChart("BZ=F", 5),
-      fetchBreadth(),
-    ]),
-    Promise.all(POSITION_TICKERS.map((t) => fetchPositionMetrics(t))),
-    // Benchmark proxy — 60% VTI / 40% BND, tracking the same two indices
-    // (CRSP US Total Market, Bloomberg US Agg Float Adjusted) VBINX itself
-    // is built on. VTI is already fetched above as a portfolio holding, so
-    // BND is the only new call needed. Both reprice intraday, unlike VBINX's
-    // once-daily NAV.
-    fetchPositionMetrics("BND"),
-    // Live Brent quote — primary source for price/change%. The chart fetch
-    // above is kept only as a fallback and for the regime bar's history.
-    fetchLiveQuote("BZ=F"),
-    // "Clean Slate" hypothetical portfolio — the panel's from-scratch build
-    // (SCHD 20 / SGOV 20 / VEA 15 / VTIP 10 / VTI 10 / VGIT 10 / DBMF 10 /
-    // PDBC 5). Six of those eight are already fetched as real holdings; only
-    // PDBC and DBMF are new tickers.
-    Promise.all([fetchPositionMetrics("PDBC"), fetchPositionMetrics("DBMF")]),
-    // LPL "Income with Moderate Growth" (IMG) proxy — LPL STAAC's 39% equity
-    // model, mapped to tradable ETFs. VEA/VGIT/VTIP/SGOV already fetched as
-    // real holdings, PDBC/DBMF already fetched above for Clean Slate. Only
-    // VUG/VTV/VWO/VCIT/VMBS/IGF are new here.
-    Promise.all([
-      fetchPositionMetrics("VUG"),
-      fetchPositionMetrics("VTV"),
-      fetchPositionMetrics("VWO"),
-      fetchPositionMetrics("VCIT"),
-      fetchPositionMetrics("VMBS"),
-      fetchPositionMetrics("IGF"),
-    ]),
-    // Vanguard "unconstrained" 40/60 model — VAAM/VCMM output. Reuses VTV,
-    // VUG, VWO, VCIT (all already fetched above for the LPL model), VEA,
-    // SGOV, VGIT (real holdings), and BND (already fetched for the 60/40
-    // proxy). BNDX (international bonds) is the only new ticker needed.
-    fetchPositionMetrics("BNDX"),
-    // "Noelle Mockup" hypothetical — Mike's what-if for Noelle's Rollover
-    // IRA per Chris's rough draft (VEA/SCHD/VGIT/SGOV/VTIP/VTI real holdings,
-    // DBMF already fetched above for Clean Slate). VTWO/VIGI/BTAL are the new
-    // tickers here. BTAL (AGF US Market Neutral Anti-Beta) is an explicit
-    // placeholder for the 5% Long/Short sleeve — Chris hasn't named a real
-    // fund yet and has said he won't use ETFs for this category, so treat
-    // this tile's return as illustrative, not predictive of his final pick.
-    Promise.all([fetchPositionMetrics("VTWO"), fetchPositionMetrics("VIGI"), fetchPositionMetrics("BTAL")]),
-    // "C1 TAX 40/60" — Chris's actual proposal for Noelle's TOD (taxable)
-    // accounts: 25% VTI / 15% VXUS / 60% VTEB. VTI is already a real
-    // holding; VXUS and VTEB are the two new tickers here. Chris flagged
-    // FMUB as a suitable Fidelity-platform substitute for VTEB if Mike
-    // ever needs it — not modeled separately since it's the same strategy.
-    Promise.all([fetchPositionMetrics("VXUS"), fetchPositionMetrics("VTEB")]),
-  ]);
-  const [cleanSlatePDBC, cleanSlateDBMF] = cleanSlateExtras;
-  const [lplVUG, lplVTV, lplVWO, lplVCIT, lplVMBS, lplIGF] = lplImgExtras;
-
-  const positions: Record<string, PositionMetrics> = {};
-  for (const p of positionResults) {
-    positions[p.ticker] = p;
-    if (p.error) diagnostics[`position_${p.ticker.toLowerCase()}`] = p.error;
-  }
-  if (benchmarkBND.error) diagnostics["benchmark_bnd"] = benchmarkBND.error;
-  positions["BND"] = benchmarkBND;
-  // DBMF/PDBC merged in early (rather than down by the Clean Slate block
-  // where they're fetched) so every blended portfolio below, including
-  // Clean Slate itself, can rely on one consistent `positions[ticker]`
-  // lookup path for the 1-YR/5-YR helpers right below.
-  positions["DBMF"] = cleanSlateDBMF;
-  positions["PDBC"] = cleanSlatePDBC;
-  positions["VUG"] = lplVUG;
-  positions["VTV"] = lplVTV;
-  positions["VWO"] = lplVWO;
-  positions["VCIT"] = lplVCIT;
-  positions["VMBS"] = lplVMBS;
-  positions["IGF"] = lplIGF;
-  positions["BNDX"] = vgBNDX;
-
-  // Shared helpers for every blended portfolio below. Both compute a
-  // weighted return live from the same `positions` dict everything else on
-  // this file already reads — 1-YR and 5-YR are no longer treated
-  // differently; both are just a different anchor date on the same
-  // fetchPositionMetrics call every ticker already makes. Both take just
-  // the {ticker, weight} pairs every portfolio's components array already
-  // has, and both use the same defensive null-if-any-missing pattern as
-  // the YTD blends below — a partial average would be silently wrong.
-  function blendFiveYear(components: { ticker: string; weight: number }[]): number | null {
-    const values = components.map((c) => ({ weight: c.weight, val: positions[c.ticker]?.fiveYearReturnPct ?? null }));
-    if (values.some((v) => v.val == null)) return null;
-    return values.reduce((sum, v) => sum + (v.val as number) * v.weight, 0);
-  }
-  function blendOneYear(components: { ticker: string; weight: number }[]): number | null {
-    const values = components.map((c) => ({ weight: c.weight, val: positions[c.ticker]?.oneYearReturnPct ?? null }));
-    if (values.some((v) => v.val == null)) return null;
-    return values.reduce((sum, v) => sum + (v.val as number) * v.weight, 0);
-  }
-
-  // Three benchmark proxies, all built from the same VTI + BND YTD figures,
-  // just weighted differently. 60/40 is the traditional convention Mike has
-  // compared against historically. 40/60 is closer to his actual posture.
-  // 50/50 was added later — Mike's rough read on where the household is
-  // likely to land once Chris's proposal settles.
-  const vtiForBenchmark = positions["VTI"];
-  const benchmark6040YtdPct: number | null =
-    vtiForBenchmark?.ytdReturnPct != null && benchmarkBND.ytdReturnPct != null
-      ? vtiForBenchmark.ytdReturnPct * 0.6 + benchmarkBND.ytdReturnPct * 0.4
-      : null;
-  const benchmark4060YtdPct: number | null =
-    vtiForBenchmark?.ytdReturnPct != null && benchmarkBND.ytdReturnPct != null
-      ? vtiForBenchmark.ytdReturnPct * 0.4 + benchmarkBND.ytdReturnPct * 0.6
-      : null;
-  const benchmark5050YtdPct: number | null =
-    vtiForBenchmark?.ytdReturnPct != null && benchmarkBND.ytdReturnPct != null
-      ? vtiForBenchmark.ytdReturnPct * 0.5 + benchmarkBND.ytdReturnPct * 0.5
-      : null;
-  // Same-day change for each proxy, same weights, so the benchmark tiles can
-  // show a "Today" figure alongside the position tiles below.
-  const benchmark6040TodayPct: number | null =
-    vtiForBenchmark?.dailyChangePct != null && benchmarkBND.dailyChangePct != null
-      ? vtiForBenchmark.dailyChangePct * 0.6 + benchmarkBND.dailyChangePct * 0.4
-      : null;
-  const benchmark4060TodayPct: number | null =
-    vtiForBenchmark?.dailyChangePct != null && benchmarkBND.dailyChangePct != null
-      ? vtiForBenchmark.dailyChangePct * 0.4 + benchmarkBND.dailyChangePct * 0.6
-      : null;
-  const benchmark5050TodayPct: number | null =
-    vtiForBenchmark?.dailyChangePct != null && benchmarkBND.dailyChangePct != null
-      ? vtiForBenchmark.dailyChangePct * 0.5 + benchmarkBND.dailyChangePct * 0.5
-      : null;
-  // 1-YR (live) and 5-YR (manual table) for the same three proxies.
-  const benchmark6040OneYearPct = blendOneYear([{ ticker: "VTI", weight: 0.6 }, { ticker: "BND", weight: 0.4 }]);
-  const benchmark4060OneYearPct = blendOneYear([{ ticker: "VTI", weight: 0.4 }, { ticker: "BND", weight: 0.6 }]);
-  const benchmark5050OneYearPct = blendOneYear([{ ticker: "VTI", weight: 0.5 }, { ticker: "BND", weight: 0.5 }]);
-  const benchmark6040FiveYearPct = blendFiveYear([{ ticker: "VTI", weight: 0.6 }, { ticker: "BND", weight: 0.4 }]);
-  const benchmark4060FiveYearPct = blendFiveYear([{ ticker: "VTI", weight: 0.4 }, { ticker: "BND", weight: 0.6 }]);
-  const benchmark5050FiveYearPct = blendFiveYear([{ ticker: "VTI", weight: 0.5 }, { ticker: "BND", weight: 0.5 }]);
-
-
-  // "Clean Slate" hypothetical portfolio blend — SCHD 20 / SGOV 20 / VEA 15 /
-  // VTIP 10 / VTI 10 / VGIT 10 / DBMF 10 / PDBC 5. Six weights pull from real
-  // holdings already in `positions`; PDBC and DBMF come from the extra fetch.
-  const cleanSlateWeights: Record<string, number> = {
-    SCHD: 0.20, SGOV: 0.20, VEA: 0.15, VTIP: 0.10, VTI: 0.10, VGIT: 0.10,
-  };
-  const cleanSlateComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] = [
-    ...Object.entries(cleanSlateWeights).map(([ticker, weight]) => ({
-      ticker, weight,
-      ytd: positions[ticker]?.ytdReturnPct ?? null,
-      today: positions[ticker]?.dailyChangePct ?? null,
-    })),
-    { ticker: "DBMF", weight: 0.10, ytd: cleanSlateDBMF.ytdReturnPct, today: cleanSlateDBMF.dailyChangePct },
-    { ticker: "PDBC", weight: 0.05, ytd: cleanSlatePDBC.ytdReturnPct, today: cleanSlatePDBC.dailyChangePct },
-  ];
-  const cleanSlateHasAllYtd = cleanSlateComponents.every((c) => c.ytd != null);
-  const cleanSlateYtdPct: number | null = cleanSlateHasAllYtd
-    ? cleanSlateComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const cleanSlateHasAllToday = cleanSlateComponents.every((c) => c.today != null);
-  const cleanSlateTodayPct: number | null = cleanSlateHasAllToday
-    ? cleanSlateComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const cleanSlateOneYearPct = blendOneYear(cleanSlateComponents);
-  const cleanSlateFiveYearPct = blendFiveYear(cleanSlateComponents);
-  if (cleanSlatePDBC.error) diagnostics["clean_slate_pdbc"] = cleanSlatePDBC.error;
-  if (cleanSlateDBMF.error) diagnostics["clean_slate_dbmf"] = cleanSlateDBMF.error;
-
-  // "Noelle Mockup" — Mike's what-if replacing GLDM with DBMF + BTAL (a
-  // placeholder for the still-unnamed Long/Short fund Chris is researching)
-  // per his conversation with Chris. Equity sleeve held at Chris's original
-  // 55% weights; VGIT/SGOV/VTIP trimmed from 41% to 35% to fund the alts
-  // sleeve growing from 4% (GLDM only) to 10% (DBMF 5% + BTAL 5%). BTAL is an
-  // explicit stand-in — Chris has said he won't use ETFs for Long/Short and
-  // is screening real managers via Nitrogen, so swap this out the moment he
-  // names an actual fund. This tile tracks Noelle's Rollover IRA only, not
-  // the household — label accordingly in the UI.
-  const [noelleVTWO, noelleVIGI, noelleBTAL] = noelleExtras;
-  const [c1VXUS, c1VTEB] = c1TaxExtras;
-
-  // Expose VTWO/VIGI/BTAL/VXUS/VTEB through the same `positions` dict real
-  // holdings use, so the "Your Holdings" UI can render full tiles for these
-  // candidate positions with zero new frontend fetch logic, and so
-  // blendOneYear/blendFiveYear below can find them via positions[ticker]
-  // the same way they find every other ticker. MUST happen before
-  // noelleMockupComponents/c1TaxComponents are built — blendOneYear/
-  // blendFiveYear read straight from `positions`, not from a component
-  // array's own ytd/today fields, so merging these in late (as this block
-  // used to sit, right before the JSON return) silently zeroed out the
-  // Proposed tile's 1-YR/5-YR: it was reading positions["VTWO"] etc.
-  // before they existed. They're candidates under consideration, not real
-  // holdings — PORTFOLIO_POSITIONS in page.tsx stays untouched.
-  positions["VTWO"] = noelleVTWO;
-  positions["VIGI"] = noelleVIGI;
-  positions["BTAL"] = noelleBTAL;
-  positions["VXUS"] = c1VXUS;
-  positions["VTEB"] = c1VTEB;
-
-  const noelleMockupWeights: Record<string, number> = {
-    VEA: 0.15, SCHD: 0.15, VTI: 0.10, VGIT: 0.13, SGOV: 0.12, VTIP: 0.10,
-  };
-  const noelleMockupComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] = [
-    ...Object.entries(noelleMockupWeights).map(([ticker, weight]) => ({
-      ticker, weight,
-      ytd: positions[ticker]?.ytdReturnPct ?? null,
-      today: positions[ticker]?.dailyChangePct ?? null,
-    })),
-    { ticker: "VTWO", weight: 0.10, ytd: noelleVTWO.ytdReturnPct, today: noelleVTWO.dailyChangePct },
-    { ticker: "VIGI", weight: 0.05, ytd: noelleVIGI.ytdReturnPct, today: noelleVIGI.dailyChangePct },
-    { ticker: "DBMF", weight: 0.05, ytd: cleanSlateDBMF.ytdReturnPct, today: cleanSlateDBMF.dailyChangePct },
-    { ticker: "BTAL", weight: 0.05, ytd: noelleBTAL.ytdReturnPct, today: noelleBTAL.dailyChangePct },
-  ];
-  const noelleMockupHasAllYtd = noelleMockupComponents.every((c) => c.ytd != null);
-  const noelleMockupYtdPct: number | null = noelleMockupHasAllYtd
-    ? noelleMockupComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const noelleMockupHasAllToday = noelleMockupComponents.every((c) => c.today != null);
-  const noelleMockupTodayPct: number | null = noelleMockupHasAllToday
-    ? noelleMockupComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const noelleMockupOneYearPct = blendOneYear(noelleMockupComponents);
-  const noelleMockupFiveYearPct = blendFiveYear(noelleMockupComponents);
-  if (noelleVTWO.error) diagnostics["noelle_vtwo"] = noelleVTWO.error;
-  if (noelleVIGI.error) diagnostics["noelle_vigi"] = noelleVIGI.error;
-  if (noelleBTAL.error) diagnostics["noelle_btal"] = noelleBTAL.error;
-
-  // "C1 TAX 40/60" — Chris's actual proposal for Noelle's TOD (taxable)
-  // accounts, from his note: 25% VTI / 15% VXUS / 60% VTEB. Distinct from
-  // C0 (55/35/10), which is his retirement-account proposal — this one is
-  // taxable-specific, built around tax-exempt income (VTEB) rather than
-  // taxable bonds, which is why it looks nothing like the IRA-side models.
-  const c1TaxWeights: Record<string, number> = { VTI: 0.25, VXUS: 0.15, VTEB: 0.60 };
-  const c1TaxComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
-    Object.entries(c1TaxWeights).map(([ticker, weight]) => ({
-      ticker, weight,
-      ytd: positions[ticker]?.ytdReturnPct ?? null,
-      today: positions[ticker]?.dailyChangePct ?? null,
-    }));
-  const c1TaxHasAllYtd = c1TaxComponents.every((c) => c.ytd != null);
-  const c1TaxYtdPct: number | null = c1TaxHasAllYtd
-    ? c1TaxComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const c1TaxHasAllToday = c1TaxComponents.every((c) => c.today != null);
-  const c1TaxTodayPct: number | null = c1TaxHasAllToday
-    ? c1TaxComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const c1TaxOneYearPct = blendOneYear(c1TaxComponents);
-  const c1TaxFiveYearPct = blendFiveYear(c1TaxComponents);
-  if (c1VXUS.error) diagnostics["c1_vxus"] = c1VXUS.error;
-  if (c1VTEB.error) diagnostics["c1_vteb"] = c1VTEB.error;
-
-  // "C1 IRA" — Chris's proposed uniform model for the six retirement
-  // accounts running the standard IRA structure (Noelle's SEP/Rollover/
-  // Inherited/Roth, Mike's Traditional/Rollover). Explicitly excludes the
-  // Alpine 401k (pending rollover, stays in its target-date fund for now)
-  // and the TOD accounts (separate C1 TAX model). Drops VGIT in favor of
-  // BND — Chris's rationale: BND is the anchor bond fund Vanguard's own
-  // target-date funds use, and it's the only place Mike/Noelle currently
-  // hold any corporate bond exposure at all. Every ticker here is already
-  // live in `positions` from real holdings or earlier candidate-fetch
-  // work — no new network calls needed for this one.
-  const c1IraWeights: Record<string, number> = {
-    SCHD: 0.16, VEA: 0.15, VTIP: 0.15, SGOV: 0.14, VTI: 0.10,
-    VTWO: 0.10, BND: 0.09, VIGI: 0.05, GLDM: 0.03, DBMF: 0.03,
-  };
-  const c1IraComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
-    Object.entries(c1IraWeights).map(([ticker, weight]) => ({
-      ticker, weight,
-      ytd: positions[ticker]?.ytdReturnPct ?? null,
-      today: positions[ticker]?.dailyChangePct ?? null,
-    }));
-  const c1IraHasAllYtd = c1IraComponents.every((c) => c.ytd != null);
-  const c1IraYtdPct: number | null = c1IraHasAllYtd
-    ? c1IraComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const c1IraHasAllToday = c1IraComponents.every((c) => c.today != null);
-  const c1IraTodayPct: number | null = c1IraHasAllToday
-    ? c1IraComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const c1IraOneYearPct = blendOneYear(c1IraComponents);
-  const c1IraFiveYearPct = blendFiveYear(c1IraComponents);
-
-  // "M2" — Mike's dial-back of Chris's C1 IRA model (56/38/6) toward a
-  // cleaner 50/40/10. Built by adjusting C1 IRA's actual weights rather
-  // than starting fresh: the full -6 equity points comes out of VTWO
-  // alone (10% → 5%), leaving SCHD/VEA/VTI/VIGI at or near Chris's
-  // original weights so the fund selection still follows his input as
-  // closely as possible. SGOV and BND each nudged +1 to round out fixed
-  // income to 40; GLDM and DBMF both doubled to 5% to bring alts to 10.
-  const m2Weights: Record<string, number> = {
-    SCHD: 0.15, VEA: 0.15, VTI: 0.10, VTWO: 0.05, VIGI: 0.05,
-    VTIP: 0.15, SGOV: 0.15, BND: 0.10,
-    GLDM: 0.05, DBMF: 0.05,
-  };
-  const m2Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
-    Object.entries(m2Weights).map(([ticker, weight]) => ({
-      ticker, weight,
-      ytd: positions[ticker]?.ytdReturnPct ?? null,
-      today: positions[ticker]?.dailyChangePct ?? null,
-    }));
-  const m2HasAllYtd = m2Components.every((c) => c.ytd != null);
-  const m2YtdPct: number | null = m2HasAllYtd
-    ? m2Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const m2HasAllToday = m2Components.every((c) => c.today != null);
-  const m2TodayPct: number | null = m2HasAllToday
-    ? m2Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const m2OneYearPct = blendOneYear(m2Components);
-  const m2FiveYearPct = blendFiveYear(m2Components);
-
-  // "M3" — same as M2, but VTWO restored to Chris's original 10% and
-  // GLDM/DBMF each at 2.5% instead of 5%. Net effect: equity climbs back
-  // to 55%, alts drops to 5%, fixed income holds at 40% — genuinely a
-  // different sleeve mix from M2's clean 50/40/10, not just a relabeling.
-  const m3Weights: Record<string, number> = {
-    SCHD: 0.15, VEA: 0.15, VTI: 0.10, VTWO: 0.10, VIGI: 0.05,
-    VTIP: 0.15, SGOV: 0.15, BND: 0.10,
-    GLDM: 0.025, DBMF: 0.025,
-  };
-  const m3Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
-    Object.entries(m3Weights).map(([ticker, weight]) => ({
-      ticker, weight,
-      ytd: positions[ticker]?.ytdReturnPct ?? null,
-      today: positions[ticker]?.dailyChangePct ?? null,
-    }));
-  const m3HasAllYtd = m3Components.every((c) => c.ytd != null);
-  const m3YtdPct: number | null = m3HasAllYtd
-    ? m3Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const m3HasAllToday = m3Components.every((c) => c.today != null);
-  const m3TodayPct: number | null = m3HasAllToday
-    ? m3Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const m3OneYearPct = blendOneYear(m3Components);
-  const m3FiveYearPct = blendFiveYear(m3Components);
-
-  // "Panel Consensus" — the 12-voice panel's debate over C1 IRA, holding
-  // the 50% equity cap fixed. Cut concentrated entirely in VTWO (its true
-  // CAPE runs to ~58x once negative-earnings members are counted, higher
-  // than the S&P's own 42x — Hussman's and Slegers' argument). BND raised
-  // more than Chris's original (Grantham/Rieder: the freed weight has to
-  // land somewhere, but Noland flagged tight credit spreads as a reason
-  // not to lean too hard into corporates). GLDM raised more than DBMF —
-  // Dalio's point that gold and managed futures hedge different risks
-  // (currency debasement vs. equity/rate), not interchangeable "alts."
-  const panelWeights: Record<string, number> = {
-    SCHD: 0.15, VEA: 0.15, VTI: 0.10, VTWO: 0.05, VIGI: 0.05,
-    VTIP: 0.15, SGOV: 0.14, BND: 0.13,
-    GLDM: 0.05, DBMF: 0.03,
-  };
-  const panelComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
-    Object.entries(panelWeights).map(([ticker, weight]) => ({
-      ticker, weight,
-      ytd: positions[ticker]?.ytdReturnPct ?? null,
-      today: positions[ticker]?.dailyChangePct ?? null,
-    }));
-  const panelHasAllYtd = panelComponents.every((c) => c.ytd != null);
-  const panelYtdPct: number | null = panelHasAllYtd
-    ? panelComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const panelHasAllToday = panelComponents.every((c) => c.today != null);
-  const panelTodayPct: number | null = panelHasAllToday
-    ? panelComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const panelOneYearPct = blendOneYear(panelComponents);
-  const panelFiveYearPct = blendFiveYear(panelComponents);
-
-  // "Other AI" — a second AI's independent take on the same C1-plus-50%-cap
-  // question. Landed close to M2 (same equity lines, same VTIP/SGOV), but
-  // BND at 11% (between Chris's 9% and the panel's 13%) and GLDM/DBMF split
-  // evenly at 5/5 rather than weighted toward gold. Explicit rationale
-  // given was round numbers being easier to hold to when markets get
-  // volatile, a real but different kind of argument than the panel's
-  // risk-specific reasoning — kept as a separate tile rather than merged
-  // in, precisely so the two philosophies can be compared side by side.
-  const otherAiWeights: Record<string, number> = {
-    SCHD: 0.15, VEA: 0.15, VTI: 0.10, VTWO: 0.05, VIGI: 0.05,
-    VTIP: 0.15, SGOV: 0.14, BND: 0.11,
-    GLDM: 0.05, DBMF: 0.05,
-  };
-  const otherAiComponents: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
-    Object.entries(otherAiWeights).map(([ticker, weight]) => ({
-      ticker, weight,
-      ytd: positions[ticker]?.ytdReturnPct ?? null,
-      today: positions[ticker]?.dailyChangePct ?? null,
-    }));
-  const otherAiHasAllYtd = otherAiComponents.every((c) => c.ytd != null);
-  const otherAiYtdPct: number | null = otherAiHasAllYtd
-    ? otherAiComponents.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const otherAiHasAllToday = otherAiComponents.every((c) => c.today != null);
-  const otherAiTodayPct: number | null = otherAiHasAllToday
-    ? otherAiComponents.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const otherAiOneYearPct = blendOneYear(otherAiComponents);
-  const otherAiFiveYearPct = blendFiveYear(otherAiComponents);
-
-  // "Hybrid 8" — Mike's curated blend of ALT 45/40/15 and the Noelle
-  // Mockup, not a straight average of the two. SCHD stays the largest
-  // single line as the foundational quality/value holding. VTWO carries
-  // over to honor Chris's small-cap input. VIGI and PDBC are cut for
-  // overlapping VEA and DBMF respectively; BTAL is cut too, consolidating
-  // to a single alts line (DBMF) to hit 8 total holdings rather than 10-11.
-  // Every ticker here is already live in `positions` from real holdings or
-  // the Noelle/ALT scaffolding above — no new fetches needed. IMPORTANT:
-  // this block must come after all four positions[...] assignments above,
-  // since DBMF/VTWO aren't real holdings and only exist in `positions`
-  // once those lines run — reading them earlier silently nulls the tile.
-  const hybrid8Weights: Record<string, number> = {
-    SCHD: 0.20, VEA: 0.15, SGOV: 0.15, DBMF: 0.15, VTI: 0.10, VGIT: 0.10, VTIP: 0.10, VTWO: 0.05,
-  };
-  const hybrid8Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
-    Object.entries(hybrid8Weights).map(([ticker, weight]) => ({
-      ticker, weight,
-      ytd: positions[ticker]?.ytdReturnPct ?? null,
-      today: positions[ticker]?.dailyChangePct ?? null,
-    }));
-  const hybrid8HasAllYtd = hybrid8Components.every((c) => c.ytd != null);
-  const hybrid8YtdPct: number | null = hybrid8HasAllYtd
-    ? hybrid8Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const hybrid8HasAllToday = hybrid8Components.every((c) => c.today != null);
-  const hybrid8TodayPct: number | null = hybrid8HasAllToday
-    ? hybrid8Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const hybrid8OneYearPct = blendOneYear(hybrid8Components);
-  const hybrid8FiveYearPct = blendFiveYear(hybrid8Components);
-
-  // LPL "40/60" proxy blend — essentially LPL's own "Income with Moderate
-  // Growth" model (39% equity), close enough to 40% that no reweighting is
-  // needed. Ticker mapping in the fetch block above: VEA/VGIT/VTIP/SGOV pull
-  // from real holdings, PDBC/DBMF reuse the Clean Slate fetch.
-  const lpl4060Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] = [
-    { ticker: "VUG",  weight: 0.12, ytd: lplVUG.ytdReturnPct,  today: lplVUG.dailyChangePct },
-    { ticker: "VTV",  weight: 0.16, ytd: lplVTV.ytdReturnPct,  today: lplVTV.dailyChangePct },
-    { ticker: "VEA",  weight: 0.07, ytd: positions["VEA"]?.ytdReturnPct ?? null,  today: positions["VEA"]?.dailyChangePct ?? null },
-    { ticker: "VWO",  weight: 0.04, ytd: lplVWO.ytdReturnPct,  today: lplVWO.dailyChangePct },
-    { ticker: "VGIT", weight: 0.18, ytd: positions["VGIT"]?.ytdReturnPct ?? null, today: positions["VGIT"]?.dailyChangePct ?? null },
-    { ticker: "VCIT", weight: 0.15, ytd: lplVCIT.ytdReturnPct, today: lplVCIT.dailyChangePct },
-    { ticker: "VMBS", weight: 0.10, ytd: lplVMBS.ytdReturnPct, today: lplVMBS.dailyChangePct },
-    { ticker: "VTIP", weight: 0.05, ytd: positions["VTIP"]?.ytdReturnPct ?? null, today: positions["VTIP"]?.dailyChangePct ?? null },
-    { ticker: "PDBC", weight: 0.01, ytd: cleanSlatePDBC.ytdReturnPct, today: cleanSlatePDBC.dailyChangePct },
-    { ticker: "IGF",  weight: 0.02, ytd: lplIGF.ytdReturnPct,  today: lplIGF.dailyChangePct },
-    { ticker: "DBMF", weight: 0.08, ytd: cleanSlateDBMF.ytdReturnPct, today: cleanSlateDBMF.dailyChangePct },
-    { ticker: "SGOV", weight: 0.02, ytd: positions["SGOV"]?.ytdReturnPct ?? null, today: positions["SGOV"]?.dailyChangePct ?? null },
-  ];
-  const lpl4060HasAllYtd = lpl4060Components.every((c) => c.ytd != null);
-  const lpl4060YtdPct: number | null = lpl4060HasAllYtd
-    ? lpl4060Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const lpl4060HasAllToday = lpl4060Components.every((c) => c.today != null);
-  const lpl4060TodayPct: number | null = lpl4060HasAllToday
-    ? lpl4060Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const lpl4060OneYearPct = blendOneYear(lpl4060Components);
-  const lpl4060FiveYearPct = blendFiveYear(lpl4060Components);
-
-  // LPL "50/50" proxy blend — interpolated roughly two-thirds of the way from
-  // LPL's IMG model (39% equity) toward its Growth-with-Income model (56%
-  // equity), landing at 50% equity / 50% fixed income+diversifying+cash.
-  // Same twelve tickers as the 40/60 blend above, just reweighted, so no new
-  // fetches are needed for this one either.
-  const lpl5050Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] = [
-    { ticker: "VUG",  weight: 0.16, ytd: lplVUG.ytdReturnPct,  today: lplVUG.dailyChangePct },
-    { ticker: "VTV",  weight: 0.20, ytd: lplVTV.ytdReturnPct,  today: lplVTV.dailyChangePct },
-    { ticker: "VEA",  weight: 0.09, ytd: positions["VEA"]?.ytdReturnPct ?? null,  today: positions["VEA"]?.dailyChangePct ?? null },
-    { ticker: "VWO",  weight: 0.05, ytd: lplVWO.ytdReturnPct,  today: lplVWO.dailyChangePct },
-    { ticker: "VGIT", weight: 0.12, ytd: positions["VGIT"]?.ytdReturnPct ?? null, today: positions["VGIT"]?.dailyChangePct ?? null },
-    { ticker: "VCIT", weight: 0.11, ytd: lplVCIT.ytdReturnPct, today: lplVCIT.dailyChangePct },
-    { ticker: "VMBS", weight: 0.10, ytd: lplVMBS.ytdReturnPct, today: lplVMBS.dailyChangePct },
-    { ticker: "VTIP", weight: 0.04, ytd: positions["VTIP"]?.ytdReturnPct ?? null, today: positions["VTIP"]?.dailyChangePct ?? null },
-    { ticker: "PDBC", weight: 0.02, ytd: cleanSlatePDBC.ytdReturnPct, today: cleanSlatePDBC.dailyChangePct },
-    { ticker: "IGF",  weight: 0.02, ytd: lplIGF.ytdReturnPct,  today: lplIGF.dailyChangePct },
-    { ticker: "DBMF", weight: 0.07, ytd: cleanSlateDBMF.ytdReturnPct, today: cleanSlateDBMF.dailyChangePct },
-    { ticker: "SGOV", weight: 0.02, ytd: positions["SGOV"]?.ytdReturnPct ?? null, today: positions["SGOV"]?.dailyChangePct ?? null },
-  ];
-  const lpl5050HasAllYtd = lpl5050Components.every((c) => c.ytd != null);
-  const lpl5050YtdPct: number | null = lpl5050HasAllYtd
-    ? lpl5050Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const lpl5050HasAllToday = lpl5050Components.every((c) => c.today != null);
-  const lpl5050TodayPct: number | null = lpl5050HasAllToday
-    ? lpl5050Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const lpl5050OneYearPct = blendOneYear(lpl5050Components);
-  const lpl5050FiveYearPct = blendFiveYear(lpl5050Components);
-
-  [
-    ["vug", lplVUG], ["vtv", lplVTV], ["vwo", lplVWO],
-    ["vcit", lplVCIT], ["vmbs", lplVMBS], ["igf", lplIGF],
-  ].forEach(([key, r]: any) => { if (r.error) diagnostics[`lpl_${key}`] = r.error; });
-
-  // Vanguard "unconstrained" 40/60 model (VAAM/VCMM, per the client's shared
-  // charts) — mapped to tradable ETFs. VGIT stands in for their "long-term
-  // Treasury" line since no dedicated long-duration Treasury ticker is
-  // fetched elsewhere; that's a real duration mismatch, not an exact match.
-  const vg4060Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] = [
-    { ticker: "VTV",  weight: 0.16, ytd: lplVTV.ytdReturnPct,  today: lplVTV.dailyChangePct },
-    { ticker: "VUG",  weight: 0.06, ytd: lplVUG.ytdReturnPct,  today: lplVUG.dailyChangePct },
-    { ticker: "VWO",  weight: 0.02, ytd: lplVWO.ytdReturnPct,  today: lplVWO.dailyChangePct },
-    { ticker: "VEA",  weight: 0.16, ytd: positions["VEA"]?.ytdReturnPct ?? null,  today: positions["VEA"]?.dailyChangePct ?? null },
-    { ticker: "BND",  weight: 0.34, ytd: benchmarkBND.ytdReturnPct, today: benchmarkBND.dailyChangePct },
-    { ticker: "SGOV", weight: 0.02, ytd: positions["SGOV"]?.ytdReturnPct ?? null, today: positions["SGOV"]?.dailyChangePct ?? null },
-    { ticker: "VGIT", weight: 0.07, ytd: positions["VGIT"]?.ytdReturnPct ?? null, today: positions["VGIT"]?.dailyChangePct ?? null },
-    { ticker: "VCIT", weight: 0.02, ytd: lplVCIT.ytdReturnPct, today: lplVCIT.dailyChangePct },
-    { ticker: "BNDX", weight: 0.15, ytd: vgBNDX.ytdReturnPct, today: vgBNDX.dailyChangePct },
-  ];
-  const vg4060HasAllYtd = vg4060Components.every((c) => c.ytd != null);
-  const vg4060YtdPct: number | null = vg4060HasAllYtd
-    ? vg4060Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0)
-    : null;
-  const vg4060HasAllToday = vg4060Components.every((c) => c.today != null);
-  const vg4060TodayPct: number | null = vg4060HasAllToday
-    ? vg4060Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0)
-    : null;
-  const vg4060OneYearPct = blendOneYear(vg4060Components);
-  const vg4060FiveYearPct = blendFiveYear(vg4060Components);
-  if (vgBNDX.error) diagnostics["vg_bndx"] = vgBNDX.error;
-
-  if (spx.error) diagnostics["spx"] = spx.error;
-  if (qqq.error) diagnostics["qqq"] = qqq.error;
-  if (vix.error) diagnostics["vix"] = vix.error;
-  if (dxy.error) diagnostics["dxy"] = dxy.error;
-  if (putCall.error) diagnostics["putcall"] = putCall.error;
-  if (fredReal10y.error) diagnostics["real10y"] = fredReal10y.error;
-  if (fredNom10y.error) diagnostics["nom10y"] = fredNom10y.error;
-  if (fredHY.error) diagnostics["hy"] = fredHY.error;
-  if (fredYC.error) diagnostics["yc"] = fredYC.error;
-  if (fredFedFunds.error) diagnostics["fedfunds"] = fredFedFunds.error;
-  if (fredBreakeven.error) diagnostics["breakeven"] = fredBreakeven.error;
-  if (peData.error) diagnostics["pe"] = peData.error;
-  if (capeData.error) diagnostics["cape"] = capeData.error;
-  if (fearGreedData.error) diagnostics["feargreed"] = fearGreedData.error;
-  if (ivyVTI.error) diagnostics["ivy_vti"] = ivyVTI.error;
-  if (ivyVEU.error) diagnostics["ivy_veu"] = ivyVEU.error;
-  if (ivyIEF.error) diagnostics["ivy_ief"] = ivyIEF.error;
-  if (ivyVNQ.error) diagnostics["ivy_vnq"] = ivyVNQ.error;
-  if (ivyDBC.error) diagnostics["ivy_dbc"] = ivyDBC.error;
-  if (fredWALCL.error) diagnostics["walcl"] = fredWALCL.error;
-  if (djt.error) diagnostics["djt"] = djt.error;
-  if (brent.error) diagnostics["brent"] = brent.error;
-  if (breadthResult.error) diagnostics["breadth"] = breadthResult.error;
-
-  const breadthPct: number | null = breadthResult.value ?? MANUAL_BREADTH_FALLBACK;
-  console.log(`Breadth (% above 200-DMA): ${breadthPct}%`);
-
-  const brentPrice: number | null =
-    brentLiveQuote.price ?? brent.meta.regularMarketPrice ?? brent.closes[brent.closes.length - 1] ?? null;
-  const brentPrev: number | null = brent.closes.length >= 2 ? brent.closes[brent.closes.length - 2] : null;
-  const brentChangePct: number | null =
-    brentLiveQuote.changePct ??
-    (brentPrice != null && brentPrev != null ? ((brentPrice - brentPrev) / brentPrev) * 100 : null);
-  if (brentLiveQuote.error) {
-    diagnostics["brent_live_quote"] = brentLiveQuote.error;
-  }
-  if (brentLiveQuote.price == null) {
-    diagnostics["brent_stale_fallback"] = "Live quote unavailable — using chart close, may lag intraday moves";
-  }
-  const brentRegime: "room" | "neutral" | "watch" | "frozen" | null =
-    brentPrice == null ? null :
-    brentPrice < 80  ? "room" :
-    brentPrice < 95  ? "neutral" :
-    brentPrice < 110 ? "watch" : "frozen";
-  console.log(`Brent: $${brentPrice} (${brentChangePct?.toFixed(2)}%) → ${brentRegime}`);
-
-  const djtCloses = djt.closes;
-  const djtPrice: number | null = djt.meta.regularMarketPrice ?? djtCloses[djtCloses.length - 1] ?? null;
-  const djtPrev: number | null = djtCloses.length >= 2 ? djtCloses[djtCloses.length - 2] : null;
-  const djtChangePct: number | null = djtPrice != null && djtPrev != null
-    ? ((djtPrice - djtPrev) / djtPrev) * 100 : null;
-
-  const djt200dma: number | null = djtCloses.length >= 200
-    ? avg(djtCloses.slice(-200)) : null;
-  const djt200dma_prev: number | null = djtCloses.length >= 220
-    ? avg(djtCloses.slice(-220, -20)) : null;
-  const djt200slope: number | null = djt200dma != null && djt200dma_prev != null
-    ? ((djt200dma - djt200dma_prev) / djt200dma_prev) * 100 : null;
-
-  const djtVs200: number | null = djtPrice != null && djt200dma != null
-    ? ((djtPrice - djt200dma) / djt200dma) * 100 : null;
-  const djtAbove200 = djtVs200 != null && djtVs200 >= 0;
-  console.log(`DJT: ${djtPrice} vs 200-DMA ${djt200dma?.toFixed(2)} (${djtVs200?.toFixed(2)}%)`);
-
-  const walclMil: number | null = fredWALCL.value;
-  const walclPrevMil: number | null = fredWALCL.prev;
-  const walclBn: number | null  = walclMil  != null ? Math.round(walclMil  / 1000) : null;
-  const walclPrevBn: number | null = walclPrevMil != null ? Math.round(walclPrevMil / 1000) : null;
-  const walclChgBn: number | null  = walclBn != null && walclPrevBn != null ? walclBn - walclPrevBn : null;
-  const walclDirection: "expanding" | "contracting" | "flat" | null =
-    walclChgBn == null ? null :
-    walclChgBn >  10 ? "expanding" :
-    walclChgBn < -10 ? "contracting" : "flat";
-  console.log(`WALCL: $${walclBn}B (chg: ${walclChgBn}B → ${walclDirection})`);
-
-  const spxCloses = spx.closes;
-  const spxPrice: number | null = spx.meta.regularMarketPrice ?? spxCloses[spxCloses.length - 1] ?? null;
-  const spxPrevClose: number | null =
-    spxCloses.length >= 2 ? spxCloses[spxCloses.length - 2] : spx.meta.chartPreviousClose ?? null;
-  const spxChangePct: number | null =
-    spxPrice != null && spxPrevClose != null
-      ? ((spxPrice - spxPrevClose) / spxPrevClose) * 100
-      : null;
-
-  const spx20dma = spxCloses.length >= 20 ? avg(spxCloses.slice(-20)) : null;
-  const spx50dma = spxCloses.length >= 50 ? avg(spxCloses.slice(-50)) : null;
-  const spx100dma = spxCloses.length >= 100 ? avg(spxCloses.slice(-100)) : null;
-  const spx200dma = spxCloses.length >= 200 ? avg(spxCloses.slice(-200)) : null;
-  const spxTrend14d = spxCloses.slice(-14);
-  // 420 calendar days of daily closes covers 12 completed month-ends plus
-  // the current month, enough for both the official and live readings.
-  const gradedIvy = {
-    ...computeGradedIvy(spxCloses, spx.timestamps, spxPrice, MANUAL_ALLOC_BAND.floor, MANUAL_ALLOC_BAND.ceiling),
-    actual: MANUAL_ALLOC_BAND.actual,
-  };
-  const roarLatest = MANUAL_ROAR_LOG[MANUAL_ROAR_LOG.length - 1] ?? null;
-  const roarPrior = MANUAL_ROAR_LOG.length >= 2 ? MANUAL_ROAR_LOG[MANUAL_ROAR_LOG.length - 2] : null;
-  const roar = roarLatest == null ? null : {
-    score: roarLatest.score,
-    date: roarLatest.date,
-    priorScore: roarPrior?.score ?? null,
-    equityPct: roarLatest.score,   // shown as published, not rescaled into the band
-    daysOld: Math.floor((Date.now() - Date.parse(`${roarLatest.date}T12:00:00Z`)) / 86400000),
-    trackingSince: MANUAL_ROAR_LOG[0].date,
-    entries: MANUAL_ROAR_LOG.length,
-    log: MANUAL_ROAR_LOG,
-  };
-
-  const spxAbove200 = spxPrice != null && spx200dma != null && spxPrice > spx200dma;
-  type SchanenpSignal = "bull" | "bear" | "non_confirmation_bull" | "non_confirmation_bear";
-  const schannepSignal: SchanenpSignal =
-    spxAbove200  && djtAbove200  ? "bull" :
-    !spxAbove200 && !djtAbove200 ? "bear" :
-    spxAbove200  && !djtAbove200 ? "non_confirmation_bear" :
-                                   "non_confirmation_bull";
-  const schannepLabel: Record<SchanenpSignal, string> = {
-    bull:                  "Confirmed Bull",
-    bear:                  "Confirmed Bear",
-    non_confirmation_bear: "Non-Confirmation ⚠",
-    non_confirmation_bull: "Recovery Signal",
-  };
-  const schannepColor: Record<SchanenpSignal, string> = {
-    bull:                  "#4ade80",
-    bear:                  "#ff6b88",
-    non_confirmation_bear: "#fbbf24",
-    non_confirmation_bull: "#4ade80",
-  };
-  console.log(`Schannep: ${schannepSignal} (SPX ${spxAbove200 ? "above" : "below"} 200-DMA, DJT ${djtAbove200 ? "above" : "below"} 200-DMA)`);
-
-  const spx20dma_prev = spxCloses.length >= 30 ? avg(spxCloses.slice(-30, -10)) : null;
-  const spx20slope = spx20dma != null && spx20dma_prev != null
-    ? ((spx20dma - spx20dma_prev) / spx20dma_prev) * 100 : null;
-
-  const spx50dma_prev = spxCloses.length >= 70 ? avg(spxCloses.slice(-70, -20)) : null;
-  const spx50slope = spx50dma != null && spx50dma_prev != null
-    ? ((spx50dma - spx50dma_prev) / spx50dma_prev) * 100 : null;
-
-  const spx100dma_prev = spxCloses.length >= 120 ? avg(spxCloses.slice(-120, -20)) : null;
-  const spx100slope = spx100dma != null && spx100dma_prev != null
-    ? ((spx100dma - spx100dma_prev) / spx100dma_prev) * 100 : null;
-
-  const spx200dma_prev = spxCloses.length >= 220 ? avg(spxCloses.slice(-220, -20)) : null;
-  const spx200slope = spx200dma != null && spx200dma_prev != null
-    ? ((spx200dma - spx200dma_prev) / spx200dma_prev) * 100 : null;
-
-  const aboveDma200 = spxPrice != null && spx200dma != null && spxPrice > spx200dma;
-  const dma200Rising = spx200slope != null && spx200slope > 0.02;
-  const dma200Falling = spx200slope != null && spx200slope < -0.02;
-
-  type Regime = "bull" | "transition_above" | "transition_below" | "bear";
-  const regime: Regime =
-    aboveDma200 && dma200Rising  ? "bull"
-    : aboveDma200 && !dma200Rising ? "transition_above"
-    : !aboveDma200 && dma200Rising ? "transition_below"
-    : "bear";
-
-  const regimeLabel: Record<Regime, string> = {
-    bull:               "Bull Trend",
-    transition_above:   "Transition — Weakening",
-    transition_below:   "Transition — Pullback",
-    bear:               "Bear Trend",
-  };
-  const regimeDesc: Record<Regime, string> = {
-    bull:             "SPX above rising 200-DMA. Trend intact. Dips are buyable.",
-    transition_above: "SPX above 200-DMA but slope flattening or falling. Bull trend losing momentum — watch closely.",
-    transition_below: "SPX below 200-DMA but DMA still rising. Pullback within a bull structure — not yet a structural break. Classic head-fake zone.",
-    bear:             "SPX below a falling 200-DMA. Structural bear trend confirmed. Rallies are suspect.",
-  };
-  const regimeColor: Record<Regime, string> = {
-    bull: "#4ade80", transition_above: "#fbbf24", transition_below: "#fbbf24", bear: "#ff6b88"
-  };
-  const regimeEmoji: Record<Regime, string> = {
-    bull: "🟢", transition_above: "🟡", transition_below: "🟡", bear: "🔴"
-  };
-
-  // ── QQQ (Nasdaq-100) — same DMA/slope/regime math as SPX above, just run
-  // against ^QQQ. Added specifically because SPX can hold up fine while
-  // tech/momentum leadership breaks underneath it, exactly what happened
-  // the week of the momentum crash.
-  const qqqCloses = qqq.closes;
-  const qqqPrice: number | null = qqq.meta.regularMarketPrice ?? qqqCloses[qqqCloses.length - 1] ?? null;
-  const qqqPrevClose: number | null =
-    qqqCloses.length >= 2 ? qqqCloses[qqqCloses.length - 2] : qqq.meta.chartPreviousClose ?? null;
-  const qqqChangePct: number | null =
-    qqqPrice != null && qqqPrevClose != null
-      ? ((qqqPrice - qqqPrevClose) / qqqPrevClose) * 100
-      : null;
-
-  const qqq20dma = qqqCloses.length >= 20 ? avg(qqqCloses.slice(-20)) : null;
-  const qqq50dma = qqqCloses.length >= 50 ? avg(qqqCloses.slice(-50)) : null;
-  const qqq100dma = qqqCloses.length >= 100 ? avg(qqqCloses.slice(-100)) : null;
-  const qqq200dma = qqqCloses.length >= 200 ? avg(qqqCloses.slice(-200)) : null;
-  const qqqTrend14d = qqqCloses.slice(-14);
-
-  const qqq20dma_prev = qqqCloses.length >= 30 ? avg(qqqCloses.slice(-30, -10)) : null;
-  const qqq20slope = qqq20dma != null && qqq20dma_prev != null
-    ? ((qqq20dma - qqq20dma_prev) / qqq20dma_prev) * 100 : null;
-
-  const qqq50dma_prev = qqqCloses.length >= 70 ? avg(qqqCloses.slice(-70, -20)) : null;
-  const qqq50slope = qqq50dma != null && qqq50dma_prev != null
-    ? ((qqq50dma - qqq50dma_prev) / qqq50dma_prev) * 100 : null;
-
-  const qqq100dma_prev = qqqCloses.length >= 120 ? avg(qqqCloses.slice(-120, -20)) : null;
-  const qqq100slope = qqq100dma != null && qqq100dma_prev != null
-    ? ((qqq100dma - qqq100dma_prev) / qqq100dma_prev) * 100 : null;
-
-  const qqq200dma_prev = qqqCloses.length >= 220 ? avg(qqqCloses.slice(-220, -20)) : null;
-  const qqq200slope = qqq200dma != null && qqq200dma_prev != null
-    ? ((qqq200dma - qqq200dma_prev) / qqq200dma_prev) * 100 : null;
-
-  const qqqAboveDma200 = qqqPrice != null && qqq200dma != null && qqqPrice > qqq200dma;
-  const qqqDma200Rising = qqq200slope != null && qqq200slope > 0.02;
-
-  const qqqRegime: Regime =
-    qqqAboveDma200 && qqqDma200Rising  ? "bull"
-    : qqqAboveDma200 && !qqqDma200Rising ? "transition_above"
-    : !qqqAboveDma200 && qqqDma200Rising ? "transition_below"
-    : "bear";
-
-  const qqqRegimeDesc: Record<Regime, string> = {
-    bull:             "QQQ above rising 200-DMA. Trend intact.",
-    transition_above: "QQQ above 200-DMA but slope flattening or falling. Momentum losing steam — watch closely.",
-    transition_below: "QQQ below 200-DMA but DMA still rising. Pullback, not yet a structural break.",
-    bear:             "QQQ below a falling 200-DMA. Structural downtrend confirmed.",
-  };
-
-  // QQQ YTD — total return, using the same adjusted-close method already
-  // proven for the seven real positions. QQQ is an ETF with real dividend
-  // data, unlike a raw index, so no price-only fallback is needed here.
-  // Reuses the 420-day fetch already pulled above — no second network call.
-  const qqqCurrentYear = new Date().getUTCFullYear();
-  const qqqYtdStartIdx = qqq.timestamps.findIndex(
-    (t) => new Date(t * 1000).getUTCFullYear() === qqqCurrentYear
-  );
-  const qqqStartAdjClose = qqqYtdStartIdx >= 0 ? qqq.adjcloses[qqqYtdStartIdx] : null;
-  const qqqYtdPct: number | null =
-    qqqStartAdjClose != null && qqqPrice != null && qqqStartAdjClose !== 0
-      ? ((qqqPrice - qqqStartAdjClose) / qqqStartAdjClose) * 100
-      : null;
-
-  const vixPrice: number | null = vix.meta.regularMarketPrice ?? vix.closes[vix.closes.length - 1] ?? null;
-
-  const real10y: number = fredReal10y.value ?? 1.92;
-  const nom10y: number = fredNom10y.value ?? 4.30;
-
-  const hySpread: number = fredHY.value ?? MANUAL_HY_FALLBACK;
-
-  // ─── Equity Allocation models (hero group) ──────────────────────────────
-  // Consensus = simple average of the scored models: trend (Graded Ivy US
-  // and Intl blended by MANUAL_EQUITY_MIX), Roberts and Credit. ROAR is
-  // tracked separately and never enters it.
-  const [spxWeekly, spxMonthly, veaDaily] = await Promise.all([spxWeeklyP, spxMonthlyP, veaDailyP]);
-  // Graded Ivy · Intl: same method as the S&P tile, run on VEA (the main
-  // international holding). Not separately backtested.
-  const gradedIvyIntl = computeGradedIvy(
-    veaDaily.closes, veaDaily.timestamps,
-    veaDaily.meta?.regularMarketPrice ?? veaDaily.closes[veaDaily.closes.length - 1] ?? null,
-    MANUAL_ALLOC_BAND.floor, MANUAL_ALLOC_BAND.ceiling
-  );
-  const ivyUsPct = gradedIvy.official?.equityPct ?? null;
-  const ivyIntlPct = gradedIvyIntl.official?.equityPct ?? null;
-  const trendBlendPct =
-    ivyUsPct != null && ivyIntlPct != null
-      ? Math.round(((ivyUsPct * MANUAL_EQUITY_MIX.us + ivyIntlPct * MANUAL_EQUITY_MIX.intl) / (MANUAL_EQUITY_MIX.us + MANUAL_EQUITY_MIX.intl)) * 10) / 10
-      : ivyUsPct ?? ivyIntlPct;
-  const robertsRisk = computeRobertsRisk(spxWeekly, spxMonthly, MANUAL_ALLOC_BAND.floor, MANUAL_ALLOC_BAND.ceiling);
-  const creditModel = computeCredit(hySpread * 100, MANUAL_ALLOC_BAND.floor, MANUAL_ALLOC_BAND.ceiling);
-  const scoredModels = [trendBlendPct, robertsRisk?.equityPct ?? null, creditModel.equityPct]
-    .filter((v): v is number => v != null);
-  const equityAllocation = {
-    ...MANUAL_ALLOC_BAND,
-    consensus: scoredModels.length ? Math.round((scoredModels.reduce((a, b) => a + b, 0) / scoredModels.length) * 10) / 10 : null,
-    modelsInConsensus: scoredModels.length,
-    roberts: robertsRisk,
-    ivyIntl: { ...gradedIvyIntl, ticker: "VEA" },
-    trend: { blendPct: trendBlendPct, usPct: ivyUsPct, intlPct: ivyIntlPct, mix: MANUAL_EQUITY_MIX },
-    credit: { ...creditModel, isFallback: fredHY.value == null },
-  };
-
-  // Week-over-week priors, live. Same method as the S&P (close from 5
-  // trading days back). Null when history is short or the fetch failed,
-  // and the page hides the arrow rather than inventing a comparison.
-  const vixWeekAgo: number | null = vix.closes.length >= 6 ? vix.closes[vix.closes.length - 6] ?? null : null;
-  const hyWeekAgo: number | null = fredHY.value != null ? fredHY.prev : null;
-
-  const yieldCurve: number = fredYC.value ?? 0.55;
-  const fedFunds: number = fredFedFunds.value ?? 4.33;
-  const fedFundsYearAgo: number | null = fredFedFunds.prev;
-  // Direction is now derived from the actual 12-month move in the
-  // effective rate, live, not hand-set. 0.125 is half a standard 25bp
-  // hike, small enough to catch a single move without flagging noise.
-  const fedTrendDirection: "up" | "down" | "flat" =
-    fedFundsYearAgo == null ? "flat" :
-    fedFunds - fedFundsYearAgo > 0.125 ? "up" :
-    fedFundsYearAgo - fedFunds > 0.125 ? "down" : "flat";
-  const breakeven5y: number = fredBreakeven.value ?? 2.45;
-
-  const dxyPrice: number | null = dxy.meta.regularMarketPrice ?? dxy.closes[dxy.closes.length - 1] ?? null;
-  const dxyPrev: number | null = dxy.closes.length >= 2 ? dxy.closes[dxy.closes.length - 2] : null;
-  const dxyChangePct: number | null = dxyPrice != null && dxyPrev != null ? ((dxyPrice - dxyPrev) / dxyPrev) * 100 : null;
-
-  const putCallRatio: number | null = putCall.meta.regularMarketPrice ?? putCall.closes[putCall.closes.length - 1] ?? null;
-
-  const trailingPE: number | null = peData.value ?? spx.meta.trailingPE ?? MANUAL_PE_FALLBACK;
-  let erp: number | null = null;
-  if (trailingPE != null && trailingPE > 0) {
-    const earningsYield = (1 / trailingPE) * 100;
-    erp = Math.round((earningsYield - real10y) * 100);
-    console.log(`ERP: ${erp} bps`);
-  }
-
-  const capeRatio: number = capeData.value ?? MANUAL_CAPE_FALLBACK;
-
-  const spxPctAbove200 = spx200dma != null && spxPrice != null
-    ? ((spxPrice - spx200dma) / spx200dma) * 100 : null;
-  const isBelow200 = spxPctAbove200 != null && spxPctAbove200 < 0;
-
-  const regimeGate: "trend_broken" | "near_ma" | "trend_intact" | "reclaiming" =
-    isBelow200                                    ? "trend_broken" :
-    spxPctAbove200 != null && spxPctAbove200 <= 3 ? "near_ma"      : "trend_intact";
-
-  const scoreCAFE    = capeRatio > 30 ? 2 : capeRatio > 20 ? 1 : 0;
-  const scoreBuffett = MANUAL_BUFFETT_SIGMA >= 2.0 ? 2 : MANUAL_BUFFETT_SIGMA >= 1.0 ? 1 : 0;
-  const scoreVIX     = vixPrice != null ? (vixPrice >= 30 ? 2 : vixPrice >= 20 ? 1 : 0) : 1;
-  const scoreHY      = hySpread >= 5 ? 2 : hySpread >= 4 ? 1 : 0;
-  const scoreYC      = yieldCurve < -0.5 ? 2 : yieldCurve < 0.5 ? 1 : 0;
-  const scoreBreadth = breadthPct != null ? (breadthPct < 50 ? 2 : breadthPct < 70 ? 1 : 0) : 1;
-  const scoreERP     = erp != null ? (erp < 100 ? 2 : erp < 300 ? 1 : 0) : 1;
-  // Official month-end count, not the live forecast. The Ivy rule only acts
-  // at month-end, so mid-month dips should not move the composite score.
-  const ivyInvestedCount = Object.values(MANUAL_IVY.signals).filter(s => s === "Invest").length;
-  const scoreIvy     = ivyInvestedCount <= 2 ? 2 : ivyInvestedCount <= 4 ? 1 : 0;
-  const compositeScore = scoreCAFE + scoreBuffett + scoreVIX + scoreHY + scoreYC + scoreBreadth + scoreERP + scoreIvy;
-
-  const compositeAllocation =
-    regimeGate === "trend_broken" ? "35–40%" :
-    regimeGate === "near_ma"      ? "42–45%" :
-    compositeScore >= 13 ? "42–45%" :
-    compositeScore >= 10 ? "45–50%" :
-    compositeScore >= 7  ? "50–55%" :
-    compositeScore >= 4  ? "55–60%" : "60%+";
-
-  const compositeSignal =
-    regimeGate === "trend_broken" ? "RISK OFF — REDUCE" :
-    regimeGate === "near_ma"      ? "RISK WATCH — NEAR MA" :
-    compositeScore >= 13 ? "RISK ON — HOLD DEFENSIVE" :
-    compositeScore >= 10 ? "RISK ON — SLIGHT TILT" :
-    compositeScore >= 7  ? "RISK ON — DEPLOY" :
-    compositeScore >= 4  ? "RISK ON — LEAN IN" : "RISK ON — FULL POSTURE";
-
-  const compositeColor =
-    regimeGate === "trend_broken" ? "#ff6b88" :
-    regimeGate === "near_ma"      ? "#fbbf24" :
-    compositeScore >= 13 ? "#fbbf24" :
-    compositeScore >= 10 ? "#94a3b8" :
-    compositeScore >= 7  ? "#4ade80" :
-    compositeScore >= 4  ? "#4ade80" : "#22d3ee";
-
-  const fearGreedScore: number = fearGreedData.value ?? MANUAL_FEAR_GREED_FALLBACK;
-  const fearGreedRating: string = fearGreedData.rating ?? "Extreme Fear";
-
-  // Total-return YTD, matching the same basis as the portfolio and VBINX
-  // tiles. ^GSPC is a price index with no real dividend adjustment, so total
-  // return needs ^SP500TR (the S&P 500 Total Return Index) instead — its
-  // own series already has dividends reinvested, no adjclose math needed.
-  let spxYtdPct: number | null = null;
-  let spxYtdIsTotalReturn = false;
-  try {
-    const now = new Date();
-    const daysIntoYear = Math.ceil(
-      (now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (1000 * 60 * 60 * 24)
-    ) + 10;
-    const trYtd = await fetchChart("^SP500TR", daysIntoYear);
-    if (trYtd.closes.length > 0) {
-      const trStart = trYtd.closes[0];
-      const trLatest = trYtd.meta.regularMarketPrice ?? trYtd.closes[trYtd.closes.length - 1];
-      spxYtdPct = ((trLatest - trStart) / trStart) * 100;
-      spxYtdIsTotalReturn = true;
-    } else if (trYtd.error) {
-      diagnostics["spx_ytd_total_return"] = trYtd.error;
+    fetchMarket();
+    const id = setInterval(fetchMarket, 60000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
+
+  const metrics = marketData?.metrics ?? marketData ?? {};
+  const getNum = (...vals: any[]): number | null => {
+    for (const v of vals) {
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+      if (typeof v === "string") { const n = Number(v.replace(/,/g, "")); if (Number.isFinite(n)) return n; }
     }
-    // Fallback: price-only YTD if the total-return series is unavailable,
-    // so a bad ticker doesn't silently kill the tile.
-    if (spxYtdPct == null) {
-      const ytd = await fetchChart("^GSPC", daysIntoYear);
-      if (ytd.closes.length > 0 && spxPrice != null) {
-        spxYtdPct = ((spxPrice - ytd.closes[0]) / ytd.closes[0]) * 100;
+    return null;
+  };
+  const getArr = (...vals: any[]): number[] | null => {
+    for (const v of vals) {
+      if (Array.isArray(v)) {
+        const arr = v.map((x: any) => typeof x === "number" ? x : Number(String(x).replace(/,/g, ""))).filter((x: number) => Number.isFinite(x));
+        if (arr.length) return arr;
       }
-      if (ytd.error) diagnostics["ytd"] = ytd.error;
     }
-  } catch (err: any) {
-    diagnostics["ytd"] = err?.message ?? "YTD fetch failed";
-  }
+    return null;
+  };
 
-  // Same technique, fixed ~365-day window instead of days-into-year, for
-  // the SPX 100/0 tile's new 1-YR figure.
-  let spxOneYearPct: number | null = null;
-  try {
-    const trOneYear = await fetchChart("^SP500TR", 375);
-    if (trOneYear.closes.length > 0) {
-      const trStart = trOneYear.closes[0];
-      const trLatest = trOneYear.meta.regularMarketPrice ?? trOneYear.closes[trOneYear.closes.length - 1];
-      spxOneYearPct = ((trLatest - trStart) / trStart) * 100;
-    } else if (trOneYear.error) {
-      diagnostics["spx_one_year_total_return"] = trOneYear.error;
+  const spxPrice = getNum(metrics.spx_price, metrics.spx, marketData?.spx_price);
+  const vixValue = getNum(metrics.vix, marketData?.vix);
+  const spx20 = getNum(metrics?.spx_20dma?.level, marketData?.spx_20dma?.level) ?? 6822.68;
+  const spx50 = getNum(metrics?.spx_50dma?.level, marketData?.spx_50dma?.level) ?? 6881.21;
+  const spx100 = getNum(metrics?.spx_100dma?.level, marketData?.spx_100dma?.level) ?? 6841.88;
+  const spx200 = getNum(metrics?.spx_200dma?.level, marketData?.spx_200dma?.level) ?? 6608.12;
+
+  // QQQ (Nasdaq-100) — mirrors the SPX extraction, added specifically to
+  // watch tech/momentum leadership separately from the broad index, per
+  // Roberts' own instrument choice in the momentum-crash report.
+  const qqqPrice = getNum(metrics?.qqq?.price, marketData?.qqq?.price);
+  const qqqChangePct = getNum(metrics?.qqq?.change_pct, marketData?.qqq?.change_pct);
+  const qqqYtd = getNum(metrics?.qqq?.ytd_pct, marketData?.qqq?.ytd_pct);
+  const qqqTrend = getArr(metrics?.qqq?.trend_14d, marketData?.qqq?.trend_14d) ?? [];
+  const qqq20 = getNum(metrics?.qqq?.dma_20?.level, marketData?.qqq?.dma_20?.level);
+  const qqq50 = getNum(metrics?.qqq?.dma_50?.level, marketData?.qqq?.dma_50?.level);
+  const qqq100 = getNum(metrics?.qqq?.dma_100?.level, marketData?.qqq?.dma_100?.level);
+  const qqq200 = getNum(metrics?.qqq?.dma_200?.level, marketData?.qqq?.dma_200?.level);
+  const qqqSlope20 = getNum(metrics?.qqq?.dma_20?.slope, marketData?.qqq?.dma_20?.slope);
+  const qqqSlope50 = getNum(metrics?.qqq?.dma_50?.slope, marketData?.qqq?.dma_50?.slope);
+  const qqqSlope100 = getNum(metrics?.qqq?.dma_100?.slope, marketData?.qqq?.dma_100?.slope);
+  const qqqSlope200 = getNum(metrics?.qqq?.dma_200?.slope, marketData?.qqq?.dma_200?.slope);
+  const qqqRegimeLabel = metrics?.qqq?.regime_label ?? marketData?.qqq?.regime_label ?? null;
+  const qqqRegimeDesc = metrics?.qqq?.regime_desc ?? marketData?.qqq?.regime_desc ?? null;
+  const qqqRegimeColor = metrics?.qqq?.regime_color ?? marketData?.qqq?.regime_color ?? "#fbbf24";
+  const qqqRegimeEmoji = metrics?.qqq?.regime_emoji ?? marketData?.qqq?.regime_emoji ?? "🟡";
+  const qqqVs = (level: number | null) => qqqPrice == null || level == null ? null : ((qqqPrice - level) / level) * 100;
+  const qqq200Pct = qqqVs(qqq200);
+
+  // DMA slopes (% change over last 20 trading days)
+  const slope20 = getNum(metrics?.spx_20dma?.slope, marketData?.spx_20dma?.slope);
+  const slope50 = getNum(metrics?.spx_50dma?.slope, marketData?.spx_50dma?.slope);
+  const slope100 = getNum(metrics?.spx_100dma?.slope, marketData?.spx_100dma?.slope);
+  const slope200 = getNum(metrics?.spx_200dma?.slope, marketData?.spx_200dma?.slope);
+
+  // Market regime
+  const regime = metrics?.regime ?? marketData?.regime ?? null;
+  const regimeLabel = metrics?.regime_label ?? marketData?.regime_label ?? null;
+  const regimeDesc = metrics?.regime_desc ?? marketData?.regime_desc ?? null;
+  const regimeColor = metrics?.regime_color ?? marketData?.regime_color ?? "#fbbf24";
+  const regimeEmoji = metrics?.regime_emoji ?? marketData?.regime_emoji ?? "🟡";
+  const spxDailyPct = getNum(metrics?.spx_change_pct, marketData?.spx_change_pct);
+  const spxYtd = getNum(metrics?.spx_ytd_pct, marketData?.spx_ytd_pct) ?? -2.13;
+  const spxOneYearPct = getNum(metrics?.spx_one_year_pct, marketData?.spx_one_year_pct);
+  const spxFiveYearPct = getNum(metrics?.spx_five_year_pct, marketData?.spx_five_year_pct);
+  const spxYtdIsTotalReturn: boolean = metrics?.spx_ytd_is_total_return ?? marketData?.spx_ytd_is_total_return ?? false;
+  const spxTrend = getArr(metrics?.spx_trend_14d, marketData?.spx_trend_14d) ?? [6946,6908,6878,6881,6816,6869,6830,6740,6795,6781,6775,6672,6632,6699];
+  const spxHistory = getArr(metrics?.spx_history, marketData?.spx_history) ?? [];
+  const hySpread = getNum(metrics?.hy_spread, marketData?.hy_spread) ?? 3.28;
+  const yieldCurve = getNum(metrics?.yield_curve_10y_2y, marketData?.yield_curve_10y_2y) ?? 0.55;
+  const real10y = getNum(metrics?.real_10y, marketData?.real_10y) ?? 1.92;
+  const nom10y = getNum(metrics?.nom_10y, marketData?.nom_10y) ?? 4.30;
+  const fedFunds = getNum(metrics?.fed_funds, marketData?.fed_funds) ?? 4.33;
+  const breakeven5y = getNum(metrics?.breakeven_5y, marketData?.breakeven_5y) ?? 2.45;
+  const dxy = getNum(metrics?.dxy, marketData?.dxy);
+  const dxyChangePct = getNum(metrics?.dxy_change_pct, marketData?.dxy_change_pct);
+  const putCallRatio = getNum(metrics?.put_call_ratio, marketData?.put_call_ratio);
+  const adLine = metrics?.ad_line ?? marketData?.ad_line ?? null;
+  const erpBps = getNum(metrics?.erp_bps, marketData?.erp_bps);
+  const trailingPE = getNum(metrics?.trailing_pe, marketData?.trailing_pe);
+  const capeRatio = getNum(metrics?.cape_ratio, marketData?.cape_ratio) ?? 40.13;
+  const fearGreedScore = getNum(metrics?.fear_greed_score, marketData?.fear_greed_score) ?? 15;
+  const fearGreedRating: string = metrics?.fear_greed_rating ?? marketData?.fear_greed_rating ?? "Extreme Fear";
+
+  // Fed Balance Sheet (WALCL)
+  const walclBn    = getNum(metrics?.walcl_bn,    marketData?.walcl_bn);
+  const walclChgBn = getNum(metrics?.walcl_chg_bn, marketData?.walcl_chg_bn);
+  const walclDirection: string = metrics?.walcl_direction ?? marketData?.walcl_direction ?? "";
+
+  // Brent Crude Oil — Roberts' "master switch"
+  const brentPrice    = getNum(metrics?.brent_price,      marketData?.brent_price);
+  const brentChangePct = getNum(metrics?.brent_change_pct, marketData?.brent_change_pct);
+  const brentRegime: string = metrics?.brent_regime ?? marketData?.brent_regime ?? "";
+
+  // Composite Signal Score
+  const breadthPct    = getNum(metrics?.breadth_pct,      marketData?.breadth_pct);
+  const compositeScore: number = metrics?.composite_score ?? marketData?.composite_score ?? 10;
+  const compositeScores = metrics?.composite_scores ?? marketData?.composite_scores ?? { cape:2, buffett:2, vix:1, hy:2, yc:1, breadth:1, erp:1, ivy:1 };
+  const compositeAllocation: string = metrics?.composite_allocation ?? marketData?.composite_allocation ?? "45–50%";
+  const compositeSignal: string = metrics?.composite_signal ?? marketData?.composite_signal ?? "SLIGHT TILT";
+  const compositeColor: string = metrics?.composite_color ?? marketData?.composite_color ?? "#fbbf24";
+  const regimeGate: string = metrics?.regime_gate ?? marketData?.regime_gate ?? "hold";
+  const buffettSigma  = getNum(metrics?.buffett_sigma,    marketData?.buffett_sigma) ?? 2.33;
+  const fedStance: string = metrics?.fed_stance ?? marketData?.fed_stance ?? "holding";
+  const fedFundsRate  = getNum(metrics?.fed_funds,          marketData?.fed_funds) ?? 4.33;
+  const fedFundsYearAgo = getNum(metrics?.fed_funds_year_ago, marketData?.fed_funds_year_ago);
+  const fedTrendDirection: string = metrics?.fed_trend_direction ?? marketData?.fed_trend_direction ?? "flat";
+  const fedNextMove = metrics?.fed_next_move ?? marketData?.fed_next_move ?? { lean: "neutral", hikeOdds: 50, meeting: "next FOMC" };
+  const aaiiBears = getNum(metrics?.aaii_bears, marketData?.aaii_bears) ?? 53.3;
+  const djtPrice      = getNum(metrics?.djt_price,      marketData?.djt_price);
+  const djtChangePct  = getNum(metrics?.djt_change_pct, marketData?.djt_change_pct);
+  const djt200dma     = getNum(metrics?.djt_200dma,     marketData?.djt_200dma);
+  const djt200slope   = getNum(metrics?.djt_200slope,   marketData?.djt_200slope);
+  const djtVs200      = getNum(metrics?.djt_vs_200_pct, marketData?.djt_vs_200_pct);
+  const djtAbove200: boolean = metrics?.djt_above_200 ?? marketData?.djt_above_200 ?? true;
+  const djtTrend14d   = getArr(metrics?.djt_trend_14d,  marketData?.djt_trend_14d) ?? [];
+  const schannepSignal: string = metrics?.schannep_signal ?? marketData?.schannep_signal ?? "";
+  const schannepLabel: string  = metrics?.schannep_label  ?? marketData?.schannep_label  ?? "Loading";
+  const schannepColor: string  = metrics?.schannep_color  ?? marketData?.schannep_color  ?? "#94a3b8";
+
+  // Live Ivy Portfolio data from route.ts
+  const ivyData = metrics?.ivy ?? marketData?.ivy ?? null;
+
+  // Live per-position 200-DMA data from route.ts
+  const positionsData: AnyObj = metrics?.positions ?? marketData?.positions ?? {};
+
+  // Official month-end Ivy signals now come from route.ts (MANUAL_IVY), the
+  // same source the composite score uses, so the score, the Top 10 tile and
+  // the Signal Inputs badge can never disagree. Update them there, not here.
+  // The fallback below only shows for the moment before the first fetch
+  // lands and does not need monthly upkeep.
+  const ivyOfficialFromApi = metrics?.ivy_official ?? marketData?.ivy_official ?? null;
+  const ivyOfficialSignals: Record<string, "Invest" | "Cash"> =
+    ivyOfficialFromApi?.signals ?? { vti: "Invest", veu: "Invest", ief: "Invest", vnq: "Invest", dbc: "Invest" };
+  const ivyOfficialDate: string = ivyOfficialFromApi?.asOf ?? "—";
+  const ivyEOMDate: string = ivyOfficialFromApi?.validUntil ?? "—";
+
+  const ivyPositions = [
+    { ticker:"VTI", name:"US Stocks",     key:"vti" },
+    { ticker:"VEU", name:"Intl Stocks",   key:"veu" },
+    { ticker:"IEF", name:"Bonds (7-10yr)",key:"ief" },
+    { ticker:"VNQ", name:"Real Estate",   key:"vnq" },
+    { ticker:"DBC", name:"Commodities",   key:"dbc" },
+  ].map(p => {
+    const d = ivyData?.[p.key];
+    const variance: number | null = d?.variance ?? null;
+    const sma: number | null = d?.sma ?? null;
+    const price: number | null = d?.price ?? null;
+    const officialSignal = ivyOfficialSignals[p.key];
+    // Forecast: what is the risk of March 31 flipping?
+    const forecastLabel = variance == null ? "Loading"
+      : variance <= -2   ? "Exit Risk High"
+      : variance <= 0    ? "Flip Risk"
+      : variance <= 2    ? "Watch"
+      : "On Track";
+    const forecastColor = variance == null ? "#475569"
+      : variance <= 0    ? "#ff6b88"
+      : variance <= 2    ? "#fbbf24"
+      : "#4ade80";
+    const forecastPill = variance == null ? ""
+      : variance <= 0    ? "pillR"
+      : variance <= 2    ? "pillA"
+      : "pillG";
+    const pct = variance != null ? Math.max(0, Math.min(Math.abs(variance) / 30 * 100, 100)) : 32;
+    return { ...p, variance, sma, price, officialSignal, forecastLabel, forecastColor, forecastPill, pct };
+  });
+  const ivyInvestedCount = Object.values(ivyOfficialSignals).filter(s => s === "Invest").length;
+  const ivyAtRiskCount = ivyPositions.filter(p => p.variance != null && p.variance <= 0).length;
+  const ivyLive = ivyData != null;
+
+  const fmtWhole = (n: number) => Math.round(n).toLocaleString();
+  const fmt1 = (n: number) => n.toFixed(1);
+  const fmt2 = (n: number) => n.toFixed(2);
+  const fmtSigned1 = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
+  const spxVs = (level: number) => spxPrice == null ? null : ((spxPrice - level) / level) * 100;
+
+  // 4-state DMA label engine — position-only wording. Direction (rising/
+  // flattening/falling) is now conveyed by the arrow next to Today, so the
+  // label itself no longer needs a separate "Bullish" vs "Holding Above"
+  // split for the same above-average state; both used the same color
+  // already (dmaTone always returned "healthy" above the average
+  // regardless of slope), so the wording was implying a distinction the
+  // color never actually made.
+  const dmaState = (pct: number | null, slope?: number | null, isLong = false) => {
+    if (pct == null) return "Loading";
+    if (pct < 0) {
+      // Below DMA — is SPX recovering toward it or moving away?
+      return (spxDailyPct != null && spxDailyPct > 0) ? "Recovering" : "Bearish";
     }
-  } catch (err: any) {
-    diagnostics["spx_one_year"] = err?.message ?? "1-YR fetch failed";
-  }
+    if (isLong && pct <= 2) return "Testing Support";
+    return "Holding Above";
+  };
+  const dmaTone = (pct: number | null, slope?: number | null, isLong = false) => {
+    if (pct == null) return "neutral";
+    if (pct < 0) return (spxDailyPct != null && spxDailyPct > 0) ? "warning" : "danger";
+    if (isLong && pct <= 2) return "warning";
+    if (slope != null && slope > 0.02) return "healthy";
+    return "healthy"; // above DMA is always at minimum healthy
+  };
 
-  // Same technique again for 5-YR — separate fetch since SPX doesn't run
-  // through fetchPositionMetrics's shared 1830-day window like every other
-  // ticker on this dashboard does.
-  let spxFiveYearPct: number | null = null;
-  try {
-    const trFiveYear = await fetchChart("^SP500TR", 1830);
-    if (trFiveYear.closes.length > 0) {
-      const trStart = trFiveYear.closes[0];
-      const trLatest = trFiveYear.meta.regularMarketPrice ?? trFiveYear.closes[trFiveYear.closes.length - 1];
-      spxFiveYearPct = ((trLatest - trStart) / trStart) * 100;
-    } else if (trFiveYear.error) {
-      diagnostics["spx_five_year_total_return"] = trFiveYear.error;
+  // Position-level version of the same 5-state engine above — takes the
+  // POSITION's own daily change instead of closing over spxDailyPct, since
+  // each holding's Recovering-vs-Bearish call must be based on its own tape,
+  // not what the S&P did today. Same thresholds, same logic, own inputs.
+  const positionDmaState = (pct: number | null, slope: number | null, dailyPct: number | null, isLong = false) => {
+    if (pct == null) return "Loading";
+    if (pct < 0) {
+      return (dailyPct != null && dailyPct > 0) ? "Recovering" : "Bearish";
     }
-  } catch (err: any) {
-    diagnostics["spx_five_year"] = err?.message ?? "5-YR fetch failed";
-  }
+    if (isLong && pct <= 2) return "Testing Support";
+    return "Holding Above";
+  };
+  const positionDmaTone = (pct: number | null, slope: number | null, dailyPct: number | null, isLong = false) => {
+    if (pct == null) return "neutral";
+    if (pct < 0) return (dailyPct != null && dailyPct > 0) ? "warning" : "danger";
+    if (isLong && pct <= 2) return "warning";
+    if (slope != null && slope > 0.02) return "healthy";
+    return "healthy";
+  };
+  const toneColor = (tone: string) => ({ danger: "#ff6b88", warning: "#fbbf24", healthy: "#4ade80", neutral: "#94a3b8" }[tone] ?? "#94a3b8");
 
-  // Any manual fallback currently standing in for a failed live fetch.
-  // Surfaced on the page with its as-of date.
-  const fallbacksInUse: { name: string; value: number; asOf: string }[] = [];
-  if (fredHY.value == null) fallbacksInUse.push({ name: "HY spread", value: MANUAL_HY_FALLBACK, asOf: FALLBACK_ASOF.hy });
-  if (capeData.value == null) fallbacksInUse.push({ name: "CAPE", value: MANUAL_CAPE_FALLBACK, asOf: FALLBACK_ASOF.cape });
-  if (fearGreedData.value == null) fallbacksInUse.push({ name: "Fear & Greed", value: MANUAL_FEAR_GREED_FALLBACK, asOf: FALLBACK_ASOF.fear_greed });
-  if (peData.value == null && spx.meta.trailingPE == null) fallbacksInUse.push({ name: "S&P trailing P/E", value: MANUAL_PE_FALLBACK, asOf: FALLBACK_ASOF.pe });
+  // Portfolio holdings at M2 weights (Mike's IRAs, 50/40/10). Sums to 100.
+  // "trend" sleeve is judged against the 200-DMA, same as SPX.
+  // "defensive" sleeve (capital preservation / cash-like) isn't supposed to
+  // trend, so it skips the Bullish/Bearish verdict entirely and just shows
+  // the numbers: price, YTD total return, and 200-DMA gap for reference.
+  const PORTFOLIO_POSITIONS = [
+    { ticker: "SCHD", weight: 15, job: "Quality equity, lower vol",        sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "VEA",  weight: 15, job: "International equity",             sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "VTI",  weight: 10, job: "Broad US market exposure",         sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "VTWO", weight: 5,  job: "Small cap, Russell 2000",          sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "VIGI", weight: 5,  job: "Int'l dividend growth",            sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "VTIP", weight: 15, job: "Inflation protection",             sleeve: "defensive" as const, acct: "M2" },
+    { ticker: "SGOV", weight: 15, job: "Capital preservation, yield",      sleeve: "defensive" as const, acct: "M2" },
+    { ticker: "BND",  weight: 10, job: "Core US bond, replaced VGIT",      sleeve: "defensive" as const, acct: "M2" },
+    { ticker: "GLDM", weight: 5,  job: "Hard asset hedge",                 sleeve: "trend" as const,     acct: "M2" },
+    { ticker: "DBMF", weight: 5,  job: "Managed futures, trend-following", sleeve: "defensive" as const, acct: "M2" },
+  ];
 
-  const hasPartialData = spxPrice != null;
-  const status = Object.keys(diagnostics).length === 0 ? "ok" : hasPartialData ? "partial" : "error";
+  // CUR 40/55/5 is meant to be a FROZEN snapshot of Mike's actual holdings
+  // through early September, before the M2 rebalance, kept solely so the
+  // "CUR vs M2" comparison tile has a stable "before" to compare against.
+  // Deliberately a separate array from PORTFOLIO_POSITIONS (the live
+  // Holdings list): that one gets edited as real positions actually
+  // change (VGIT -> BND, etc.), and CUR must never inherit those edits or
+  // it stops being a valid historical baseline. VGIT's price data is
+  // still fetched server-side even though it's no longer a live holding,
+  // so this can still compute real returns.
+  const CUR_PORTFOLIO_POSITIONS = [
+    { ticker: "SGOV", weight: 20 },
+    { ticker: "VGIT", weight: 20 },
+    { ticker: "VEA",  weight: 15 },
+    { ticker: "SCHD", weight: 15 },
+    { ticker: "VTIP", weight: 15 },
+    { ticker: "VTI",  weight: 10 },
+    { ticker: "GLDM", weight: 5  },
+  ];
+  const curPositionCards = CUR_PORTFOLIO_POSITIONS.map(p => {
+    const d = positionsData?.[p.ticker] ?? null;
+    return {
+      ...p,
+      dailyPct: d?.dailyChangePct ?? null,
+      ytdReturnPct: d?.ytdReturnPct ?? null,
+      oneYearReturnPct: d?.oneYearReturnPct ?? null,
+      fiveYearReturnPct: d?.fiveYearReturnPct ?? null,
+    };
+  });
 
-  return NextResponse.json({
-    ok: hasPartialData,
-    status,
-    source: "LIVE_YAHOO_FRED",
-    asOf: new Date().toISOString(),
-    diagnostics: Object.keys(diagnostics).length > 0 ? diagnostics : undefined,
-    spx_price: spxPrice,
-    spx_change_pct: spxChangePct,
-    spx_ytd_pct: spxYtdPct,
-    spx_one_year_pct: spxOneYearPct,
-    spx_five_year_pct: spxFiveYearPct,
-    spx_trend_14d: spxTrend14d,
-    spx_history: spxCloses,
-    vix: vixPrice,
-    fallbacks_in_use: fallbacksInUse,
-    metrics: {
-      spx_price: spxPrice,
-      spx_change_pct: spxChangePct,
-      spx_ytd_pct: spxYtdPct,
-      spx_one_year_pct: spxOneYearPct,
-      spx_five_year_pct: spxFiveYearPct,
-      spx_ytd_is_total_return: spxYtdIsTotalReturn,
-      spx_trend_14d: spxTrend14d,
-      spx_history: spxCloses,
-      vix: vixPrice,
-      vix_week_ago: vixWeekAgo,
-      spx_20dma: { level: spx20dma, slope: spx20slope },
-      spx_50dma: { level: spx50dma, slope: spx50slope },
-      spx_100dma: { level: spx100dma, slope: spx100slope },
-      spx_200dma: { level: spx200dma, slope: spx200slope },
-      qqq: {
-        price: qqqPrice,
-        change_pct: qqqChangePct,
-        ytd_pct: qqqYtdPct,
-        trend_14d: qqqTrend14d,
-        dma_20: { level: qqq20dma, slope: qqq20slope },
-        dma_50: { level: qqq50dma, slope: qqq50slope },
-        dma_100: { level: qqq100dma, slope: qqq100slope },
-        dma_200: { level: qqq200dma, slope: qqq200slope },
-        regime: qqqRegime,
-        regime_label: regimeLabel[qqqRegime],
-        regime_desc: qqqRegimeDesc[qqqRegime],
-        regime_color: regimeColor[qqqRegime],
-        regime_emoji: regimeEmoji[qqqRegime],
-      },
-      regime,
-      regime_label: regimeLabel[regime],
-      regime_desc: regimeDesc[regime],
-      regime_color: regimeColor[regime],
-      regime_emoji: regimeEmoji[regime],
-      hy_spread: hySpread,
-      hy_spread_week_ago: hyWeekAgo,
-      yield_curve_10y_2y: yieldCurve,
-      real_10y: real10y,
-      nom_10y: nom10y,
-      fed_funds: fedFunds,
-      fed_funds_year_ago: fedFundsYearAgo,
-      fed_trend_direction: fedTrendDirection,
-      breakeven_5y: breakeven5y,
-      dxy: dxyPrice,
-      dxy_change_pct: dxyChangePct,
-      put_call_ratio: putCallRatio,
-      erp_bps: erp,
-      trailing_pe: trailingPE,
-      cape_ratio: capeRatio,
-      fear_greed_score: fearGreedScore,
-      fear_greed_rating: fearGreedRating,
-      ad_line: MANUAL_AD,
-      walcl_bn: walclBn,
-      walcl_prev_bn: walclPrevBn,
-      walcl_chg_bn: walclChgBn,
-      walcl_direction: walclDirection,
-      brent_price: brentPrice,
-      brent_change_pct: brentChangePct,
-      brent_regime: brentRegime,
-      breadth_pct: breadthPct,
-      composite_score: compositeScore,
-      composite_scores: { cape: scoreCAFE, buffett: scoreBuffett, vix: scoreVIX, hy: scoreHY, yc: scoreYC, breadth: scoreBreadth, erp: scoreERP, ivy: scoreIvy },
-      composite_allocation: compositeAllocation,
-      composite_signal: compositeSignal,
-      composite_color: compositeColor,
-      regime_gate: regimeGate,
-      buffett_sigma: MANUAL_BUFFETT_SIGMA,
-      fed_stance: MANUAL_FED_STANCE,
-      fed_next_move: MANUAL_FED_NEXT_MOVE,
-      aaii_bears: MANUAL_AAII_BEARS,
-      djt_price: djtPrice,
-      djt_change_pct: djtChangePct,
-      djt_trend_14d: djtCloses.slice(-14),
-      djt_200dma: djt200dma,
-      djt_200slope: djt200slope,
-      djt_vs_200_pct: djtVs200,
-      djt_above_200: djtAbove200,
-      schannep_signal: schannepSignal,
-      schannep_label: schannepLabel[schannepSignal],
-      schannep_color: schannepColor[schannepSignal],
-      ivy_official: MANUAL_IVY,
-      graded_ivy: gradedIvy,
-      equity_allocation: equityAllocation,
-      roar,
-      ivy: {
-        vti: { price: ivyVTI.price, sma: ivyVTI.sma, variance: ivyVTI.variancePct, signal: ivyVTI.signal },
-        veu: { price: ivyVEU.price, sma: ivyVEU.sma, variance: ivyVEU.variancePct, signal: ivyVEU.signal },
-        ief: { price: ivyIEF.price, sma: ivyIEF.sma, variance: ivyIEF.variancePct, signal: ivyIEF.signal },
-        vnq: { price: ivyVNQ.price, sma: ivyVNQ.sma, variance: ivyVNQ.variancePct, signal: ivyVNQ.signal },
-        dbc: { price: ivyDBC.price, sma: ivyDBC.sma, variance: ivyDBC.variancePct, signal: ivyDBC.signal },
-      },
-      positions,
-      benchmark_6040: {
-        ytd_return_pct: benchmark6040YtdPct,
-        today_change_pct: benchmark6040TodayPct,
-        one_year_return_pct: benchmark6040OneYearPct,
-        five_year_return_pct: benchmark6040FiveYearPct,
-        vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
-        bnd_ytd_pct: benchmarkBND.ytdReturnPct,
-        components: [
-          { ticker: "VTI", weight_pct: 60, ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null, today_pct: vtiForBenchmark?.dailyChangePct ?? null },
-          { ticker: "BND", weight_pct: 40, ytd_pct: benchmarkBND.ytdReturnPct, today_pct: benchmarkBND.dailyChangePct },
-        ],
-      },
-      benchmark_4060: {
-        ytd_return_pct: benchmark4060YtdPct,
-        today_change_pct: benchmark4060TodayPct,
-        one_year_return_pct: benchmark4060OneYearPct,
-        five_year_return_pct: benchmark4060FiveYearPct,
-        vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
-        bnd_ytd_pct: benchmarkBND.ytdReturnPct,
-        components: [
-          { ticker: "VTI", weight_pct: 40, ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null, today_pct: vtiForBenchmark?.dailyChangePct ?? null },
-          { ticker: "BND", weight_pct: 60, ytd_pct: benchmarkBND.ytdReturnPct, today_pct: benchmarkBND.dailyChangePct },
-        ],
-      },
-      benchmark_5050: {
-        ytd_return_pct: benchmark5050YtdPct,
-        today_change_pct: benchmark5050TodayPct,
-        one_year_return_pct: benchmark5050OneYearPct,
-        five_year_return_pct: benchmark5050FiveYearPct,
-        vti_ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null,
-        bnd_ytd_pct: benchmarkBND.ytdReturnPct,
-        components: [
-          { ticker: "VTI", weight_pct: 50, ytd_pct: vtiForBenchmark?.ytdReturnPct ?? null, today_pct: vtiForBenchmark?.dailyChangePct ?? null },
-          { ticker: "BND", weight_pct: 50, ytd_pct: benchmarkBND.ytdReturnPct, today_pct: benchmarkBND.dailyChangePct },
-        ],
-      },
-      clean_slate: {
-        ytd_return_pct: cleanSlateYtdPct,
-        today_change_pct: cleanSlateTodayPct,
-        one_year_return_pct: cleanSlateOneYearPct,
-        five_year_return_pct: cleanSlateFiveYearPct,
-        components: serializeComponents(cleanSlateComponents),
-      },
-      lpl_4060: {
-        ytd_return_pct: lpl4060YtdPct,
-        today_change_pct: lpl4060TodayPct,
-        one_year_return_pct: lpl4060OneYearPct,
-        five_year_return_pct: lpl4060FiveYearPct,
-        components: serializeComponents(lpl4060Components),
-      },
-      lpl_5050: {
-        ytd_return_pct: lpl5050YtdPct,
-        today_change_pct: lpl5050TodayPct,
-        one_year_return_pct: lpl5050OneYearPct,
-        five_year_return_pct: lpl5050FiveYearPct,
-        components: serializeComponents(lpl5050Components),
-      },
-      vg_4060: {
-        ytd_return_pct: vg4060YtdPct,
-        today_change_pct: vg4060TodayPct,
-        one_year_return_pct: vg4060OneYearPct,
-        five_year_return_pct: vg4060FiveYearPct,
-        components: serializeComponents(vg4060Components),
-      },
-      noelle_mockup: {
-        ytd_return_pct: noelleMockupYtdPct,
-        today_change_pct: noelleMockupTodayPct,
-        one_year_return_pct: noelleMockupOneYearPct,
-        five_year_return_pct: noelleMockupFiveYearPct,
-        components: serializeComponents(noelleMockupComponents),
-      },
-      c1_tax: {
-        ytd_return_pct: c1TaxYtdPct,
-        today_change_pct: c1TaxTodayPct,
-        one_year_return_pct: c1TaxOneYearPct,
-        five_year_return_pct: c1TaxFiveYearPct,
-        components: serializeComponents(c1TaxComponents),
-      },
-      c1_ira: {
-        ytd_return_pct: c1IraYtdPct,
-        today_change_pct: c1IraTodayPct,
-        one_year_return_pct: c1IraOneYearPct,
-        five_year_return_pct: c1IraFiveYearPct,
-        components: serializeComponents(c1IraComponents),
-      },
-      m2: {
-        ytd_return_pct: m2YtdPct,
-        today_change_pct: m2TodayPct,
-        one_year_return_pct: m2OneYearPct,
-        five_year_return_pct: m2FiveYearPct,
-        components: serializeComponents(m2Components),
-      },
-      m3: {
-        ytd_return_pct: m3YtdPct,
-        today_change_pct: m3TodayPct,
-        one_year_return_pct: m3OneYearPct,
-        five_year_return_pct: m3FiveYearPct,
-        components: serializeComponents(m3Components),
-      },
-      panel_consensus: {
-        ytd_return_pct: panelYtdPct,
-        today_change_pct: panelTodayPct,
-        one_year_return_pct: panelOneYearPct,
-        five_year_return_pct: panelFiveYearPct,
-        components: serializeComponents(panelComponents),
-      },
-      other_ai: {
-        ytd_return_pct: otherAiYtdPct,
-        today_change_pct: otherAiTodayPct,
-        one_year_return_pct: otherAiOneYearPct,
-        five_year_return_pct: otherAiFiveYearPct,
-        components: serializeComponents(otherAiComponents),
-      },
-      hybrid_8: {
-        ytd_return_pct: hybrid8YtdPct,
-        today_change_pct: hybrid8TodayPct,
-        one_year_return_pct: hybrid8OneYearPct,
-        five_year_return_pct: hybrid8FiveYearPct,
-        components: serializeComponents(hybrid8Components),
-      },
+  const positionCards = PORTFOLIO_POSITIONS.map(p => {
+    const d = positionsData?.[p.ticker] ?? null;
+    const price: number | null = d?.price ?? null;
+    const dailyPct: number | null = d?.dailyChangePct ?? null;
+    const dma200: number | null = d?.dma200 ?? null;
+    const slope200: number | null = d?.slope200 ?? null;
+    const pctVs200: number | null = d?.pctVs200 ?? null;
+    const ytdReturnPct: number | null = d?.ytdReturnPct ?? null;
+    const oneYearReturnPct: number | null = d?.oneYearReturnPct ?? null;
+    const fiveYearReturnPct: number | null = d?.fiveYearReturnPct ?? null;
+    const state = positionDmaState(pctVs200, slope200, dailyPct, true);
+    const tone = positionDmaTone(pctVs200, slope200, dailyPct, true);
+    const color = toneColor(tone);
+    // Marker position on the bar: 0% gap = center (50%), clamp at ±15% so
+    // an outsized move never pushes the dot off the track.
+    const clampedPct = pctVs200 == null ? 0 : Math.max(-15, Math.min(15, pctVs200));
+    const barPos = 50 + (clampedPct / 15) * 50;
+    return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, oneYearReturnPct, fiveYearReturnPct, state, tone, color, barPos };
+  });
+
+  // TOD-only holdings (Noelle's taxable account). Shown at their CURRENT
+  // TOD weights (40 VTI / 15 VXUS / 45 VTEB), not M2 weights. The tile label
+  // reads "TOD" so they aren't confused with the M2 percentages. Target is
+  // Chris's C1 TAX 25/15/60. Update VTEB as the Dec/Jan tranches complete.
+  const CANDIDATE_POSITIONS = [
+    { ticker: "VXUS", weight: 15, job: "Total intl (dev + EM), TOD",       sleeve: "trend" as const,     acct: "TOD" },
+    { ticker: "VTEB", weight: 45, job: "Muni bonds, tax-exempt, TOD",      sleeve: "defensive" as const, acct: "TOD" },
+  ];
+  const candidateCards = CANDIDATE_POSITIONS.map(p => {
+    const d = positionsData?.[p.ticker] ?? null;
+    const price: number | null = d?.price ?? null;
+    const dailyPct: number | null = d?.dailyChangePct ?? null;
+    const dma200: number | null = d?.dma200 ?? null;
+    const slope200: number | null = d?.slope200 ?? null;
+    const pctVs200: number | null = d?.pctVs200 ?? null;
+    const ytdReturnPct: number | null = d?.ytdReturnPct ?? null;
+    const oneYearReturnPct: number | null = d?.oneYearReturnPct ?? null;
+    const fiveYearReturnPct: number | null = d?.fiveYearReturnPct ?? null;
+    const state = positionDmaState(pctVs200, slope200, dailyPct, true);
+    const tone = positionDmaTone(pctVs200, slope200, dailyPct, true);
+    const color = toneColor(tone);
+    const clampedPct = pctVs200 == null ? 0 : Math.max(-15, Math.min(15, pctVs200));
+    const barPos = 50 + (clampedPct / 15) * 50;
+    return { ...p, price, dailyPct, dma200, slope200, pctVs200, ytdReturnPct, oneYearReturnPct, fiveYearReturnPct, state, tone, color, barPos };
+  });
+
+  // Blended portfolio YTD return — weight × each position's own YTD total
+  // return. This is an ESTIMATE: it assumes today's weights were held
+  // constant since Jan 1 with no rebalancing and no cash flows, so it will
+  // drift from the actual brokerage-reported return over time.
+  const portfolioHasAllYtd = curPositionCards.every(p => p.ytdReturnPct != null);
+  const portfolioYtdPct: number | null = portfolioHasAllYtd
+    ? curPositionCards.reduce((sum, p) => sum + (p.ytdReturnPct as number) * (p.weight / 100), 0)
+    : null;
+
+  // Same blend, but for today's change — mirrors the "Today" column already
+  // shown on each position tile, so the benchmark row speaks the same
+  // language as the cards below it.
+  const portfolioHasAllToday = curPositionCards.every(p => p.dailyPct != null);
+  const portfolioTodayPct: number | null = portfolioHasAllToday
+    ? curPositionCards.reduce((sum, p) => sum + (p.dailyPct as number) * (p.weight / 100), 0)
+    : null;
+  const portfolioHasAllOneYear = curPositionCards.every(p => p.oneYearReturnPct != null);
+  const portfolioOneYearPct: number | null = portfolioHasAllOneYear
+    ? curPositionCards.reduce((sum, p) => sum + (p.oneYearReturnPct as number) * (p.weight / 100), 0)
+    : null;
+  const portfolioHasAllFiveYear = curPositionCards.every(p => p.fiveYearReturnPct != null);
+  const portfolioFiveYearPct: number | null = portfolioHasAllFiveYear
+    ? curPositionCards.reduce((sum, p) => sum + (p.fiveYearReturnPct as number) * (p.weight / 100), 0)
+    : null;
+
+  // Benchmarks — SPX already computed elsewhere as spxYtd/spxDailyPct;
+  // the two index proxies come from route.ts using the same VTI/BND blend.
+  const benchmark6040YtdPct = getNum(metrics?.benchmark_6040?.ytd_return_pct, marketData?.benchmark_6040?.ytd_return_pct);
+  const benchmark4060YtdPct = getNum(metrics?.benchmark_4060?.ytd_return_pct, marketData?.benchmark_4060?.ytd_return_pct);
+  const benchmark6040TodayPct = getNum(metrics?.benchmark_6040?.today_change_pct, marketData?.benchmark_6040?.today_change_pct);
+  const benchmark6040OneYearPct = getNum(metrics?.benchmark_6040?.one_year_return_pct, marketData?.benchmark_6040?.one_year_return_pct);
+  const benchmark6040FiveYearPct = getNum(metrics?.benchmark_6040?.five_year_return_pct, marketData?.benchmark_6040?.five_year_return_pct);
+  const benchmark4060TodayPct = getNum(metrics?.benchmark_4060?.today_change_pct, marketData?.benchmark_4060?.today_change_pct);
+  const benchmark4060OneYearPct = getNum(metrics?.benchmark_4060?.one_year_return_pct, marketData?.benchmark_4060?.one_year_return_pct);
+  const benchmark4060FiveYearPct = getNum(metrics?.benchmark_4060?.five_year_return_pct, marketData?.benchmark_4060?.five_year_return_pct);
+  // Simple 50/50 VTI/BND — added as a plainer benchmark closer to where Mike
+  // expects the household to actually land once Chris's proposal settles.
+  const benchmark5050YtdPct = getNum(metrics?.benchmark_5050?.ytd_return_pct, marketData?.benchmark_5050?.ytd_return_pct);
+  const benchmark5050TodayPct = getNum(metrics?.benchmark_5050?.today_change_pct, marketData?.benchmark_5050?.today_change_pct);
+  const benchmark5050OneYearPct = getNum(metrics?.benchmark_5050?.one_year_return_pct, marketData?.benchmark_5050?.one_year_return_pct);
+  const benchmark5050FiveYearPct = getNum(metrics?.benchmark_5050?.five_year_return_pct, marketData?.benchmark_5050?.five_year_return_pct);
+  // Clean Slate — hypothetical from-scratch panel build (SCHD/SGOV/VEA/VTIP/VTI/VGIT/DBMF/PDBC)
+  const cleanSlateYtdPct = getNum(metrics?.clean_slate?.ytd_return_pct, marketData?.clean_slate?.ytd_return_pct);
+  const cleanSlateTodayPct = getNum(metrics?.clean_slate?.today_change_pct, marketData?.clean_slate?.today_change_pct);
+  const cleanSlateOneYearPct = getNum(metrics?.clean_slate?.one_year_return_pct, marketData?.clean_slate?.one_year_return_pct);
+  const cleanSlateFiveYearPct = getNum(metrics?.clean_slate?.five_year_return_pct, marketData?.clean_slate?.five_year_return_pct);
+  // LPL "Income with Moderate Growth" proxy — 39% equity model, mapped to ETFs
+  const lpl4060YtdPct = getNum(metrics?.lpl_4060?.ytd_return_pct, marketData?.lpl_4060?.ytd_return_pct);
+  const lpl4060TodayPct = getNum(metrics?.lpl_4060?.today_change_pct, marketData?.lpl_4060?.today_change_pct);
+  const lpl4060OneYearPct = getNum(metrics?.lpl_4060?.one_year_return_pct, marketData?.lpl_4060?.one_year_return_pct);
+  const lpl4060FiveYearPct = getNum(metrics?.lpl_4060?.five_year_return_pct, marketData?.lpl_4060?.five_year_return_pct);
+  const lpl5050YtdPct = getNum(metrics?.lpl_5050?.ytd_return_pct, marketData?.lpl_5050?.ytd_return_pct);
+  const lpl5050TodayPct = getNum(metrics?.lpl_5050?.today_change_pct, marketData?.lpl_5050?.today_change_pct);
+  const lpl5050OneYearPct = getNum(metrics?.lpl_5050?.one_year_return_pct, marketData?.lpl_5050?.one_year_return_pct);
+  const lpl5050FiveYearPct = getNum(metrics?.lpl_5050?.five_year_return_pct, marketData?.lpl_5050?.five_year_return_pct);
+  const vg4060YtdPct = getNum(metrics?.vg_4060?.ytd_return_pct, marketData?.vg_4060?.ytd_return_pct);
+  const vg4060TodayPct = getNum(metrics?.vg_4060?.today_change_pct, marketData?.vg_4060?.today_change_pct);
+  const vg4060OneYearPct = getNum(metrics?.vg_4060?.one_year_return_pct, marketData?.vg_4060?.one_year_return_pct);
+  const vg4060FiveYearPct = getNum(metrics?.vg_4060?.five_year_return_pct, marketData?.vg_4060?.five_year_return_pct);
+  // Noelle Mockup — Mike's what-if replacing GLDM with DBMF + BTAL (a
+  // placeholder for the still-unnamed Long/Short fund Chris is researching),
+  // equity held at Chris's original 55%. Tracks Noelle's Rollover IRA only,
+  // not the household. BTAL is illustrative — swap once Chris names a real
+  // long/short fund from his Nitrogen screen.
+  const noelleMockupYtdPct = getNum(metrics?.noelle_mockup?.ytd_return_pct, marketData?.noelle_mockup?.ytd_return_pct);
+  const noelleMockupTodayPct = getNum(metrics?.noelle_mockup?.today_change_pct, marketData?.noelle_mockup?.today_change_pct);
+  const noelleMockupOneYearPct = getNum(metrics?.noelle_mockup?.one_year_return_pct, marketData?.noelle_mockup?.one_year_return_pct);
+  const noelleMockupFiveYearPct = getNum(metrics?.noelle_mockup?.five_year_return_pct, marketData?.noelle_mockup?.five_year_return_pct);
+  // C1 TAX 40/60 — Chris's actual proposal for Noelle's TOD (taxable)
+  // accounts: 25% VTI / 15% VXUS / 60% VTEB. Distinct from C0 (his
+  // retirement-account proposal) — this one is taxable-specific.
+  const c1TaxYtdPct = getNum(metrics?.c1_tax?.ytd_return_pct, marketData?.c1_tax?.ytd_return_pct);
+  const c1TaxTodayPct = getNum(metrics?.c1_tax?.today_change_pct, marketData?.c1_tax?.today_change_pct);
+  const c1TaxOneYearPct = getNum(metrics?.c1_tax?.one_year_return_pct, marketData?.c1_tax?.one_year_return_pct);
+  const c1TaxFiveYearPct = getNum(metrics?.c1_tax?.five_year_return_pct, marketData?.c1_tax?.five_year_return_pct);
+  // C1 IRA — Chris's proposed uniform model for the six standard-structure
+  // retirement accounts (excludes Alpine 401k pending rollover, excludes
+  // TOD accounts which use C1 TAX). Drops VGIT in favor of BND.
+  const c1IraYtdPct = getNum(metrics?.c1_ira?.ytd_return_pct, marketData?.c1_ira?.ytd_return_pct);
+  const c1IraTodayPct = getNum(metrics?.c1_ira?.today_change_pct, marketData?.c1_ira?.today_change_pct);
+  const c1IraOneYearPct = getNum(metrics?.c1_ira?.one_year_return_pct, marketData?.c1_ira?.one_year_return_pct);
+  const c1IraFiveYearPct = getNum(metrics?.c1_ira?.five_year_return_pct, marketData?.c1_ira?.five_year_return_pct);
+  // M2 — Mike's dial-back of C1 IRA toward a clean 50/40/10 (VTWO cut to
+  // 5%, GLDM/DBMF each doubled to 5%). M3 — same base but VTWO back to
+  // 10% and GLDM/DBMF at 2.5% each (nets to 55/40/5, not 50/40/10).
+  const m2YtdPct = getNum(metrics?.m2?.ytd_return_pct, marketData?.m2?.ytd_return_pct);
+  const m2TodayPct = getNum(metrics?.m2?.today_change_pct, marketData?.m2?.today_change_pct);
+  const m2OneYearPct = getNum(metrics?.m2?.one_year_return_pct, marketData?.m2?.one_year_return_pct);
+  const m2FiveYearPct = getNum(metrics?.m2?.five_year_return_pct, marketData?.m2?.five_year_return_pct);
+  const m3YtdPct = getNum(metrics?.m3?.ytd_return_pct, marketData?.m3?.ytd_return_pct);
+  const m3TodayPct = getNum(metrics?.m3?.today_change_pct, marketData?.m3?.today_change_pct);
+  const m3OneYearPct = getNum(metrics?.m3?.one_year_return_pct, marketData?.m3?.one_year_return_pct);
+  const m3FiveYearPct = getNum(metrics?.m3?.five_year_return_pct, marketData?.m3?.five_year_return_pct);
+  // Panel Consensus — the 12-voice panel's debate over C1, 50% equity cap
+  // held fixed, cut concentrated in VTWO, BND raised more than Chris's
+  // original, gold weighted above DBMF. Other AI — a second AI's take on
+  // the same question, close to M2 but BND at 11% and GLDM/DBMF split
+  // evenly, kept separate to compare philosophies side by side.
+  const panelYtdPct = getNum(metrics?.panel_consensus?.ytd_return_pct, marketData?.panel_consensus?.ytd_return_pct);
+  const panelTodayPct = getNum(metrics?.panel_consensus?.today_change_pct, marketData?.panel_consensus?.today_change_pct);
+  const panelOneYearPct = getNum(metrics?.panel_consensus?.one_year_return_pct, marketData?.panel_consensus?.one_year_return_pct);
+  const panelFiveYearPct = getNum(metrics?.panel_consensus?.five_year_return_pct, marketData?.panel_consensus?.five_year_return_pct);
+  const otherAiYtdPct = getNum(metrics?.other_ai?.ytd_return_pct, marketData?.other_ai?.ytd_return_pct);
+  const otherAiTodayPct = getNum(metrics?.other_ai?.today_change_pct, marketData?.other_ai?.today_change_pct);
+  const otherAiOneYearPct = getNum(metrics?.other_ai?.one_year_return_pct, marketData?.other_ai?.one_year_return_pct);
+  const otherAiFiveYearPct = getNum(metrics?.other_ai?.five_year_return_pct, marketData?.other_ai?.five_year_return_pct);
+  // Hybrid 8 — Mike's curated blend of ALT 45/40/15 and the Noelle Mockup.
+  // SCHD foundational, VTWO carried over for Chris's small-cap input, VIGI
+  // and PDBC cut for overlap with VEA/DBMF, BTAL cut to consolidate alts
+  // into a single DBMF line. 8 holdings by design, not a straight average.
+  const hybrid8YtdPct = getNum(metrics?.hybrid_8?.ytd_return_pct, marketData?.hybrid_8?.ytd_return_pct);
+  const hybrid8TodayPct = getNum(metrics?.hybrid_8?.today_change_pct, marketData?.hybrid_8?.today_change_pct);
+  const hybrid8OneYearPct = getNum(metrics?.hybrid_8?.one_year_return_pct, marketData?.hybrid_8?.one_year_return_pct);
+  const hybrid8FiveYearPct = getNum(metrics?.hybrid_8?.five_year_return_pct, marketData?.hybrid_8?.five_year_return_pct);
+
+  // Raw component breakdowns for the drill-down modal — ticker/weight/YTD/today
+  // for each hypothetical portfolio, sourced straight from route.ts. 1-YR/5-YR
+  // per ticker aren't in the components array route.ts returns (that only
+  // carries what each blend needs), but every ticker's own 1-YR/5-YR already
+  // lives in the shared positions dict from the "Your Holdings" tiles, so
+  // this just looks each one up there instead of needing a backend change.
+  type DetailComponent = { ticker: string; weight: number; ytd: number | null; today: number | null; oneYear: number | null; fiveYear: number | null };
+  const apiComponents = (obj: any): DetailComponent[] =>
+    (obj?.components ?? []).map((c: any) => ({
+      ticker: c.ticker, weight: c.weight_pct, ytd: c.ytd_pct, today: c.today_pct,
+      oneYear: positionsData?.[c.ticker]?.oneYearReturnPct ?? null,
+      fiveYear: positionsData?.[c.ticker]?.fiveYearReturnPct ?? null,
+    }));
+
+  const portfolioDetailData: Record<string, { title: string; subtitle: string; ytd: number | null; today: number | null; oneYear: number | null; fiveYear: number | null; components: DetailComponent[] }> = {
+    cur: {
+      title: "Your Current Portfolio",
+      subtitle: "Weighted by actual allocation · estimate, not brokerage-reported return",
+      ytd: portfolioYtdPct, today: portfolioTodayPct, oneYear: portfolioOneYearPct, fiveYear: portfolioFiveYearPct,
+      components: curPositionCards.map(p => ({ ticker: p.ticker, weight: p.weight, ytd: p.ytdReturnPct, today: p.dailyPct, oneYear: p.oneYearReturnPct, fiveYear: p.fiveYearReturnPct })),
     },
-  }, { status: 200 });
+    idx4060: {
+      title: "40/60 Index Proxy",
+      subtitle: "40% VTI / 60% BND",
+      ytd: benchmark4060YtdPct, today: benchmark4060TodayPct, oneYear: benchmark4060OneYearPct, fiveYear: benchmark4060FiveYearPct,
+      components: apiComponents(metrics?.benchmark_4060 ?? marketData?.benchmark_4060),
+    },
+    idx5050: {
+      title: "50/50 Index Proxy",
+      subtitle: "50% VTI / 50% BND · Mike's rough read on where the household lands",
+      ytd: benchmark5050YtdPct, today: benchmark5050TodayPct, oneYear: benchmark5050OneYearPct, fiveYear: benchmark5050FiveYearPct,
+      components: apiComponents(metrics?.benchmark_5050 ?? marketData?.benchmark_5050),
+    },
+    idx6040: {
+      title: "60/40 Index Proxy",
+      subtitle: "60% VTI / 40% BND · same indices as VBINX",
+      ytd: benchmark6040YtdPct, today: benchmark6040TodayPct, oneYear: benchmark6040OneYearPct, fiveYear: benchmark6040FiveYearPct,
+      components: apiComponents(metrics?.benchmark_6040 ?? marketData?.benchmark_6040),
+    },
+    spx: {
+      title: "S&P 500",
+      subtitle: "Total return, dividends included",
+      ytd: spxYtd, today: spxDailyPct, oneYear: spxOneYearPct, fiveYear: spxFiveYearPct,
+      components: [{ ticker: "SPX", weight: 100, ytd: spxYtd, today: spxDailyPct, oneYear: spxOneYearPct, fiveYear: spxFiveYearPct }],
+    },
+    alt: {
+      title: "M0 45/40/15",
+      subtitle: "Panel's from-scratch build — 45% equity / 40% fixed income / 15% alternatives",
+      ytd: cleanSlateYtdPct, today: cleanSlateTodayPct, oneYear: cleanSlateOneYearPct, fiveYear: cleanSlateFiveYearPct,
+      components: apiComponents(metrics?.clean_slate ?? marketData?.clean_slate),
+    },
+    lpl4060: {
+      title: "LPL 40/60",
+      subtitle: "LPL STAAC \"Income with Moderate Growth\" proxy, mapped to ETFs",
+      ytd: lpl4060YtdPct, today: lpl4060TodayPct, oneYear: lpl4060OneYearPct, fiveYear: lpl4060FiveYearPct,
+      components: apiComponents(metrics?.lpl_4060 ?? marketData?.lpl_4060),
+    },
+    lpl5050: {
+      title: "LPL 50/50",
+      subtitle: "Interpolated between LPL's IMG and Growth-with-Income models",
+      ytd: lpl5050YtdPct, today: lpl5050TodayPct, oneYear: lpl5050OneYearPct, fiveYear: lpl5050FiveYearPct,
+      components: apiComponents(metrics?.lpl_5050 ?? marketData?.lpl_5050),
+    },
+    vg4060: {
+      title: "VG 40/60",
+      subtitle: "Vanguard's unconstrained VAAM/VCMM model, mapped to ETFs",
+      ytd: vg4060YtdPct, today: vg4060TodayPct, oneYear: vg4060OneYearPct, fiveYear: vg4060FiveYearPct,
+      components: apiComponents(metrics?.vg_4060 ?? marketData?.vg_4060),
+    },
+    noelleMockup: {
+      title: "C0 55/35/10",
+      subtitle: "Chris's rough draft for Noelle's Rollover IRA — 55% equity / 35% fixed income / 10% alts (DBMF + BTAL placeholder for TBD Long/Short). IRA-level, not household.",
+      ytd: noelleMockupYtdPct, today: noelleMockupTodayPct, oneYear: noelleMockupOneYearPct, fiveYear: noelleMockupFiveYearPct,
+      components: apiComponents(metrics?.noelle_mockup ?? marketData?.noelle_mockup),
+    },
+    c1Tax: {
+      title: "C1 TAX 40/60",
+      subtitle: "Chris's actual proposal for Noelle's TOD (taxable) accounts — 25% VTI / 15% VXUS / 60% VTEB. Tax-exempt income via munis, sized for the household's early-retirement funding bucket.",
+      ytd: c1TaxYtdPct, today: c1TaxTodayPct, oneYear: c1TaxOneYearPct, fiveYear: c1TaxFiveYearPct,
+      components: apiComponents(metrics?.c1_tax ?? marketData?.c1_tax),
+    },
+    c1Ira: {
+      title: "C1 IRA",
+      subtitle: "Chris's proposed uniform model across the six standard retirement accounts — 16% SCHD / 15% VEA / 15% VTIP / 14% SGOV / 10% VTI / 10% VTWO / 9% BND / 5% VIGI / 3% GLDM / 3% DBMF. Drops VGIT for BND (the anchor bond fund in Vanguard's own target-date funds). Excludes the Alpine 401k (pending rollover) and TOD accounts (see C1 TAX).",
+      ytd: c1IraYtdPct, today: c1IraTodayPct, oneYear: c1IraOneYearPct, fiveYear: c1IraFiveYearPct,
+      components: apiComponents(metrics?.c1_ira ?? marketData?.c1_ira),
+    },
+    m2: {
+      title: "M2 50/40/10",
+      subtitle: "Mike's dial-back of C1 IRA — same fund selection, VTWO cut from 10% to 5%, GLDM/DBMF each doubled to 5%. 50% equity / 40% fixed income / 10% alts.",
+      ytd: m2YtdPct, today: m2TodayPct, oneYear: m2OneYearPct, fiveYear: m2FiveYearPct,
+      components: apiComponents(metrics?.m2 ?? marketData?.m2),
+    },
+    m3: {
+      title: "M3 55/40/5",
+      subtitle: "Same as M2 but VTWO restored to Chris's original 10% and GLDM/DBMF each at 2.5%. 55% equity / 40% fixed income / 5% alts.",
+      ytd: m3YtdPct, today: m3TodayPct, oneYear: m3OneYearPct, fiveYear: m3FiveYearPct,
+      components: apiComponents(metrics?.m3 ?? marketData?.m3),
+    },
+    panelConsensus: {
+      title: "Panel Consensus",
+      subtitle: "The 12-voice panel's debate over C1 IRA with the 50% equity cap held fixed — cut concentrated in VTWO (its true CAPE runs higher than the S&P's own), BND raised above Chris's original 9%, gold weighted above DBMF since they hedge different risks. 50% equity / 42% fixed income / 8% alts.",
+      ytd: panelYtdPct, today: panelTodayPct, oneYear: panelOneYearPct, fiveYear: panelFiveYearPct,
+      components: apiComponents(metrics?.panel_consensus ?? marketData?.panel_consensus),
+    },
+    otherAi: {
+      title: "Other AI",
+      subtitle: "A second AI's independent take on C1 with the same 50% equity cap — same equity lines as M2/Panel, BND at 11%, GLDM/DBMF split evenly at 5/5 rather than weighted toward gold. Stated rationale: round numbers are easier to hold to when markets get volatile. 50% equity / 40% fixed income / 10% alts.",
+      ytd: otherAiYtdPct, today: otherAiTodayPct, oneYear: otherAiOneYearPct, fiveYear: otherAiFiveYearPct,
+      components: apiComponents(metrics?.other_ai ?? marketData?.other_ai),
+    },
+    hybrid8: {
+      title: "M1 50/35/15",
+      subtitle: "Mike's curated blend of ALT 45/40/15 and the Noelle Mockup — SCHD foundational, VTWO for Chris's small-cap input, VIGI/PDBC/BTAL cut for overlap. 50% equity / 35% fixed income / 15% alts, 8 holdings.",
+      ytd: hybrid8YtdPct, today: hybrid8TodayPct, oneYear: hybrid8OneYearPct, fiveYear: hybrid8FiveYearPct,
+      components: apiComponents(metrics?.hybrid_8 ?? marketData?.hybrid_8),
+    },
+  };
+
+  const vixStatus = vixValue == null ? { label: "Loading", sub: "", color: "#94a3b8" }
+    : vixValue >= 30 ? { label: "Stress — Pause Buying", sub: "Trigger breached · Pause new buying", color: "#ff6b88" }
+    : vixValue >= 20 ? { label: "Slightly Elevated", sub: "Rising fear and potential volatility", color: "#fbbf24" }
+    : { label: "Calm", sub: "Low volatility, market conditions steady", color: "#4ade80" };
+
+  const vixPctTable: number[][] = [[9,1],[10,3],[11,6],[12,10],[13,15],[14,20],[15,27],[16,33],[17,40],[18,48],[19,56],[20,63],[21,68],[22,73],[23,77],[24,80],[25,83],[26,85],[27,87],[28,89],[29,91],[30,93],[32,95],[35,97],[40,98],[50,99],[82,100]];
+  const getVixPct = (v: number) => {
+    for (let i = 0; i < vixPctTable.length - 1; i++) {
+      const [v0,p0] = vixPctTable[i], [v1,p1] = vixPctTable[i+1];
+      if (v <= v1) return Math.round(p0 + ((v-v0)/(v1-v0))*(p1-p0));
+    }
+    return 100;
+  };
+  const vixPct = vixValue != null ? getVixPct(vixValue) : 75;
+  const vixNeedlePct = (v: number) => {
+    if (v <= 15) return (v/15)*37.5;
+    if (v <= 20) return 37.5+((v-15)/5)*12.5;
+    if (v <= 30) return 50+((v-20)/10)*25;
+    return Math.min(75+((v-30)/10)*25, 99);
+  };
+
+  const damageCount = [spxVs(spx20), spxVs(spx50), spxVs(spx100), spxVs(spx200)].filter(v => v != null && v < 0).length;
+
+  // ── 200-DMA breach state ──────────────────────────────────────────────────
+  const spx200Pct = spxVs(spx200);
+  const is200Broken = spx200Pct != null && spx200Pct < 0;
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const sparkline = (points: number[], color: string) => {
+    const w = 100, h = 22;
+    const max = Math.max(...points), min = Math.min(...points);
+    const range = Math.max(1, max - min);
+    const coords = points.map((p, i) => `${(i/(points.length-1))*w},${h-((p-min)/range)*(h-2)-1}`).join(" ");
+    const ly = h - ((points[points.length-1]-min)/range)*(h-2)-1;
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}"><polyline fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="${coords}"/><circle cx="${w}" cy="${ly}" r="2" fill="${color}"/></svg>`;
+  };
+
+  // Chart helpers
+  const sma = (arr: number[], n: number): (number | null)[] =>
+    arr.map((_, i) => i < n - 1 ? null : arr.slice(i - n + 1, i + 1).reduce((s, v) => s + v, 0) / n);
+
+  const bollinger = (arr: number[], n = 20, k = 2) => {
+    const mid = sma(arr, n);
+    return {
+      upper: arr.map((_, i) => { if (i < n - 1) return null; const sl = arr.slice(i-n+1,i+1), m = mid[i]!, std = Math.sqrt(sl.reduce((a,v)=>a+(v-m)**2,0)/n); return m+k*std; }),
+      lower: arr.map((_, i) => { if (i < n - 1) return null; const sl = arr.slice(i-n+1,i+1), m = mid[i]!, std = Math.sqrt(sl.reduce((a,v)=>a+(v-m)**2,0)/n); return m-k*std; }),
+    };
+  };
+
+  const calcRsi = (arr: number[], n = 14): (number | null)[] =>
+    arr.map((_, i) => {
+      if (i < n) return null;
+      let g = 0, l = 0;
+      for (let j = i - n + 1; j <= i; j++) { const d = arr[j] - arr[j-1]; if (d > 0) g += d; else l -= d; }
+      const rs = g / (l || 0.001);
+      return Math.round((100 - 100/(1+rs)) * 10) / 10;
+    });
+
+  const calcMacd = (arr: number[], fast = 12, slow = 26, sig = 9) => {
+    const ema = (a: number[], n: number): (number | null)[] => {
+      const k = 2/(n+1), r: (number|null)[] = Array(a.length).fill(null);
+      r[n-1] = a.slice(0,n).reduce((s,v)=>s+v,0)/n;
+      for (let i = n; i < a.length; i++) r[i] = a[i]*k + (r[i-1] as number)*(1-k);
+      return r;
+    };
+    const fe = ema(arr,fast), se = ema(arr,slow);
+    const ml = arr.map((_,i) => fe[i]!=null&&se[i]!=null ? (fe[i] as number)-(se[i] as number) : null);
+    const valid = ml.filter((v): v is number => v!=null);
+    const se2 = ema(valid, sig);
+    let si = 0;
+    const sl = ml.map(v => v!=null ? (se2[si++] ?? null) : null);
+    const hist = ml.map((v,i) => v!=null&&sl[i]!=null ? v-(sl[i] as number) : null);
+    return { ml, sl, hist };
+  };
+
+  // Build chart labels from trading day count
+  const buildChartLabels = (count: number): string[] => {
+    const labels: string[] = [], now = new Date();
+    let added = 0, day = 0;
+    while (added < count) {
+      const d = new Date(now); d.setDate(d.getDate() - day);
+      if (d.getDay() !== 0 && d.getDay() !== 6) { labels.unshift(d.toLocaleDateString("en-US",{month:"short",day:"numeric"})); added++; }
+      day++;
+    }
+    return labels;
+  };
+
+  // Initialize/update charts when data or range changes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const prices = spxHistory.length >= 50 ? spxHistory : (() => {
+      const pts: number[] = []; let p = (spxPrice ?? 6637) * 0.9;
+      for (let i = 290; i >= 0; i--) { p *= (1+(Math.random()-0.484)*0.013); pts.push(Math.round(p*100)/100); }
+      const scale = (spxPrice ?? 6637) / pts[pts.length-1];
+      return pts.map(p => Math.round(p*scale*100)/100);
+    })();
+
+    const N = prices.length;
+    const labels = buildChartLabels(N);
+    const MA20 = sma(prices,20), MA50 = sma(prices,50), MA100 = sma(prices,100), MA200 = sma(prices,200);
+    const BB = bollinger(prices,20,2);
+    const RSI = calcRsi(prices,14);
+    const MACD = calcMacd(prices,12,26,9);
+    const current200 = MA200.filter((v): v is number => v!=null).slice(-1)[0] ?? (spxPrice ?? 6637)*0.97;
+    const gridColor = "rgba(255,255,255,0.06)", tickColor = "#475569";
+
+    const minIdx = Math.max(0, N - activeRange);
+
+    const getYBounds = (mi: number) => {
+      const vis = prices.slice(mi).filter((v): v is number => v!=null);
+      const visUp = BB.upper.slice(mi).filter((v): v is number => v!=null);
+      const yMax = Math.max(...vis.concat(visUp.length?[Math.max(...visUp)]:[])) * 1.003;
+      const yMin = Math.min(Math.min(...vis)*0.997, current200*0.992);
+      return { yMin, yMax };
+    };
+
+    const { yMin, yMax } = getYBounds(minIdx);
+
+    const script = document.getElementById("chartjs-script");
+    const initCharts = () => {
+      const Chart = (window as any).Chart;
+      if (!Chart) return;
+
+      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+      if (rsiRef.current) { rsiRef.current.destroy(); rsiRef.current = null; }
+      if (macdRef.current) { macdRef.current.destroy(); macdRef.current = null; }
+
+      const xAxis = (showTicks: boolean) => ({
+        min: labels[minIdx], max: labels[N-1],
+        ticks: { display: showTicks, color: tickColor, font: { size: 10 }, maxTicksLimit: 8, maxRotation: 0 },
+        grid: { color: gridColor }, border: { color: "rgba(255,255,255,0.1)" }
+      });
+
+      const priceEl = document.getElementById("spxPriceChart") as HTMLCanvasElement;
+      const rsiEl = document.getElementById("spxRsiChart") as HTMLCanvasElement;
+      const macdEl = document.getElementById("spxMacdChart") as HTMLCanvasElement;
+      if (!priceEl || !rsiEl || !macdEl) return;
+
+      chartRef.current = new Chart(priceEl, {
+        type: "line",
+        data: { labels, datasets: [
+          { label:"BB Upper", data:BB.upper, borderColor:"rgba(0,0,0,0)", backgroundColor:"rgba(148,163,184,0.1)", fill:"+1", pointRadius:0, borderWidth:0, tension:0.3 },
+          { label:"BB Lower", data:BB.lower, borderColor:"rgba(0,0,0,0)", fill:false, pointRadius:0, borderWidth:0, tension:0.3 },
+          { label:"SPX",     data:prices, borderColor:"#60a5fa", backgroundColor:"transparent", pointRadius:0, borderWidth:2, tension:0.2 },
+          { label:"20-DMA",  data:MA20,   borderColor:"#fbbf24", backgroundColor:"transparent", pointRadius:0, borderWidth:1.5, tension:0.3 },
+          { label:"50-DMA",  data:MA50,   borderColor:"#a78bfa", backgroundColor:"transparent", pointRadius:0, borderWidth:1.5, tension:0.3 },
+          { label:"100-DMA", data:MA100,  borderColor:"#f97316", backgroundColor:"transparent", pointRadius:0, borderWidth:1.5, tension:0.3 },
+          { label:"200-DMA", data:MA200,  borderColor:"#ef4444", backgroundColor:"transparent", pointRadius:0, borderWidth:2,   tension:0.3 },
+        ]},
+        options: {
+          responsive:true, maintainAspectRatio:false, interaction:{mode:"index",intersect:false},
+          plugins:{ legend:{display:false}, tooltip:{backgroundColor:"#0f153f",borderColor:"#1e293b",borderWidth:1,titleColor:"#cbd5e1",bodyColor:"#94a3b8",titleFont:{size:11},bodyFont:{size:11}, callbacks:{label:(ctx:any)=>ctx.dataset.label.startsWith("BB")?null:`${ctx.dataset.label}: ${ctx.parsed.y!=null?Math.round(ctx.parsed.y).toLocaleString():"—"}`}}},
+          scales:{ x:xAxis(true), y:{min:yMin,max:yMax,ticks:{color:tickColor,font:{size:10},callback:(v:any)=>v>=1000?(v/1000).toFixed(1)+"k":v},grid:{color:gridColor},border:{color:"rgba(255,255,255,0.1)"}}}
+        }
+      });
+
+      rsiRef.current = new Chart(rsiEl, {
+        type:"line",
+        data:{labels,datasets:[
+          {data:Array(N).fill(70),borderColor:"rgba(255,107,136,0.25)",pointRadius:0,borderWidth:1,borderDash:[4,4],fill:false},
+          {data:Array(N).fill(30),borderColor:"rgba(74,222,128,0.25)",pointRadius:0,borderWidth:1,borderDash:[4,4],fill:false},
+          {label:"RSI",data:RSI,borderColor:"#c084fc",backgroundColor:"transparent",pointRadius:0,borderWidth:1.5,tension:0.3}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:"#0f153f",borderColor:"#1e293b",borderWidth:1,titleColor:"#cbd5e1",bodyColor:"#94a3b8",titleFont:{size:11},bodyFont:{size:11}}},
+          scales:{x:xAxis(false),y:{min:0,max:100,ticks:{color:tickColor,font:{size:10},stepSize:25},grid:{color:gridColor},border:{color:"rgba(255,255,255,0.1)"}}}}
+      });
+
+      macdRef.current = new Chart(macdEl, {
+        type:"bar",
+        data:{labels,datasets:[
+          {type:"bar",  label:"Hist",   data:MACD.hist, backgroundColor:MACD.hist.map((v:any)=>v==null?"transparent":v>=0?"rgba(74,222,128,0.5)":"rgba(255,107,136,0.5)"),borderWidth:0},
+          {type:"line", label:"MACD",   data:MACD.ml,   borderColor:"#60a5fa",pointRadius:0,borderWidth:1.5,tension:0.3},
+          {type:"line", label:"Signal", data:MACD.sl,   borderColor:"#f97316",pointRadius:0,borderWidth:1.5,tension:0.3}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:"#0f153f",borderColor:"#1e293b",borderWidth:1,titleColor:"#cbd5e1",bodyColor:"#94a3b8",titleFont:{size:11},bodyFont:{size:11}}},
+          scales:{x:xAxis(false),y:{ticks:{color:tickColor,font:{size:10},maxTicksLimit:4},grid:{color:gridColor},border:{color:"rgba(255,255,255,0.1)"}}}}
+      });
+    };
+
+    if (!(window as any).Chart) {
+      if (!document.getElementById("chartjs-script")) {
+        const s = document.createElement("script");
+        s.id = "chartjs-script";
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js";
+        s.onload = initCharts;
+        document.head.appendChild(s);
+      } else {
+        const wait = setInterval(() => { if ((window as any).Chart) { clearInterval(wait); initCharts(); } }, 100);
+      }
+    } else {
+      initCharts();
+    }
+  }, [spxHistory, spxPrice, activeRange]);
+
+  const HistRow = ({ val, event, note, active }: { val: string; event: string; note: string; active?: boolean }) => (
+    <div style={{ display:"grid", gridTemplateColumns:"56px 1fr 1fr", gap:8, background:active?"#141b47":"#0b1138", border:`1px solid ${active?"rgba(245,158,11,0.4)":"#1e293b"}`, borderRadius:7, padding:"8px 10px", fontSize:12, color:"#e2e8f0" }}>
+      <div style={{ fontWeight:700, fontSize:13, color:active?"#fff":"#cbd5e1" }}>{val}</div>
+      <div>{event}</div>
+      <div style={{ color:active?"#fbbf24":"#64748b" }}>{note}</div>
+    </div>
+  );
+
+  const ModalWrapper = ({ onClose, title, sub, children }: { onClose:()=>void; title:string; sub:string; children:React.ReactNode }) => (
+    <div style={{ position:"fixed", inset:0, zIndex:50, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={onClose}>
+      <div style={{ width:"100%", maxWidth:1000, background:"#0f153f", border:"1px solid #1e293b", borderRadius:18, padding:24, maxHeight:"90vh", overflowY:"auto" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+          <div><div style={{ fontSize:22, fontWeight:700 }}>{title}</div><div style={{ fontSize:12, color:"#64748b", marginTop:4 }}>{sub}</div></div>
+          <button style={{ background:"#1f2937", border:0, borderRadius:8, color:"#e2e8f0", padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }} onClick={onClose}>Close ✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+
+  const ModalGrid = ({ left, right }: { left:React.ReactNode; right:React.ReactNode }) => (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+      <div style={{ background:"#050a35", borderRadius:12, padding:16 }}>{left}</div>
+      <div style={{ display:"grid", gap:12 }}>{right}</div>
+    </div>
+  );
+
+  const MCard = ({ children }: { children:React.ReactNode }) => <div style={{ background:"#050a35", borderRadius:12, padding:14 }}>{children}</div>;
+  const SH = ({ children }: { children:React.ReactNode }) => <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#64748b", marginBottom:7 }}>{children}</div>;
+  const BC = ({ children }: { children:React.ReactNode }) => <div style={{ fontSize:13, lineHeight:1.7, color:"#cbd5e1", marginTop:8 }}>{children}</div>;
+  const Tag = ({ label, color, bg }: { label:string; color:string; bg:string }) => <span style={{ display:"inline-block", fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em", padding:"2px 9px", borderRadius:20, color, background:bg, marginBottom:8 }}>{label}</span>;
+  const ActionCard = ({ children }: { children:React.ReactNode }) => (
+    <div style={{ background:"#031e1a", border:"1px solid rgba(34,197,94,0.25)", borderRadius:10, padding:12 }}>
+      <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#fbbf24", marginBottom:6 }}>Your action</div>
+      <div style={{ fontSize:13, lineHeight:1.6, color:"#ecfdf5" }}>{children}</div>
+    </div>
+  );
+  const BandTrack = ({ segs, needle, scaleNums, scaleNames }: { segs:{w:string;color:string}[]; needle:number; scaleNums:string[]; scaleNames:string[] }) => (
+    <div style={{ marginTop:12 }}>
+      <div style={{ height:8, borderRadius:9999, overflow:"hidden", display:"flex", marginBottom:4 }}>{segs.map((s,i)=><div key={i} style={{ width:s.w, height:8, background:s.color }} />)}</div>
+      <div style={{ position:"relative", height:12, marginBottom:2 }}><div style={{ position:"absolute", top:0, left:`${needle}%`, width:2, height:12, background:"#fff", borderRadius:1, transform:"translateX(-50%)" }} /></div>
+      <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginBottom:2 }}>{scaleNums.map((s,i)=><span key={i}>{s}</span>)}</div>
+      <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, fontWeight:700, textTransform:"uppercase", color:"#64748b" }}>{scaleNames.map((s,i)=><span key={i}>{s}</span>)}</div>
+    </div>
+  );
+
+  const rangeBtn = (label: string, days: number) => (
+    <button key={days} onClick={() => setActiveRange(days)} style={{ padding:"4px 10px", borderRadius:6, fontSize:11, fontWeight:600, border:`1px solid ${activeRange===days?"rgba(99,179,237,0.5)":"rgba(255,255,255,0.15)"}`, background:activeRange===days?"rgba(99,179,237,0.15)":"transparent", color:activeRange===days?"#93c5fd":"#94a3b8", cursor:"pointer" }}>{label}</button>
+  );
+
+  return (
+    <>
+      <div className="pageShell">
+        <div className="frame">
+
+          {/* TOP BAR */}
+          <div className="topBar">
+            <h1 className="title">Prospect Market Dashboard</h1>
+            <div className="topRight">
+              <div className="liveDot">
+                <span className={feedError ? "dot dotError" : "dot dotLive"} />
+                <span className="dotLabel">
+                  {feedError ? "Feed error" : <>Live<span className="hideMobile"> · 60s refresh</span></>}
+                </span>
+              </div>
+              <div className="meta">
+                <div className="sourceLabel">LIVE_YAHOO_FRED</div>
+                <div>{feedError ? "Feed error" : lastUpdated ? `Refreshed ${lastUpdated}` : "Loading..."}</div>
+              </div>
+            </div>
+          </div>
+
+          {feedError && <div className="errorBar">Feed error: {feedError}</div>}
+
+          {/* Stale-data notice: a live fetch failed and a manual fallback is
+              standing in. Shows the value and its as-of date so an old number
+              is never read as live. Hidden when everything is live. */}
+          {(() => {
+            const fb: { name: string; value: number; asOf: string }[] = marketData?.fallbacks_in_use ?? [];
+            if (!fb.length) return null;
+            return (
+              <div style={{ margin:"0 0 12px", padding:"8px 12px", borderRadius:8, border:"1px solid rgba(251,191,36,0.35)", background:"rgba(251,191,36,0.08)", color:"#fbbf24", fontSize:12, lineHeight:1.5 }}>
+                <strong>Stale data:</strong> live fetch failed, showing manual values for{" "}
+                {fb.map((f, i) => (
+                  <span key={f.name}>{i > 0 ? ", " : ""}{f.name} ({f.value}, as of {f.asOf})</span>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* ⓪-A EQUITY ALLOCATION — hero group. Each scored model resolves to a
+              target equity % inside the personal band (MANUAL_ALLOC_BAND in
+              route.ts). Consensus = average of the scored models (Graded Ivy,
+              Roberts Risk Signals, Credit). PiTrade ROAR is tracked beside
+              them and never enters Consensus. Tile anatomy, bar, ticks and
+              colors mirror the Top 10 Signals tiles below on purpose. */}
+          <section className="panel" style={{ marginBottom:16 }}>
+            <div className="panelHeader">
+              <div><div className="panelTitle">Equity Allocation</div><div className="panelSub">Each model resolves to a target equity % · Consensus = average of trend (US + Intl blended), momentum and credit</div></div>
+            </div>
+            {(() => {
+              const ea = metrics?.equity_allocation ?? marketData?.equity_allocation ?? null;
+              const gi = metrics?.graded_ivy ?? marketData?.graded_ivy ?? null;
+              const roar = metrics?.roar ?? marketData?.roar ?? null;
+              const floor: number = ea?.floor ?? gi?.floor ?? 30;
+              const ceiling: number = ea?.ceiling ?? gi?.ceiling ?? 60;
+              const actual: number | null = ea?.actual ?? gi?.actual ?? null;
+              const baseline: number = ea?.baseline ?? (floor + ceiling) / 2;
+              const comfortLow: number | null = ea?.comfortLow ?? null;
+              const comfortHigh: number | null = ea?.comfortHigh ?? null;
+              const span = ceiling - floor;
+              const toPos = (pct: number) => Math.max(0, Math.min(100, ((pct - floor) / span) * 100));
+
+              // One zone scheme for every allocation tile, centered on the
+              // baseline: within 5 pts = Neutral (yellow), below = Underweight
+              // (red), above = Overweight (green). Readings outside the
+              // 40-60 comfort range get flagged in the status, not capped.
+              const RED = "#ff6b88", YELLOW = "#fbbf24", GREEN = "#4ade80", GRAY = "#94a3b8";
+              const nLo = toPos(baseline - 5), nHi = toPos(baseline + 5);
+              const allocBands = [{ color:RED, from:0, to:nLo }, { color:YELLOW, from:nLo, to:nHi }, { color:GREEN, from:nHi, to:100 }];
+              const zoneColor = (pct: number | null) => pct == null ? GRAY : pct > baseline + 5 ? GREEN : pct >= baseline - 5 ? YELLOW : RED;
+              const zoneStatus = (pct: number | null) => {
+                if (pct == null) return "Loading";
+                const word = pct > baseline + 5 ? "Overweight" : pct >= baseline - 5 ? "Neutral" : "Underweight";
+                if (comfortHigh != null && pct > comfortHigh) return `${word} · Past ${comfortHigh}`;
+                if (comfortLow != null && pct < comfortLow) return `${word} · Below ${comfortLow}`;
+                return word;
+              };
+              const ticks = Array.from({ length: Math.round(span / 10) + 1 }, (_, i) => floor + i * 10).filter(v => v <= ceiling)
+                .map(v => ({ pos: toPos(v), label: `${v}` }));
+              const bandGradient = `linear-gradient(to right, ${allocBands.map(b => `${b.color} ${b.from}%, ${b.color} ${b.to}%`).join(", ")})`;
+              const fmtDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month:"short", day:"numeric", timeZone:"UTC" });
+
+              const ivyPct: number | null = gi?.official?.equityPct ?? null;
+              const ivyAbove = gi?.official?.mas ? gi.official.mas.filter((m: { above: boolean }) => m.above).length : null;
+              const gx = ea?.ivyIntl ?? null;
+              const intlPct: number | null = gx?.official?.equityPct ?? null;
+              const intlAbove = gx?.official?.mas ? gx.official.mas.filter((m: { above: boolean }) => m.above).length : null;
+              const mix = ea?.trend?.mix ?? null;
+              const rob = ea?.roberts ?? null;
+              const robBuys: string[] = rob?.signals ? rob.signals.filter((x: { buy: boolean }) => x.buy).map((x: { label: string }) => x.label) : [];
+              const cr = ea?.credit ?? null;
+              const consensus: number | null = ea?.consensus ?? null;
+              const gap = consensus != null && actual != null ? Math.round(consensus - actual) : null;
+              const roarStale = roar != null && roar.daysOld > 10;
+
+              type ATile = { family: string; label: string; pct: number | null; status: string; color: string; dot: string; sub: string };
+              const tiles: ATile[] = [
+                { family: mix ? `Trend · ${mix.us}% of stocks` : "Trend", label:"Graded Ivy · US", pct: ivyPct, status: zoneStatus(ivyPct), color: zoneColor(ivyPct), dot: zoneColor(ivyPct),
+                  sub: gi?.official ? `S&P · ${ivyAbove}/5 SMAs above · ${gi.official.asOf} close${gi.live ? ` · live ${Math.round(gi.live.equityPct)}%` : ""}` : "Waiting for month-end data" },
+                { family: mix ? `Trend · ${mix.intl}% of stocks` : "Trend", label:"Graded Ivy · Intl", pct: intlPct, status: zoneStatus(intlPct), color: zoneColor(intlPct), dot: zoneColor(intlPct),
+                  sub: gx?.official ? `${gx.ticker} · ${intlAbove}/5 SMAs above · ${gx.official.asOf} close${gx.live ? ` · live ${Math.round(gx.live.equityPct)}%` : ""}` : "Loading VEA data" },
+                { family:"Momentum", label:"Roberts Risk Signals", pct: rob?.equityPct ?? null, status: zoneStatus(rob?.equityPct ?? null), color: zoneColor(rob?.equityPct ?? null), dot: zoneColor(rob?.equityPct ?? null),
+                  sub: rob ? (robBuys.length ? `Buy: ${robBuys.join(", ")}` : "All four signals on sell") : "Loading weekly data" },
+                { family:"Credit", label:"HY Credit", pct: cr?.equityPct ?? null, status: zoneStatus(cr?.equityPct ?? null), color: zoneColor(cr?.equityPct ?? null), dot: zoneColor(cr?.equityPct ?? null),
+                  sub: cr ? `${cr.hyBps}bps · ceiling ≤${cr.ceilingBps} · floor ${cr.floorBps}${cr.isFallback ? " · manual" : ""}` : "Loading" },
+                { family:"Outside view", label:"PiTrade ROAR", pct: roar?.equityPct ?? null, status: roar == null ? "No Entry" : roarStale ? `Stale · ${roar.daysOld}d` : "Not Scored",
+                  color: roarStale ? YELLOW : GRAY, dot: GRAY,
+                  sub: roar ? `Published ${fmtDate(roar.date)} · tracking since ${fmtDate(roar.trackingSince)}` : "Add a reading in MANUAL_ROAR_LOG" },
+              ];
+
+              return (
+                <>
+                  {/* Summary strip, same anatomy as the Top 10 strip */}
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, padding:"10px 14px", background:"#161a33", borderRadius:10 }}>
+                    <div style={{ display:"flex", gap:18, alignItems:"center" }}>
+                      <span style={{ fontSize:13, fontWeight:700, color:"#cbd5e1", whiteSpace:"nowrap" }}>Baseline {baseline}%</span>
+                      <span className="hideMobile" style={{ fontSize:13, fontWeight:700, color:"#cbd5e1", whiteSpace:"nowrap" }}>Band {floor}–{ceiling}%{comfortLow != null && comfortHigh != null ? ` · range ${comfortLow}–${comfortHigh}%` : ""}</span>
+                      {actual != null && <span style={{ fontSize:13, fontWeight:700, color:"#cbd5e1", whiteSpace:"nowrap" }}>You {actual}%</span>}
+                      {gap != null && <span className="hideMobile" style={{ fontSize:12, color:"#64748b" }}>Consensus {gap > 0 ? "+" : ""}{gap} pts vs you</span>}
+                    </div>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
+                      <span style={{ fontSize:10, color:"#64748b", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Consensus</span>
+                      <span style={{ fontSize:20, fontWeight:800, color: zoneColor(consensus) }}>{consensus != null ? `${Math.round(consensus)}%` : "—"}</span>
+                      <span style={{ fontSize:11, color:"#475569" }}>{ea?.modelsInConsensus ?? 0} models</span>
+                    </div>
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:8 }} className="allocGrid">
+                    {tiles.map(t => (
+                      <div key={t.label} className="tile" style={{ position:"relative" }}>
+                        <div style={{ position:"absolute", top:10, right:10, width:10, height:10, borderRadius:"50%", background:t.dot, boxShadow:`0 0 6px ${t.dot}88` }} />
+                        <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:2, textTransform:"uppercase", letterSpacing:"0.04em" }}>{t.family}</div>
+                        <div className="lbl" style={{ marginBottom:6, paddingRight:18 }}>{t.label}</div>
+                        <div className="valHero" style={{ fontSize:24 }}>{t.pct != null ? `${Math.round(t.pct)}%` : "—"}</div>
+                        <div className="status" style={{ color:t.color, fontSize:12, marginTop:2 }}>{t.status}</div>
+                        {/* Bar = the allocation band. Gray tick = your actual
+                            allocation, white marker = this model's target. */}
+                        <div style={{ position:"relative", height:5, borderRadius:9999, background: bandGradient, marginTop:8, marginBottom:2 }}>
+                          {actual != null && <div style={{ position:"absolute", top:-2, left:`${toPos(actual)}%`, width:2, height:9, background:"#475569", transform:"translateX(-1px)", zIndex:1 }} />}
+                          {t.pct != null && <div style={{ position:"absolute", top:-2, left:`${Math.max(1, Math.min(toPos(t.pct), 99))}%`, width:2, height:9, background:"#0b0b2a", border:"1px solid #fff", transform:"translateX(-1px)", zIndex:2 }} />}
+                        </div>
+                        <div style={{ position:"relative", height:12, marginTop:2 }}>
+                          {ticks.map((k, i) => (
+                            <div key={i} style={{ position:"absolute", left:`${k.pos}%`, transform: i === 0 ? "none" : i === ticks.length - 1 ? "translateX(-100%)" : "translateX(-50%)", fontSize:9, color:"#64748b" }}>{k.label}</div>
+                          ))}
+                        </div>
+                        <div className="sub" style={{ marginTop:2 }}>{t.sub}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+          </section>
+
+          {/* ⓪ TOP 10 SIGNALS — force-ranked scoreboard, #1 most critical to
+              watch through #10 least urgent. Two rows of five. Each tile
+              reuses the same live thresholds already computed elsewhere on
+              this dashboard, this section is a consolidated view, not a
+              new data source, except AAII Bears (#10), which has no live
+              feed in this pipeline and is manually maintained. */}
+          <section className="panel" style={{ marginBottom:16 }}>
+            <div className="panelHeader">
+              <div><div className="panelTitle">Top 10 Signals</div><div className="panelSub">Force-ranked · most critical to watch first</div></div>
+            </div>
+            {(() => {
+              type Band = { color: string; from: number; to: number };
+              type Sig = { rank: number; label: string; value: string; sub: string; color: string; dotColor?: string; status: string; posPct?: number; bands?: Band[]; distance?: string; axisTicks?: { pos: number; label: string }[]; tickCaption?: string; centerPos?: number };
+
+              const robertsColor = regimeGate==="trend_broken" ? "#ff6b88" : regimeGate==="near_ma" ? "#fbbf24" : "#4ade80";
+              // Same thresholds already driving this tile's status word and
+              // dot: below 0% = red, 0% to +3% = yellow (the established
+              // "near MA, watch closely" zone), above +3% = green. On the
+              // -10%/+10% scale: pos(0%) = 50%, pos(+3%) = 65%.
+              const robertsBands: Band[] = [{ color:"#ff6b88", from:0, to:50 }, { color:"#fbbf24", from:50, to:65 }, { color:"#4ade80", from:65, to:100 }];
+              // DJT's own gap vs its 200-DMA, same -10%/+10% scale as
+              // Roberts, but DJT's established watch line is 2%, not
+              // SPX's 3% (already used elsewhere on this dashboard).
+              // pos(0%) = 50%, pos(+2%) = 60%.
+              const djtBands: Band[] = [{ color:"#ff6b88", from:0, to:50 }, { color:"#fbbf24", from:50, to:60 }, { color:"#4ade80", from:60, to:100 }];
+              const djtCenterPos = djtVs200!=null ? Math.max(0, Math.min(100, ((djtVs200 + 10) / 20) * 100)) : 50;
+              const breadthColor = breadthPct==null ? "#94a3b8" : breadthPct<40 ? "#ff6b88" : breadthPct<70 ? "#fbbf24" : "#4ade80";
+              const hySpreadBps = hySpread*100;
+              const hyColor = hySpread>=5 ? "#ff6b88" : hySpread>=4 ? "#fbbf24" : "#4ade80";
+              const vixColor2 = vixValue==null ? "#94a3b8" : vixValue>=30 ? "#ff6b88" : vixValue>=20 ? "#fbbf24" : "#4ade80";
+              const ycColor = yieldCurve<0 ? "#ff6b88" : yieldCurve<0.5 ? "#fbbf24" : "#4ade80";
+              // Dot/status color: driven by the LIVE 12-month trend
+              // direction (rising rates = headwind = red), not the
+              // absolute level. The bar below answers a different
+              // question, where the rate sits historically, with its
+              // own independent zone coloring.
+              const fedColor = fedTrendDirection==="up" ? "#ff6b88" : fedTrendDirection==="down" ? "#4ade80" : "#fbbf24";
+              const fedStatus = fedTrendDirection==="up" ? "Tightening" : fedTrendDirection==="down" ? "Easing" : "Holding";
+              const FED_ACCOM = "#4ade80", FED_NEUTRAL = "#94a3b8", FED_RESTRICT = "#ff6b88";
+              const fedBands: Band[] = [{ color:FED_ACCOM, from:0, to:33.33 }, { color:FED_NEUTRAL, from:33.33, to:66.67 }, { color:FED_RESTRICT, from:66.67, to:100 }];
+              const fedPos = Math.max(0, Math.min(100, (fedFundsRate / 6) * 100));
+              const fedLeanLabel = fedNextMove.lean === "hawkish" ? "Hawkish" : fedNextMove.lean === "dovish" ? "Dovish" : "Neutral";
+
+              // AAII Bears: plain reading, consistent with the rest of the
+              // panel (higher = red), not the contrarian read some analysts
+              // use (extreme fear = buy signal). 45% is the same threshold
+              // Roberts' own scorecard elsewhere in this dashboard uses as
+              // its "elevated" line. Scale runs 0-70%, comfortably above
+              // any reading likely to occur.
+              const aaiiColor = aaiiBears>45 ? "#ff6b88" : aaiiBears>35 ? "#fbbf24" : "#4ade80";
+              const aaiiStatus = aaiiBears>45 ? "Elevated" : aaiiBears>35 ? "Watch" : "Calm";
+              const aaiiBands: Band[] = [{ color:"#4ade80", from:0, to:50 }, { color:"#fbbf24", from:50, to:64.29 }, { color:"#ff6b88", from:64.29, to:100 }];
+              const aaiiPos = Math.max(0, Math.min(100, (aaiiBears / 70) * 100));
+
+              // Buffett gets its own 5-zone palette, matching
+              // currentmarketvaluation.com exactly: Strongly Overvalued
+              // (red, >2.0σ), Overvalued (yellow, 1.0-2.0σ), Fairly
+              // Valued (gray, -1.0 to 1.0σ), Undervalued (light green,
+              // -2.0 to -1.0σ), Strongly Undervalued (dark green, <-2.0σ).
+              const DARK_GREEN = "#15803d", LIGHT_GREEN = "#86efac", GRAY = "#94a3b8";
+              const buffettColor = buffettSigma>2.0 ? "#ff6b88" : buffettSigma>1.0 ? "#fbbf24" : buffettSigma>=-1.0 ? GRAY : buffettSigma>=-2.0 ? LIGHT_GREEN : DARK_GREEN;
+              const buffettStatus = buffettSigma>2.0 ? "Strongly Overvalued" : buffettSigma>1.0 ? "Overvalued" : buffettSigma>=-1.0 ? "Fairly Valued" : buffettSigma>=-2.0 ? "Undervalued" : "Strongly Undervalued";
+              const buffettDistance =
+                buffettSigma>2.0 ? "Past +2.0σ line" :
+                buffettSigma>1.0 ? `${(2.0-buffettSigma).toFixed(2)}σ to Strongly Overvalued` :
+                buffettSigma>=-1.0 ? `${(1.0-buffettSigma).toFixed(2)}σ to Overvalued` :
+                buffettSigma>=-2.0 ? `${(buffettSigma-(-2.0)).toFixed(2)}σ above Strongly Undervalued` :
+                "Past -2.0σ line";
+
+              // Ivy mirrors Buffett's 5-tier palette, reversed: here HIGH
+              // is good (more of the 5 assets confirmed invested), so dark
+              // green sits at 5 instead of at 0. Six points (0-5), each
+              // one its own color, bands colored by their upper point.
+              const ivyColor = ivyInvestedCount>=5 ? DARK_GREEN : ivyInvestedCount>=4 ? LIGHT_GREEN : ivyInvestedCount>=3 ? GRAY : ivyInvestedCount>=2 ? "#fbbf24" : "#ff6b88";
+              // The corner dot summarizes at a coarser, 3-state resolution
+              // than the 5-tier bar: green at 4-5, yellow at 2-3, red at
+              // 0-1, so the quick glance and the detailed bar can agree
+              // without forcing the bar itself down to 3 colors.
+              const ivyDotColor = ivyInvestedCount>=4 ? "#4ade80" : ivyInvestedCount>=2 ? "#fbbf24" : "#ff6b88";
+              const ivyStatus = ivyInvestedCount>=5 ? "Fully Invested" : ivyInvestedCount>=4 ? "Mostly Invested" : ivyInvestedCount>=3 ? "Mixed" : ivyInvestedCount>=2 ? "Defensive" : ivyInvestedCount>=1 ? "Mostly Cash" : "All Cash";
+              const ivyBands: Band[] = [{ color:"#ff6b88", from:0, to:20 }, { color:"#fbbf24", from:20, to:40 }, { color:GRAY, from:40, to:60 }, { color:LIGHT_GREEN, from:60, to:80 }, { color:DARK_GREEN, from:80, to:100 }];
+              const ivyPos = Math.max(0, Math.min(100, (ivyInvestedCount / 5) * 100));
+
+              // Bar position, 0-100. Breadth/Yield Curve: low = bad (left).
+              // HY/VIX: high = bad (right). Buffett: bidirectional, -3σ to
+              // +3σ, both tails represent zones (red high, dark green low).
+              const breadthPos = breadthPct==null ? 50 : Math.max(0, Math.min(100, breadthPct));
+              const hyPos = Math.max(0, Math.min(100, ((hySpreadBps - 200) / 800) * 100));
+              const vixPos = vixValue==null ? 50 : Math.max(0, Math.min(100, (vixValue / 50) * 100));
+              const buffettPos = Math.max(0, Math.min(100, ((buffettSigma + 3) / 6) * 100));
+              const ycPos = Math.max(0, Math.min(100, ((yieldCurve + 1) / 2.5) * 100));
+
+              // Static zone bands, sized to the real proportion of each
+              // metric's scale, matching how currentmarketvaluation.com
+              // draws its gauges. The whole spectrum stays visible no
+              // matter where the current reading sits, only the marker
+              // line moves.
+              const breadthBands: Band[] = [{ color:"#ff6b88", from:0, to:40 }, { color:"#fbbf24", from:40, to:70 }, { color:"#4ade80", from:70, to:100 }];
+              const hyBands: Band[] = [{ color:"#4ade80", from:0, to:25 }, { color:"#fbbf24", from:25, to:37.5 }, { color:"#ff6b88", from:37.5, to:100 }];
+              const vixBands: Band[] = [{ color:"#4ade80", from:0, to:40 }, { color:"#fbbf24", from:40, to:60 }, { color:"#ff6b88", from:60, to:100 }];
+              const buffettBands: Band[] = [{ color:DARK_GREEN, from:0, to:16.67 }, { color:LIGHT_GREEN, from:16.67, to:33.33 }, { color:GRAY, from:33.33, to:66.67 }, { color:"#fbbf24", from:66.67, to:83.33 }, { color:"#ff6b88", from:83.33, to:100 }];
+              const ycBands: Band[] = [{ color:"#ff6b88", from:0, to:40 }, { color:"#fbbf24", from:40, to:60 }, { color:"#4ade80", from:60, to:100 }];
+
+              const signals: Sig[] = [
+                { rank:1,  label:"Roberts 40-Wk", value: spx200Pct!=null ? `${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}%` : "—", sub:"", color: robertsColor,
+                  status: regimeGate==="trend_broken"?"Trend Broken":regimeGate==="near_ma"?"At the Line":regimeGate==="reclaiming"?"Reclaiming":"Bull Trend",
+                  centerPos: spx200Pct!=null ? Math.max(0, Math.min(100, ((spx200Pct + 10) / 20) * 100)) : 50, bands: robertsBands,
+                  axisTicks: [{ pos:0, label:"-10%" }, { pos:50, label:"0%" }, { pos:100, label:"+10%" }] },
+                { rank:2,  label:"Breadth",             value: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—", sub:"% of S&P 500 above 200-DMA", color: breadthColor,
+                  status: breadthColor==="#ff6b88"?"Narrow":breadthColor==="#fbbf24"?"Mixed":"Broad", posPct: breadthPos, bands: breadthBands,
+                  axisTicks: [{ pos:40, label:"40" }, { pos:70, label:"70" }] },
+                { rank:3,  label:"HY Spread",           value: `${Math.round(hySpreadBps)}bps`, sub:"Credit stress", color: hyColor,
+                  status: hyColor==="#ff6b88"?"Stress":hyColor==="#fbbf24"?"Watch":"Tight", posPct: hyPos, bands: hyBands,
+                  axisTicks: [{ pos:25, label:"400" }, { pos:37.5, label:"500" }] },
+                { rank:4,  label:"VIX",                 value: vixValue!=null?vixValue.toFixed(1):"—", sub:"Near-term fear gauge", color: vixColor2,
+                  status: vixColor2==="#ff6b88"?"Stress":vixColor2==="#fbbf24"?"Elevated":"Calm", posPct: vixPos, bands: vixBands,
+                  axisTicks: [{ pos:40, label:"20" }, { pos:60, label:"30" }] },
+                { rank:5,  label:"Buffett Indicator",   value: `${buffettSigma.toFixed(2)}σ`, sub:"Valuation vs GDP trend", color: buffettColor,
+                  status: buffettStatus, posPct: buffettPos, bands: buffettBands,
+                  axisTicks: [{ pos:16.67, label:"-2" }, { pos:33.33, label:"-1" }, { pos:50, label:"0" }, { pos:66.67, label:"+1" }, { pos:83.33, label:"+2" }] },
+                { rank:6,  label:"Ivy Portfolio",       value: `${ivyInvestedCount}/5`, sub:"Multi-asset trend confirmation", color: ivyColor, dotColor: ivyDotColor,
+                  status: ivyStatus, posPct: ivyPos, bands: ivyBands,
+                  axisTicks: [{ pos:0, label:"0" }, { pos:20, label:"1" }, { pos:40, label:"2" }, { pos:60, label:"3" }, { pos:80, label:"4" }, { pos:100, label:"5" }] },
+                { rank:7,  label:"Dow Theory", value: djtVs200!=null ? `${djtVs200>=0?"+":""}${djtVs200.toFixed(1)}%` : "—", sub:"Economic confirmation, SPX + Transports", color: schannepColor,
+                  status: schannepLabel ?? "—",
+                  centerPos: djtCenterPos, bands: djtBands,
+                  axisTicks: [{ pos:0, label:"-10%" }, { pos:50, label:"0%" }, { pos:100, label:"+10%" }] },
+                { rank:8,  label:"Yield Curve",         value: `${yieldCurve>=0?"+":""}${yieldCurve.toFixed(2)}`, sub:"10Y-2Y spread · recession lead", color: ycColor,
+                  status: ycColor==="#ff6b88"?"Inverted":ycColor==="#fbbf24"?"Flat":"Healthy", posPct: ycPos, bands: ycBands,
+                  axisTicks: [{ pos:40, label:"0" }, { pos:60, label:"0.5" }] },
+                { rank:9,  label:"Fed Policy Stance",   value: `${fedFundsRate.toFixed(2)}%`, sub:"Rate policy backdrop", color: fedColor,
+                  status: fedStatus, posPct: fedPos, bands: fedBands,
+                  axisTicks: [{ pos:33.33, label:"2%" }, { pos:66.67, label:"4%" }],
+                  tickCaption: `Next: ${fedLeanLabel}, ${fedNextMove.hikeOdds}% hike odds (${fedNextMove.meeting}, Manual)` },
+                { rank:10, label:"AAII Bears",          value: `${aaiiBears.toFixed(1)}%`, sub:"Sentiment · Manual, updated weekly", color: aaiiColor,
+                  status: aaiiStatus, posPct: aaiiPos, bands: aaiiBands,
+                  axisTicks: [{ pos:50, label:"35" }, { pos:64.29, label:"45" }],
+                  tickCaption: "Sentiment · Manual, updated weekly" },
+              ];
+
+              // CMV style: the full zone spectrum stays visible as static
+              // bands sized to their real proportion of the scale. A single
+              // marker line shows where the current reading sits. Only the
+              // marker moves, the bands never change.
+              const bandGradient = (bands: Band[]) => `linear-gradient(to right, ${bands.map(b => `${b.color} ${b.from}%, ${b.color} ${b.to}%`).join(", ")})`;
+              const Bar = ({ posPct, bands }: { posPct: number; bands: Band[] }) => (
+                <div style={{ position:"relative", height:5, borderRadius:9999, background: bandGradient(bands), marginTop:8, marginBottom:2 }}>
+                  <div style={{ position:"absolute", top:-2, left:`${Math.max(1,Math.min(posPct,99))}%`, width:2, height:9, background:"#0b0b2a", border:"1px solid #fff", transform:"translateX(-1px)", zIndex:2 }} />
+                </div>
+              );
+
+              // Composite index: green +1, red -1, yellow 0. Equal-weighted
+              // on purpose, this answers "how many things are supportive
+              // vs. concerning right now," a different question than the
+              // force-rank above it, which already says which ones matter
+              // most. Reads off each tile's dot color, the same coarse
+              // 3-state summary the dot itself shows, not the richer 5-tier
+              // bar colors some tiles use internally (e.g. Ivy, Buffett).
+              const greenCount = signals.filter(s => (s.dotColor ?? s.color) === "#4ade80").length;
+              const yellowCount = signals.filter(s => (s.dotColor ?? s.color) === "#fbbf24").length;
+              const redCount = signals.filter(s => (s.dotColor ?? s.color) === "#ff6b88").length;
+              const compositeIndex = greenCount - redCount;
+              const compositeColor2 = compositeIndex > 0 ? "#4ade80" : compositeIndex < 0 ? "#ff6b88" : "#fbbf24";
+
+              return (
+                <>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, padding:"10px 14px", background:"#161a33", borderRadius:10 }}>
+                    <div style={{ display:"flex", gap:18, alignItems:"center" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ width:9, height:9, borderRadius:"50%", background:"#4ade80" }} />
+                        <span style={{ fontSize:13, fontWeight:700, color:"#cbd5e1" }}>{greenCount} Green</span>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ width:9, height:9, borderRadius:"50%", background:"#fbbf24" }} />
+                        <span style={{ fontSize:13, fontWeight:700, color:"#cbd5e1" }}>{yellowCount} Yellow</span>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ width:9, height:9, borderRadius:"50%", background:"#ff6b88" }} />
+                        <span style={{ fontSize:13, fontWeight:700, color:"#cbd5e1" }}>{redCount} Red</span>
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
+                      <span style={{ fontSize:10, color:"#64748b", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Composite</span>
+                      <span style={{ fontSize:20, fontWeight:800, color:compositeColor2 }}>{compositeIndex > 0 ? "+" : ""}{compositeIndex}</span>
+                      <span style={{ fontSize:11, color:"#475569" }}>/ 10</span>
+                    </div>
+                  </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
+                  {signals.map(s => (
+                    <div key={s.rank} className="tile" style={{ position:"relative" }}>
+                      <div style={{ position:"absolute", top:10, right:10, width:10, height:10, borderRadius:"50%", background:s.dotColor ?? s.color, boxShadow:`0 0 6px ${s.dotColor ?? s.color}88` }} />
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:2 }}>#{s.rank}</div>
+                      <div className="lbl" style={{ marginBottom:6, paddingRight:18 }}>{s.label}</div>
+                      <div className="valHero" style={{ fontSize:24 }}>{s.value}</div>
+                      <div className="status" style={{ color:s.color, fontSize:12, marginTop:2 }}>{s.status}</div>
+                      {s.posPct != null && s.bands != null && <Bar posPct={s.posPct} bands={s.bands} />}
+                      {s.centerPos != null && (
+                        <div style={{ position:"relative", height:5, borderRadius:9999, background: s.bands ? bandGradient(s.bands) : "#2a2f45", marginTop:8, marginBottom:2 }}>
+                          <div style={{ position:"absolute", top:-2, left:"50%", width:2, height:9, background:"#475569", transform:"translateX(-1px)", zIndex:1 }} />
+                          <div style={{ position:"absolute", top:-2, left:`${Math.max(1,Math.min(s.centerPos,99))}%`, width:2, height:9, background:"#0b0b2a", border:"1px solid #fff", transform:"translateX(-1px)", zIndex:2 }} />
+                        </div>
+                      )}
+                      {s.axisTicks && (
+                        <div style={{ position:"relative", height:12, marginTop:2 }}>
+                          {s.axisTicks.map((t, i) => (
+                            <div key={i} style={{ position:"absolute", left:`${t.pos}%`, transform:"translateX(-50%)", fontSize:9, color:"#64748b" }}>{t.label}</div>
+                          ))}
+                        </div>
+                      )}
+                      {s.axisTicks ? (
+                        s.tickCaption && <div className="sub" style={{ marginTop:2 }}>{s.tickCaption}</div>
+                      ) : (
+                        <div className="sub" style={{ marginTop:6 }}>{s.distance ?? s.sub}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                </>
+              );
+            })()}
+          </section>
+
+          {/* ① MARKET STRUCTURE */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div><div className="panelTitle">Market Structure</div><div className="panelSub">Price vs Key Moving Averages</div></div>
+              <div className="damage">{damageCount} / 4 short-term trends broken</div>
+            </div>
+
+            {/* ── Regime Banner ── */}
+            <div style={{
+              display:"flex", alignItems:"center", gap:12,
+              background: regime==="bull" ? "rgba(74,222,128,0.07)" : regime==="bear" ? "rgba(239,68,68,0.07)" : "rgba(245,158,11,0.07)",
+              border: `1px solid ${regime==="bull" ? "rgba(74,222,128,0.3)" : regime==="bear" ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.3)"}`,
+              borderRadius:10, padding:"10px 14px", marginBottom:10
+            }}>
+              {/* Regime pill */}
+              <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:16 }}>{regimeEmoji ?? "🟡"}</span>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>Market Regime</div>
+                  <div style={{ fontSize:14, fontWeight:700, color: regimeColor }}>{regimeLabel ?? "Calculating…"}</div>
+                </div>
+              </div>
+              <div className="hideMobile" style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0 }} />
+              {/* Description — hidden on mobile, the Gap/Slope numbers below
+                  already cover the same ground more concisely there. */}
+              <div className="hideMobile" style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{regimeDesc ?? "Computing 200-DMA slope from price history…"}</div>
+              <div className="hideMobile" style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0, marginLeft:"auto" }} />
+              {/* 200-DMA slope readout */}
+              <div style={{ flexShrink:0, textAlign:"right", marginLeft:"auto" }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>200-DMA Slope</div>
+                <div style={{ fontSize:14, fontWeight:700, color: slope200 == null ? "#475569" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                  {slope200 == null ? "—" : `${slope200 > 0 ? "↗" : slope200 < 0 ? "↘" : "→"} ${slope200 > 0 ? "+" : ""}${slope200.toFixed(1)}%`}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid5" style={{ marginBottom:8 }}>
+              {/* Tile 1: SPX Price — stacked rows (Today, YTD) matching the
+                  portfolio tiles' layout. No arrow/Gap here — those apply
+                  to the DMA tiles below, not to the raw index itself. */}
+              <div className="tile">
+                <div className="tileTop"><span className="lbl">S&P 500</span></div>
+                <div className="valHero">{spxPrice != null ? fmtWhole(spxPrice) : "—"}</div>
+                <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(spxTrend, spxDailyPct != null && spxDailyPct >= 0 ? "#4ade80" : "#ff6b88") }} />
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+
+              {/* Tile 2: 200-DMA — stacked rows with a slope arrow to the
+                  left of Today, then Gap (this tile's own differentiator).
+                  YTD dropped — it repeated the same index-level number
+                  across every DMA tile without adding anything unique.
+                  Arrow direction only, not scaled by magnitude. */}
+              {(() => {
+                const isNear = spx200Pct != null && spx200Pct >= 0 && spx200Pct <= 3;
+                const tileClass = is200Broken ? "tile tile200Red" : isNear ? "tile tile200" : "tile";
+                const badgeBg = is200Broken ? "#ef4444" : "#f59e0b";
+                const statusColor = is200Broken ? "#ff6b88" : isNear ? "#fbbf24" : "#4ade80";
+                const subColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
+                const arrow = slope200 == null ? null : slope200 > 0.02 ? "↗" : slope200 < -0.02 ? "↘" : "→";
+                const arrowColor = slope200 == null ? "#475569" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24";
+                return (
+                  <div className={tileClass} style={{ cursor:"pointer" }} onClick={() => setModal("dma200")}>
+                    <div className="tileTop">
+                      <span className="lbl">200-DMA</span>
+                      {(is200Broken || isNear) && <span className="badge" style={{ background: badgeBg, color:"#000" }}>!</span>}
+                    </div>
+                    <div className="valHero">{fmtWhole(spx200)}</div>
+                    <div className="status" style={{ color: statusColor }}>
+                      {dmaState(spx200Pct, slope200, true)}
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:3, marginTop:8, alignItems:"center" }}>
+                      <span style={{ fontSize:12, fontWeight:700, color: arrowColor }}>{arrow ?? ""}</span>
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
+                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: subColor }}>{spx200Pct != null ? fmtSigned1(spx200Pct) : "—"}</div>
+                    </div>
+                    <div style={{ fontSize:10, color:"#64748b", marginTop:8 }}>Click for detail</div>
+                  </div>
+                );
+              })()}
+
+              {/* Tiles 3-5: 100 / 50 / 20-DMA — same stacked layout as
+                  tile 2, YTD dropped for the same reason. */}
+              {[
+                { label:"100-DMA", level:spx100, slope:slope100 },
+                { label:"50-DMA",  level:spx50,  slope:slope50  },
+                { label:"20-DMA",  level:spx20,  slope:slope20  },
+              ].map(d => {
+                const pct = spxVs(d.level); const tone = dmaTone(pct, d.slope);
+                const arrow = d.slope == null ? null : d.slope > 0.02 ? "↗" : d.slope < -0.02 ? "↘" : "→";
+                const arrowColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
+                return (
+                  <div key={d.label} className="tile">
+                    <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:toneColor(tone), color:tone==="warning"?"#000":"#fff" }}>!</span></div>
+                    <div className="valHero">{fmtWhole(d.level)}</div>
+                    <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct, d.slope)}</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:3, marginTop:8, alignItems:"center" }}>
+                      <span style={{ fontSize:12, fontWeight:700, color: arrowColor }}>{arrow ?? ""}</span>
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
+                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: toneColor(tone) }}>{pct != null ? fmtSigned1(pct) : "—"}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {is200Broken ? (
+              <div className="alertStripCritical">
+                <span className="alertDotRed" />
+                <span className="alertTitleRed">⚠ 200-DMA Breached — Critical</span>
+                <span className="alertBodyRed">
+                  {spxPrice != null
+                    ? `SPX ${fmtSigned1(spx200Pct!)} below 200-DMA (${fmtWhole(spx200)}) · ${Math.abs(spxPrice - spx200).toFixed(0)} pts below · Watch: 2 Friday closes below + VIX >30 or HY >400bps triggers defensive posture`
+                    : "Waiting..."}
+                </span>
+              </div>
+            ) : spx200Pct != null && spx200Pct <= 3 ? (
+              <div className="alertStrip">
+                <span className="alertDot" />
+                <span className="alertTitle">200-DMA Proximity — Immediate Watch</span>
+                <span className="alertBody">
+                  {spxPrice != null
+                    ? `Only ${spx200Pct.toFixed(1)}% above (${fmtWhole(spx200)}) · ${Math.abs(spxPrice-spx200).toFixed(0)} pts gap · Trigger: 2 Friday closes below + VIX >30 or HY >400bps`
+                    : "Waiting..."}
+                </span>
+              </div>
+            ) : null}
+          </section>
+
+          {/* ①-Q MARKET STRUCTURE — QQQ (NASDAQ-100) — same layout as the SPX
+              section above, added to watch tech/momentum leadership
+              separately from the broad index, matching the instrument
+              Roberts himself used in the momentum-crash report. */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div><div className="panelTitle">Market Structure — QQQ</div><div className="panelSub">Price vs Key Moving Averages · Nasdaq-100</div></div>
+            </div>
+
+            <div style={{
+              display:"flex", alignItems:"center", gap:12,
+              background: "rgba(255,255,255,0.02)",
+              border: `1px solid ${qqqRegimeColor}33`,
+              borderRadius:10, padding:"10px 14px", marginBottom:10
+            }}>
+              <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:16 }}>{qqqRegimeEmoji}</span>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>Market Regime</div>
+                  <div style={{ fontSize:14, fontWeight:700, color: qqqRegimeColor }}>{qqqRegimeLabel ?? "Calculating…"}</div>
+                </div>
+              </div>
+              <div className="hideMobile" style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0 }} />
+              <div className="hideMobile" style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{qqqRegimeDesc ?? "Computing 200-DMA slope from price history…"}</div>
+              <div className="hideMobile" style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0, marginLeft:"auto" }} />
+              <div style={{ flexShrink:0, textAlign:"right", marginLeft:"auto" }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>200-DMA Slope</div>
+                <div style={{ fontSize:14, fontWeight:700, color: qqqSlope200 == null ? "#475569" : qqqSlope200 > 0.02 ? "#4ade80" : qqqSlope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                  {qqqSlope200 == null ? "—" : `${qqqSlope200 > 0 ? "↗" : qqqSlope200 < 0 ? "↘" : "→"} ${qqqSlope200 > 0 ? "+" : ""}${qqqSlope200.toFixed(1)}%`}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid5">
+              <div className="tile">
+                <div className="tileTop"><span className="lbl">QQQ</span></div>
+                <div className="valHero">{qqqPrice != null ? `$${qqqPrice.toFixed(2)}` : "—"}</div>
+                {qqqTrend.length > 0 && (
+                  <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(qqqTrend, qqqChangePct != null && qqqChangePct >= 0 ? "#4ade80" : "#ff6b88") }} />
+                )}
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: qqqChangePct == null ? "#cbd5e1" : qqqChangePct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {qqqChangePct != null ? `${qqqChangePct >= 0 ? "+" : ""}${qqqChangePct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: qqqYtd == null ? "#cbd5e1" : qqqYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {qqqYtd != null ? `${qqqYtd >= 0 ? "+" : ""}${qqqYtd.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+
+              {/* DMA tiles — arrow next to Gap, no Today/Slope-text rows,
+                  same as the SPX group above. */}
+              {[
+                { label:"200-DMA", level:qqq200, slope:qqqSlope200, pct:qqq200Pct, isLong:true },
+                { label:"100-DMA", level:qqq100, slope:qqqSlope100, pct:qqqVs(qqq100), isLong:false },
+                { label:"50-DMA",  level:qqq50,  slope:qqqSlope50,   pct:qqqVs(qqq50),  isLong:false },
+                { label:"20-DMA",  level:qqq20,  slope:qqqSlope20,   pct:qqqVs(qqq20),  isLong:false },
+              ].map(d => {
+                const state = positionDmaState(d.pct, d.slope, qqqChangePct, d.isLong);
+                const tone = positionDmaTone(d.pct, d.slope, qqqChangePct, d.isLong);
+                const color = toneColor(tone);
+                const arrow = d.slope == null ? null : d.slope > 0.02 ? "↗" : d.slope < -0.02 ? "↘" : "→";
+                const arrowColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
+                return (
+                  <div key={d.label} className="tile">
+                    <div className="tileTop"><span className="lbl">{d.label}</span></div>
+                    <div className="valHero">{d.level != null ? `$${d.level.toFixed(2)}` : "—"}</div>
+                    <div className="status" style={{ color }}>{state}</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:3, marginTop:8, alignItems:"center" }}>
+                      <span style={{ fontSize:12, fontWeight:700, color: arrowColor }}>{arrow ?? ""}</span>
+                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
+                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color }}>{d.pct != null ? fmtSigned1(d.pct) : "—"}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* ①-B PORTFOLIO POSITION HEALTH — live per-holding 200-DMA status */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div>
+                <div className="panelTitle">Portfolio Position Health</div>
+              </div>
+              <div className="pstamp">LIVE · Yahoo Finance</div>
+            </div>
+
+            {/* Row group label — small, uppercase, matches the style already
+                used elsewhere on the dashboard for row/section labels. */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+              My Current Allocation
+            </div>
+
+            {/* Portfolio YTD is an ESTIMATE: weight × each position's own YTD
+                return, held constant since Jan 1. Will drift from actual
+                brokerage-reported return if rebalanced. Grid5 matches the
+                tile width of the position cards below. Today's change below
+                the hero number uses the same red/green convention as the
+                position tiles' Today column. CUR now sits alone in its own
+                row — index benchmarks and candidate portfolios moved to
+                their own rows below, so the read is "my current alloc,
+                then the index comparisons, then what I'm considering". */}
+            <div className="grid5" style={{ marginBottom:16 }}>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("cur"); }}>
+                <div className="lbl">CUR 40/55/5 YTD</div>
+                <div className="valHero">
+                  {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: portfolioTodayPct == null ? "#cbd5e1" : portfolioTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {portfolioTodayPct != null ? `${portfolioTodayPct >= 0 ? "+" : ""}${portfolioTodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: portfolioOneYearPct == null ? "#cbd5e1" : portfolioOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {portfolioOneYearPct != null ? `${portfolioOneYearPct >= 0 ? "+" : ""}${portfolioOneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: portfolioFiveYearPct == null ? "#cbd5e1" : portfolioFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {portfolioFiveYearPct != null ? `${portfolioFiveYearPct >= 0 ? "+" : ""}${portfolioFiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+              {/* M2 50/40/10 added here as tile #2 — this is the allocation
+                  for the remainder of the year, sitting alongside CUR
+                  40/55/5 (the allocation through early Sept) so the two are
+                  directly comparable as "before" and "after". */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("m2"); }}>
+                <div className="lbl">M2 50/40/10 YTD</div>
+                <div className="valHero">
+                  {m2YtdPct != null ? `${m2YtdPct >= 0 ? "+" : ""}${m2YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2TodayPct == null ? "#cbd5e1" : m2TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m2TodayPct != null ? `${m2TodayPct >= 0 ? "+" : ""}${m2TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2OneYearPct == null ? "#cbd5e1" : m2OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m2OneYearPct != null ? `${m2OneYearPct >= 0 ? "+" : ""}${m2OneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2FiveYearPct == null ? "#cbd5e1" : m2FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m2FiveYearPct != null ? `${m2FiveYearPct >= 0 ? "+" : ""}${m2FiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2 — the four passive index benchmarks, on their own row
+                now that CUR has row 1 to itself. */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+              Index Benchmarks
+            </div>
+            <div className="grid5" style={{ marginBottom:16 }}>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx4060"); }}>
+                <div className="lbl">40/60 Index YTD</div>
+                <div className="valHero">
+                  {benchmark4060YtdPct != null ? `${benchmark4060YtdPct >= 0 ? "+" : ""}${benchmark4060YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: benchmark4060TodayPct == null ? "#cbd5e1" : benchmark4060TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark4060TodayPct != null ? `${benchmark4060TodayPct >= 0 ? "+" : ""}${benchmark4060TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: benchmark4060OneYearPct == null ? "#cbd5e1" : benchmark4060OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark4060OneYearPct != null ? `${benchmark4060OneYearPct >= 0 ? "+" : ""}${benchmark4060OneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: benchmark4060FiveYearPct == null ? "#cbd5e1" : benchmark4060FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark4060FiveYearPct != null ? `${benchmark4060FiveYearPct >= 0 ? "+" : ""}${benchmark4060FiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx5050"); }}>
+                <div className="lbl">50/50 Index YTD</div>
+                <div className="valHero">
+                  {benchmark5050YtdPct != null ? `${benchmark5050YtdPct >= 0 ? "+" : ""}${benchmark5050YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: benchmark5050TodayPct == null ? "#cbd5e1" : benchmark5050TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark5050TodayPct != null ? `${benchmark5050TodayPct >= 0 ? "+" : ""}${benchmark5050TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: benchmark5050OneYearPct == null ? "#cbd5e1" : benchmark5050OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark5050OneYearPct != null ? `${benchmark5050OneYearPct >= 0 ? "+" : ""}${benchmark5050OneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: benchmark5050FiveYearPct == null ? "#cbd5e1" : benchmark5050FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark5050FiveYearPct != null ? `${benchmark5050FiveYearPct >= 0 ? "+" : ""}${benchmark5050FiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("idx6040"); }}>
+                <div className="lbl">60/40 Index YTD</div>
+                <div className="valHero">
+                  {benchmark6040YtdPct != null ? `${benchmark6040YtdPct >= 0 ? "+" : ""}${benchmark6040YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: benchmark6040TodayPct == null ? "#cbd5e1" : benchmark6040TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark6040TodayPct != null ? `${benchmark6040TodayPct >= 0 ? "+" : ""}${benchmark6040TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: benchmark6040OneYearPct == null ? "#cbd5e1" : benchmark6040OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark6040OneYearPct != null ? `${benchmark6040OneYearPct >= 0 ? "+" : ""}${benchmark6040OneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: benchmark6040FiveYearPct == null ? "#cbd5e1" : benchmark6040FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {benchmark6040FiveYearPct != null ? `${benchmark6040FiveYearPct >= 0 ? "+" : ""}${benchmark6040FiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("spx"); }}>
+                <div className="lbl">SPX 100/0 YTD</div>
+                <div className="valHero">
+                  {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxOneYearPct == null ? "#cbd5e1" : spxOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {spxOneYearPct != null ? `${spxOneYearPct >= 0 ? "+" : ""}${spxOneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxFiveYearPct == null ? "#cbd5e1" : spxFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {spxFiveYearPct != null ? `${spxFiveYearPct >= 0 ? "+" : ""}${spxFiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 3 — Chris's rough-draft proposal, Mike's own curated
+                blend, and ALT, all grouped as "portfolios I'm considering".
+                ALT used to sit alone in its own row with two stray extra
+                closing divs left over from an earlier edit that removed
+                the LPL/VG tiles — confirmed via a clean bounded div-count
+                across the whole <section>...</section> boundary (116 opens
+                vs 118 closes) that those two tags were genuinely orphaned,
+                not matched to anything. Removed here rather than carried
+                forward. Modeled on Noelle's Rollover IRA dollar figures for
+                the Proposed tile, but Mike confirmed the same 55/35/10
+                model is intended across all retirement accounts, so it's
+                directly comparable to CUR 40/55/5 above, not IRA-only. Swap
+                BTAL for Chris's real Long/Short pick once his weekend
+                proposal lands. */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:6 }}>
+              LPL Recommendations
+            </div>
+            <div className="grid5">
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("c1Tax"); }}>
+                <div className="lbl">C1 TAX 40/60 YTD</div>
+                <div className="valHero">
+                  {c1TaxYtdPct != null ? `${c1TaxYtdPct >= 0 ? "+" : ""}${c1TaxYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1TaxTodayPct == null ? "#cbd5e1" : c1TaxTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1TaxTodayPct != null ? `${c1TaxTodayPct >= 0 ? "+" : ""}${c1TaxTodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1TaxOneYearPct == null ? "#cbd5e1" : c1TaxOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1TaxOneYearPct != null ? `${c1TaxOneYearPct >= 0 ? "+" : ""}${c1TaxOneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1TaxFiveYearPct == null ? "#cbd5e1" : c1TaxFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1TaxFiveYearPct != null ? `${c1TaxFiveYearPct >= 0 ? "+" : ""}${c1TaxFiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+              </div>
+            </div>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("c1Ira"); }}>
+                <div className="lbl">C1 IRA 56/38/6 YTD</div>
+                <div className="valHero">
+                  {c1IraYtdPct != null ? `${c1IraYtdPct >= 0 ? "+" : ""}${c1IraYtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1IraTodayPct == null ? "#cbd5e1" : c1IraTodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1IraTodayPct != null ? `${c1IraTodayPct >= 0 ? "+" : ""}${c1IraTodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1IraOneYearPct == null ? "#cbd5e1" : c1IraOneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1IraOneYearPct != null ? `${c1IraOneYearPct >= 0 ? "+" : ""}${c1IraOneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: c1IraFiveYearPct == null ? "#cbd5e1" : c1IraFiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {c1IraFiveYearPct != null ? `${c1IraFiveYearPct >= 0 ? "+" : ""}${c1IraFiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+              </div>
+            </div>
+            </div>
+
+          </section>
+
+          {/* ①-C YOUR HOLDINGS — the actual position tiles, split into their
+              own section since the combined panel had grown to ~15 tiles. */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div>
+                <div className="panelTitle">Your Holdings</div>
+                <div className="panelSub">Trend sleeve judged vs 200-DMA · fixed income shown by YTD return only</div>
+              </div>
+              <div className="pstamp">LIVE · Yahoo Finance</div>
+            </div>
+
+            {(() => {
+              // Shared tile renderer — same trend/defensive branch logic as
+              // before, just extracted so both row groups below can call it
+              // without duplicating the card markup.
+              const renderPositionTile = (p: typeof positionCards[number]) => {
+                const ytdLabel = p.ytdReturnPct != null ? `${p.ytdReturnPct >= 0 ? "+" : ""}${p.ytdReturnPct.toFixed(1)}%` : "—";
+                const todayLabel = p.dailyPct != null ? `${p.dailyPct >= 0 ? "+" : ""}${p.dailyPct.toFixed(1)}%` : "—";
+                const todayColor = p.dailyPct == null ? "#cbd5e1" : p.dailyPct >= 0 ? "#4ade80" : "#ff6b88";
+                const oneYearLabel = p.oneYearReturnPct != null ? `${p.oneYearReturnPct >= 0 ? "+" : ""}${p.oneYearReturnPct.toFixed(1)}%` : "—";
+                const fiveYearLabel = p.fiveYearReturnPct != null ? `${p.fiveYearReturnPct >= 0 ? "+" : ""}${p.fiveYearReturnPct.toFixed(1)}%` : "—";
+                // Shared stats grid — same 2-col (label / value) x 3-row shape
+                // as the Portfolio Position Health tiles, for visual
+                // consistency across the dashboard. Price and job
+                // description dropped per Mike's cleanup — ticker + weight
+                // in the header already carries what's needed at a glance.
+                const statsGrid = (
+                  <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                    <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color:todayColor }}>{todayLabel}</div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                    <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color:p.oneYearReturnPct == null ? "#cbd5e1" : p.oneYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{oneYearLabel}</div>
+                    <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                    <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color:p.fiveYearReturnPct == null ? "#cbd5e1" : p.fiveYearReturnPct >= 0 ? "#4ade80" : "#ff6b88" }}>{fiveYearLabel}</div>
+                  </div>
+                );
+
+                if (p.sleeve === "defensive") {
+                  const neutralBarPos = Math.max(2, Math.min(p.barPos, 98));
+                  return (
+                    <div key={p.ticker} className="tile" style={{ position:"relative", borderTop:"2px solid rgba(148,163,184,0.35)" }}>
+                      <div className="tileTop">
+                        <span className="lbl">{p.ticker} · {p.acct === "TOD" ? `TOD ${p.weight}%` : `${p.weight}%`}</span>
+                      </div>
+                      <div className="valHero" style={{ fontSize:24, color:"#fff" }}>{ytdLabel}</div>
+                      {statsGrid}
+
+                      {/* Position-only gauge, deliberately flat gray rather
+                          than the equity tiles' red-yellow-green gradient.
+                          Strategies like DBMF/BTAL are built to move opposite
+                          equities on purpose, so a green "bullish" bar here
+                          would misread the strategy doing its job as a
+                          warning sign. This shows where price sits vs its
+                          200-DMA with no directional verdict attached. */}
+                      <div style={{ position:"relative", height:5, borderRadius:9999, background:"#26315f", marginTop:10, marginBottom:4 }}>
+                        <div style={{ position:"absolute", left:"50%", top:-3, width:2, height:11, background:"#fff" }} />
+                        {p.pctVs200 != null && (
+                          <div style={{ position:"absolute", left:`${neutralBarPos}%`, top:-2.5, width:8, height:8, borderRadius:"50%", background:"#94a3b8", border:"2px solid #050a35", transform:"translateX(-50%)" }} />
+                        )}
+                      </div>
+                      <div className="sub" style={{ marginTop:4 }}>
+                        {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}% vs 200-DMA` : "Loading"}
+                      </div>
+                    </div>
+                  );
+                }
+
+                const barPos = Math.max(2, Math.min(p.barPos, 98));
+                return (
+                  <div
+                    key={p.ticker}
+                    className="tile"
+                    style={{ position:"relative", borderTop:`2px solid ${p.color}` }}
+                  >
+                    <div style={{ position:"absolute", top:11, right:11, width:9, height:9, borderRadius:"50%", background:p.color, boxShadow:`0 0 6px ${p.color}99` }} />
+                    <div className="tileTop" style={{ paddingRight:20 }}>
+                      <span className="lbl">{p.ticker} · {p.acct === "TOD" ? `TOD ${p.weight}%` : `${p.weight}%`}</span>
+                    </div>
+                    <div className="valHero" style={{ fontSize:24, color:"#fff" }}>{ytdLabel}</div>
+                    {statsGrid}
+
+                    <div style={{ fontSize:10, color:p.color, fontWeight:600, marginTop:8 }}>{p.state}</div>
+
+                    <div style={{ position:"relative", height:5, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)", marginTop:6, marginBottom:4 }}>
+                      <div style={{ position:"absolute", left:"50%", top:-3, width:2, height:11, background:"#fff" }} />
+                      {p.pctVs200 != null && (
+                        <div style={{ position:"absolute", left:`${barPos}%`, top:-2.5, width:8, height:8, borderRadius:"50%", background:p.color, border:"2px solid #050a35", transform:"translateX(-50%)" }} />
+                      )}
+                    </div>
+                    <div className="sub">
+                      {p.pctVs200 != null ? `${p.pctVs200 >= 0 ? "+" : ""}${p.pctVs200.toFixed(1)}% vs 200-DMA` : "Loading"}
+                    </div>
+                  </div>
+                );
+              };
+
+              // Three sleeves at M2 weights (Mike's IRAs). VXUS and VTEB are
+              // TOD-only holdings, shown at their TOD weights and labeled
+              // "TOD" on the tile so the two sets of percentages don't mix.
+              const byTicker = (t: string) =>
+                positionCards.find(p => p.ticker === t) ?? candidateCards.find(p => p.ticker === t);
+              const equityCards = ["VEA", "SCHD", "VTI", "VTWO", "VIGI", "VXUS"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              const incomeCards = ["VTIP", "SGOV", "BND", "VTEB"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+              const altCards = ["GLDM", "DBMF"].map(byTicker).filter((p): p is NonNullable<typeof p> => !!p);
+
+              return (
+                <>
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
+                    Equity Sleeve
+                  </div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>M2 weights (Mike's IRAs) · VXUS shown at its TOD weight</div>
+                  <div className="grid5" style={{ marginBottom:16 }}>
+                    {equityCards.map(renderPositionTile)}
+                  </div>
+
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
+                    Fixed Income
+                  </div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>M2 weights · VTEB shown at its TOD weight (target 60%)</div>
+                  <div className="grid5" style={{ marginBottom:16 }}>
+                    {incomeCards.map(renderPositionTile)}
+                  </div>
+
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", marginBottom:2 }}>
+                    Alternatives Sleeve
+                  </div>
+                  <div style={{ fontSize:10, color:"#475569", marginBottom:6 }}>M2 weights · both held</div>
+                  <div className="grid5">
+                    {altCards.map(renderPositionTile)}
+                  </div>
+                </>
+              );
+            })()}
+          </section>
+
+          {/* ⓪-A COMPOSITE SCORE HERO — tile-style, matches Signal Inputs aesthetic */}
+          {(() => {
+            const pct = compositeScore / 16;
+            const gradColor = pct <= 0.25 ? "#4ade80" : pct <= 0.44 ? "#86efac" : pct <= 0.56 ? "#94a3b8" : pct <= 0.75 ? "#fbbf24" : "#ff6b88";
+
+            const regimeColor = regimeGate==="trend_broken"?"#ff6b88":regimeGate==="near_ma"?"#fbbf24":"#4ade80";
+            const regimeLabel = regimeGate==="trend_broken"?"RISK OFF":regimeGate==="near_ma"?"RISK WATCH":regimeGate==="reclaiming"?"RECLAIMING":"RISK ON";
+            const regimeSub = regimeGate==="trend_broken"?"Trend broken · floor at 35–40%":regimeGate==="near_ma"?"Within 3% of 200-DMA · watch closely":regimeGate==="reclaiming"?"Reclaiming MA · add first tranche":`SPX ${spx200Pct!=null?`+${spx200Pct.toFixed(1)}%`:"—"} above 200-DMA · trend intact`;
+
+            const actionLabel =
+              regimeGate==="trend_broken" ? "REDUCE EQUITY" :
+              regimeGate==="near_ma"      ? "WATCH CLOSELY" :
+              compositeScore >= 13 ? "HOLD POSITIONS" :
+              compositeScore >= 10 ? "ADD TO VALUE EQUITY" :
+              compositeScore >= 7  ? "DEPLOY INTO EQUITY" :
+              compositeScore >= 4  ? "BUY AGGRESSIVELY" : "FULLY INVESTED";
+
+            const actionColor =
+              regimeGate==="trend_broken" ? "#ff6b88" :
+              regimeGate==="near_ma"      ? "#fbbf24" :
+              compositeScore >= 13 ? "#fbbf24" :
+              compositeScore >= 10 ? "#94a3b8" :
+              "#4ade80";
+
+            const triggerWatch = hySpread >= 4
+              ? `HY TRIGGER ACTIVE — ${Math.round(hySpread*100)}bps`
+              : vixValue != null && vixValue >= 30
+              ? `VIX TRIGGER ACTIVE — ${vixValue.toFixed(1)}`
+              : `Both triggers clear`;
+
+            const triggerColor = hySpread >= 4 || (vixValue != null && vixValue >= 30) ? "#ff6b88" : "#4ade80";
+
+            return (
+              <section className="panel" style={{ marginBottom:8, padding:"12px 16px" }}>
+                <style>{`
+                  @media (max-width: 640px) { .hero-grid { grid-template-columns: 1fr 1fr !important; } }
+                `}</style>
+                <div className="hero-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
+
+                  {/* Tile 1 — Regime */}
+                  <div className="tile" style={{ background:"rgba(255,255,255,0.02)" }}>
+                    <div className="lbl" style={{ marginBottom:6 }}>Regime</div>
+                    <div style={{ fontSize:32, fontWeight:900, color:regimeColor, letterSpacing:"-0.02em", lineHeight:1 }}>{regimeLabel}</div>
+                    <div className="status" style={{ color:regimeColor, marginTop:6 }}>Trend is {regimeGate==="trend_broken"?"broken":"intact"}</div>
+                    <div className="sub" style={{ marginTop:4 }}>{regimeSub}</div>
+                    {spxPrice!=null && spx200!=null && (
+                      <div style={{ marginTop:8, display:"flex", gap:12 }}>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase" }}>SPX</div>
+                          <div style={{ fontSize:16, fontWeight:800, color:"#fff" }}>{fmtWhole(spxPrice)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase" }}>200-DMA</div>
+                          <div style={{ fontSize:16, fontWeight:800, color:"#64748b" }}>{fmtWhole(spx200)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase" }}>Gap</div>
+                          <div style={{ fontSize:16, fontWeight:800, color:regimeColor }}>{spx200Pct!=null?`${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}%`:"—"}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tile 2 — Action */}
+                  <div className="tile" style={{ background:"rgba(255,255,255,0.02)", position:"relative" }}>
+                    <div style={{ position:"absolute", top:10, right:10, fontSize:10, fontWeight:700, color:"#475569", background:"rgba(255,255,255,0.06)", borderRadius:20, padding:"2px 8px" }}>{compositeScore}/16</div>
+                    <div className="lbl" style={{ marginBottom:6, paddingRight:36 }}>Signal</div>
+                    <div style={{ fontSize:22, fontWeight:900, color:actionColor, letterSpacing:"-0.02em", lineHeight:1.1, marginBottom:6 }}>{actionLabel}</div>
+                    <div style={{ fontSize:11, color:"#64748b", marginBottom:10, lineHeight:1.5 }}>
+                      {compositeScore >= 13 ? "Most indicators cautious — hold allocation, protect capital" :
+                       compositeScore >= 10 ? "Market is trending — cautious tilt toward value equity" :
+                       compositeScore >= 7  ? "Conditions improving — deploy gradually into equities" :
+                       compositeScore >= 4  ? "Stress reversing — lean into equities" :
+                       "Deep value setup — maximum deployment"}
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155", marginBottom:3, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em" }}>
+                      <span>Deploy</span><span>Defensive</span>
+                    </div>
+                    <div style={{ position:"relative", height:5, borderRadius:9999, background:"linear-gradient(to right,#4ade80,#fbbf24,#ff6b88)", marginBottom:4 }}>
+                      <div style={{ position:"absolute", top:"50%", left:`${Math.max(4,Math.min((compositeScore/16)*100,96))}%`, transform:"translate(-50%,-50%)", width:10, height:10, borderRadius:"50%", background:"#fff", border:`2px solid ${gradColor}`, zIndex:2 }} />
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569" }}>
+                      {Math.round((compositeScore/8)*10)/10} of 8 indicators cautious
+                    </div>
+                  </div>
+
+                  {/* Tile 3 — Target Allocation */}
+                  <div className="tile" style={{ background:"rgba(255,255,255,0.02)" }}>
+                    <div className="lbl" style={{ marginBottom:6 }}>Target Equity Allocation</div>
+                    <div style={{ fontSize:36, fontWeight:900, color:"#fff", letterSpacing:"-0.03em", lineHeight:1 }}>{compositeAllocation}</div>
+                    <div className="sub" style={{ marginTop:8, lineHeight:1.6 }}>
+                      Fed is {fedStance==="tightening"?"raising rates — makes stocks less attractive":fedStance==="easing"?"cutting rates — supports stock valuations":"on hold — rates unchanged, watching data"}
+                    </div>
+                  </div>
+
+                  {/* Tile 4 — Weekly Change */}
+                  {(() => {
+                    const spxHistory: number[] = marketData?.spx_history ?? marketData?.metrics?.spx_history ?? [];
+                    const spxWeekAgo = spxHistory.length >= 6 ? spxHistory[spxHistory.length - 6] : null;
+                    const spxWeekPct = spxWeekAgo != null && spxPrice != null ? ((spxPrice - spxWeekAgo) / spxWeekAgo) * 100 : null;
+                    const spxWeekColor = spxWeekPct == null ? "#64748b" : spxWeekPct >= 0 ? "#4ade80" : "#ff6b88";
+
+                    // VIX vs 5 trading days ago, live from route.ts. If the
+                    // prior is unavailable the arrow hides (no hardcoded fallback).
+                    const vixPrior = getNum(metrics?.vix_week_ago, marketData?.vix_week_ago);
+                    const vixDelta = vixValue != null && vixPrior != null ? vixValue - vixPrior : null;
+                    // VIX down = good (calmer), up = bad (more fear)
+                    const vixColor = vixDelta == null ? "#64748b" : vixDelta <= 0 ? "#4ade80" : "#ff6b88";
+                    const vixArrow = vixDelta == null ? "—" : vixDelta <= 0 ? "↓" : "↑";
+
+                    // HY vs 5 business days ago (FRED), live from route.ts.
+                    const hyPrior = getNum(metrics?.hy_spread_week_ago, marketData?.hy_spread_week_ago);
+                    const hyDelta = hyPrior != null ? hySpread - hyPrior : null;
+                    // HY tighter = good, wider = bad
+                    const hyColor = hyDelta == null ? "#64748b" : hyDelta <= 0 ? "#4ade80" : "#ff6b88";
+                    const hyArrow = hyDelta == null ? "—" : hyDelta <= 0 ? "↓" : "↑";
+
+                    const weekLabel = spxWeekPct == null ? "—" : spxWeekPct >= 0 ? `+${spxWeekPct.toFixed(1)}%` : `${spxWeekPct.toFixed(1)}%`;
+                    const weekSummary = spxWeekPct == null ? "Loading" : spxWeekPct >= 1 ? "Conditions improving" : spxWeekPct >= 0 ? "Holding steady" : spxWeekPct >= -1 ? "Slight deterioration" : "Conditions worsening";
+
+                    return (
+                      <div className="tile" style={{ background:"rgba(255,255,255,0.02)" }}>
+                        <div className="lbl" style={{ marginBottom:4 }}>Week-over-Week</div>
+                        <div style={{ fontSize:32, fontWeight:900, color:spxWeekColor, letterSpacing:"-0.02em", lineHeight:1, marginBottom:4 }}>{weekLabel}</div>
+                        <div style={{ fontSize:11, color:spxWeekColor, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", marginBottom:10 }}>{weekSummary}</div>
+                        <div style={{ display:"grid", gap:6 }}>
+                          {/* SPX row */}
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                            <span style={{ fontSize:10, color:"#475569" }}>SPX</span>
+                            <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                              <span style={{ fontSize:10, color:"#64748b" }}>{spxPrice!=null?fmtWhole(spxPrice):"—"}</span>
+                              <span style={{ fontSize:11, fontWeight:700, color:spxWeekColor }}>{weekLabel}</span>
+                            </div>
+                          </div>
+                          {/* VIX row */}
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                            <span style={{ fontSize:10, color:"#475569" }}>VIX</span>
+                            <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                              <span style={{ fontSize:10, color:"#64748b" }}>{vixValue!=null?vixValue.toFixed(1):"—"}</span>
+                              <span style={{ fontSize:11, fontWeight:700, color:vixColor }}>{vixArrow} {vixDelta!=null?`${Math.abs(vixDelta).toFixed(1)}`:""}</span>
+                            </div>
+                          </div>
+                          {/* HY row */}
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                            <span style={{ fontSize:10, color:"#475569" }}>HY Spread</span>
+                            <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                              <span style={{ fontSize:10, color:"#64748b" }}>{Math.round(hySpread*100)}bps</span>
+                              <span style={{ fontSize:11, fontWeight:700, color:hyColor }}>{hyArrow} {hyDelta!=null?`${Math.abs(Math.round(hyDelta*100))}bps`:""}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ marginTop:8, fontSize:9, color:"#334155" }}>vs 5 trading days ago</div>
+                      </div>
+                    );
+                  })()}
+
+                </div>
+              </section>
+            );
+          })()}
+
+          {/* ⓪-B SIGNAL TILES — 7 scored variables */}
+          <section className="panel" style={{ marginBottom:16 }}>
+            <div className="panelHeader">
+              <div>
+                <div className="panelTitle">Signal Inputs</div>
+                <div className="panelSub">8 scored variables · 0–2 pts each · max 16 · drives composite score above</div>
+              </div>
+              <div style={{ fontSize:11, color:"#475569" }}>2 pts = defensive · 1 pt = neutral · 0 pts = deploy</div>
+            </div>
+            {(() => {
+              // Score dot badge — red=defensive(2pts) yellow=neutral(1pt) green=deploy(0pts)
+              const Badge = ({ score }: { score: number }) => {
+                const c = score === 2 ? "#ff6b88" : score === 1 ? "#fbbf24" : "#4ade80";
+                const glow = score === 2 ? "rgba(255,107,136,0.45)" : score === 1 ? "rgba(251,191,36,0.35)" : "rgba(74,222,128,0.4)";
+                return (
+                  <div style={{ position:"absolute", top:11, right:11, width:11, height:11, borderRadius:"50%", background:c, boxShadow:`0 0 6px ${glow}`, zIndex:3 }} />
+                );
+              };
+              // Gradient bar with dot-position marker — shared across tiles
+              const GradBar = ({ posPct, markerColor, reverse }: { posPct: number; markerColor: string; reverse?: boolean }) => (
+                <div style={{ position:"relative", height:5, borderRadius:9999, background: reverse ? "linear-gradient(to right,#ff6b88,#fbbf24,#4ade80)" : "linear-gradient(to right,#4ade80,#fbbf24,#ff6b88)", marginTop:10, marginBottom:4 }}>
+                  <div style={{ position:"absolute", top:"50%", left:`${Math.max(4,Math.min(posPct,96))}%`, transform:"translate(-50%,-50%)", width:9, height:9, borderRadius:"50%", background:"#fff", border:`2px solid ${markerColor}`, zIndex:2 }} />
+                </div>
+              );
+              return (
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
+
+                  {/* ── Row 1 ── */}
+
+                  {/* 1. CAPE */}
+                  <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("cape")}>
+                    <Badge score={compositeScores.cape} />
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>CAPE Ratio (Shiller P/E)</div>
+                    <div className="valHero" style={{ color:"#fff" }}>{capeRatio.toFixed(1)}<span style={{ fontSize:20, fontWeight:600 }}>x</span></div>
+                    <div className="status" style={{ color:capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {capeRatio>35?"Market stretched":capeRatio>25?"Market overvalued":capeRatio>20?"Fairly elevated":"Fairly valued"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {capeRatio>35?`${(capeRatio-16).toFixed(1)}x above long-run avg (16x)`:"Hist. avg ~16x · Dot-com peak 44x"}
+                    </div>
+                    <GradBar posPct={Math.max(0,Math.min((capeRatio-5)/45*100,100))} markerColor={capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80"} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Cheap</span><span>Fair</span><span>Stretched</span></div>
+                  </div>
+
+                  {/* 2. HY Spread */}
+                  <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("hy")}>
+                    <Badge score={compositeScores.hy} />
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>HY Spread</div>
+                    <div className="valHero" style={{ color:"#fff" }}>{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
+                    <div className="status" style={{ color:hySpread>=5?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {hySpread>=5?"Credit stress":hySpread>=4?"Trigger watch":hySpread>=3.5?"Credit caution":"Credit calm"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {hySpread>=4?`Trigger active · ${Math.round((5-hySpread)*100)}bps to red line`:`${Math.round((4-hySpread)*100)}bps to trigger · ${Math.round((5-hySpread)*100)}bps to red line`}
+                    </div>
+                    {(() => {
+                      const toPos = (v: number) => v<=3.5?Math.max(0,(v-2)/1.5*30):v<=4.5?30+(v-3.5)*20:v<=5?50+(v-4.5)*20:v<=7?60+(v-5)/2*25:Math.min(100,85+(v-7)/3*15);
+                      return <GradBar posPct={toPos(hySpread)} markerColor={hySpread>=5?"#ff6b88":hySpread>=3.5?"#fbbf24":"#4ade80"} />;
+                    })()}
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Calm</span><span style={{ color:"#fbbf24" }}>400</span><span style={{ color:"#ff6b88" }}>500</span><span>Stress</span></div>
+                  </div>
+
+                  {/* 3. VIX */}
+                  <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("vix")}>
+                    <Badge score={compositeScores.vix} />
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>VIX</div>
+                    <div className="valHero">{vixValue!=null?fmt1(vixValue):"—"}</div>
+                    <div className="status" style={{ color:vixValue==null?"#94a3b8":vixValue>=30?"#ff6b88":vixValue>=20?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {vixValue==null?"Loading":vixValue>=30?"Market stressed":vixValue>=20?"Market nervous":"Market calm"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {vixValue!=null&&vixValue>=30?"Stress trigger breached — pause buying":vixValue!=null?`${(30-vixValue).toFixed(1)} pts from stress level`:""}
+                    </div>
+                    <GradBar posPct={vixValue!=null?Math.min(vixValue/50*100,100):0} markerColor={vixValue==null?"#94a3b8":vixValue>=30?"#ff6b88":vixValue>=20?"#fbbf24":"#4ade80"} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Calm</span><span>Watch</span><span>Stress</span></div>
+                  </div>
+
+                  {/* 4. ERP */}
+                  <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("erp")}>
+                    <Badge score={compositeScores.erp??1} />
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>Equity Risk Premium</div>
+                    <div className="valHero" style={{ color:"#fff" }}>
+                      {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
+                    </div>
+                    <div className="status" style={{ color:erpStatus(erpBps).color, marginBottom:2 }}>
+                      {erpStatus(erpBps).shortLabel}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {erpBps!=null&&erpBps<200?"Stocks barely beating T-bills":erpBps!=null&&erpBps<500?`${((erpBps)/100).toFixed(2)}% equity premium — modest`:"Above 5% healthy threshold"}
+                    </div>
+                    <GradBar posPct={erpBps!=null?Math.max(0,Math.min((erpBps/1000)*100,100)):25} markerColor={erpStatus(erpBps).color} reverse />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Thin</span><span>Fair</span><span>Rich</span></div>
+                  </div>
+
+                  {/* 5. Buffett Indicator */}
+                  <div className="tile" style={{ position:"relative" }}>
+                    <Badge score={compositeScores.buffett} />
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>Buffett Indicator</div>
+                    <div className="valHero" style={{ color:"#fff" }}>{buffettSigma.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>σ</span></div>
+                    <div className="status" style={{ color:buffettSigma>1.5?"#ff6b88":buffettSigma>0.5?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {buffettSigma>1.5?"Market cap extreme":buffettSigma>0.5?"Market cap elevated":"Near fair value"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {buffettSigma>1.5?"Historic extreme vs GDP trend":buffettSigma>0.5?"Above long-run trend":"Near long-run trend"}
+                    </div>
+                    <GradBar posPct={Math.max(0,Math.min((buffettSigma/3)*100,100))} markerColor={buffettSigma>1.5?"#ff6b88":buffettSigma>0.5?"#fbbf24":"#4ade80"} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Fair</span><span>Elevated</span><span>Extreme</span></div>
+                  </div>
+
+                  {/* ── Row 2 ── */}
+
+                  {/* 6. Yield Curve */}
+                  <div className="tile" style={{ position:"relative" }}>
+                    <Badge score={compositeScores.yc} />
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>Yield Curve</div>
+                    <div className="valHero" style={{ color:"#fff" }}>{yieldCurve>=0?"+":""}{yieldCurve.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                    <div className="status" style={{ color:yieldCurve<-0.5?"#ff6b88":yieldCurve<0.5?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {yieldCurve<-0.5?"Curve inverted":yieldCurve<0.5?"Curve flat":"Curve healthy"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {yieldCurve<-0.5?"Recession signal historically active":yieldCurve<0.5?"Uncertain — watch closely":"Healthy term premium"}
+                    </div>
+                    <GradBar posPct={Math.max(0,Math.min(((yieldCurve+1)/2)*100,100))} markerColor={yieldCurve<-0.5?"#ff6b88":yieldCurve<0.5?"#fbbf24":"#4ade80"} reverse />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Inverted</span><span>Flat</span><span>Normal</span></div>
+                  </div>
+
+                  {/* 7. Breadth */}
+                  <div className="tile" style={{ position:"relative" }}>
+                    <Badge score={compositeScores.breadth} />
+                    <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>Breadth</div>
+                    <div className="valHero" style={{ color:"#fff" }}>{breadthPct!=null?breadthPct.toFixed(0):"—"}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                    <div className="status" style={{ color:breadthPct==null?"#94a3b8":breadthPct<50?"#ff6b88":breadthPct<70?"#fbbf24":"#4ade80", marginBottom:2 }}>
+                      {breadthPct==null?"Loading":breadthPct<50?"Broad selling":breadthPct<70?"Mixed internals":"Broad participation"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                      {breadthPct!=null?`${breadthPct.toFixed(0)}% of S&P 500 above 200-DMA`:"Live $SPXA200R"}
+                    </div>
+                    <GradBar posPct={breadthPct??50} markerColor={breadthPct==null?"#94a3b8":breadthPct<50?"#ff6b88":breadthPct<70?"#fbbf24":"#4ade80"} reverse />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>Weak</span><span>Mixed</span><span>Strong</span></div>
+                  </div>
+
+                  {/* 8. Ivy Portfolio */}
+                  {(() => {
+                    const ivyDotColor = ivyInvestedCount>=5?"#4ade80":ivyInvestedCount>=3?"#fbbf24":"#ff6b88";
+                    const ivyScore = ivyInvestedCount>=5?0:ivyInvestedCount>=3?1:2;
+                    return (
+                      <div className="tile" style={{ position:"relative" }}>
+                        <Badge score={ivyScore} />
+                        <div className="lbl" style={{ marginBottom:4, paddingRight:22 }}>Ivy Portfolio</div>
+                        <div className="valHero" style={{ color:"#fff" }}>{ivyInvestedCount}<span style={{ fontSize:20, fontWeight:600 }}>/5</span></div>
+                        <div className="status" style={{ color:ivyDotColor, marginBottom:2 }}>
+                          {ivyInvestedCount>=5?"All trends invested":ivyInvestedCount>=3?"Partial signal active":"Trend breakdown"}
+                        </div>
+                        <div style={{ fontSize:10, color:"#475569", marginBottom:2 }}>
+                          {ivyInvestedCount>=5?"10-mo SMA · full trend confirmation":ivyInvestedCount>=3?"Some assets near cash signal":"Multiple assets below 10-mo SMA"}
+                        </div>
+                        <GradBar posPct={(ivyInvestedCount/5)*100} markerColor={ivyDotColor} reverse />
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155" }}><span>0/5</span><span>3/5</span><span>5/5</span></div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 9. 200-DMA — display only */}
+                  {(() => {
+                    const stColor = is200Broken?(spxDailyPct!=null&&spxDailyPct>0?"#fbbf24":"#ff6b88"):spx200Pct!=null&&spx200Pct<=3?"#fbbf24":"#4ade80";
+                    return (
+                      <div className="tile" style={{ position:"relative" }}>
+                        <div style={{ position:"absolute", top:8, right:8, fontSize:9, color:"#334155", fontWeight:600 }}>display</div>
+                        <div className="lbl" style={{ marginBottom:6, paddingRight:36 }}>200-DMA</div>
+                        <div className="valHero" style={{ color:"#fff" }}>{spx200Pct!=null?`${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}`:"—"}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                        <div className="status" style={{ color:stColor }}>{dmaState(spx200Pct, slope200, true)}</div>
+                        <div className="sub" style={{ marginTop:4 }}>
+                          {spx200Pct!=null?`SPX ${spx200Pct>=0?"above":"below"} ${fmtWhole(spx200)} · Slope ${slope200!=null?(slope200>0?"↗":"↘"):"—"} ${slope200!=null?slope200.toFixed(1)+"%":""}`:"Waiting"}
+                        </div>
+                        <div style={{ fontSize:9, color:"#334155", marginTop:6 }}>Display only · not scored · Roberts&apos; primary trigger</div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 10. Roberts 40-Week Signal — Reduce / Hold / Re-entry */}
+                  {(() => {
+                    const ma40w = spx200;
+                    const pctAbove = spx200Pct;
+                    const isBelow = is200Broken;
+                    const isReclaiming = isBelow && spxDailyPct != null && spxDailyPct > 0;
+                    const isTesting = !isBelow && pctAbove != null && pctAbove <= 3;
+
+                    const state =
+                      isBelow && !isReclaiming ? "trend_broken" :
+                      isReclaiming             ? "reclaiming"   :
+                      isTesting                ? "near_ma"      : "trend_intact";
+
+                    const stateLabel =
+                      state === "trend_broken" ? "RISK OFF" :
+                      state === "reclaiming"   ? "RECLAIMING" :
+                      state === "near_ma"      ? "RISK WATCH" : "RISK ON";
+
+                    const stateColor =
+                      state === "trend_broken" ? "#ff6b88" :
+                      state === "reclaiming"   ? "#60a5fa" :
+                      state === "near_ma"      ? "#fbbf24" : "#4ade80";
+
+                    const stateNote =
+                      state === "trend_broken" ? "Below 40-wk MA · trim 10–20%" :
+                      state === "reclaiming"   ? "Reclaimed MA · add tranche 1" :
+                      state === "near_ma"      ? `${pctAbove?.toFixed(1)}% above · watch` :
+                      `${pctAbove?.toFixed(1)}% above · trend intact`;
+
+                    const t1 = !isBelow && pctAbove != null && pctAbove > 0;
+                    const t2 = t1 && pctAbove != null && pctAbove > 3;
+                    const t3 = t2 && breadthPct != null && breadthPct > 55;
+
+                    const barPct = pctAbove != null ? Math.max(0, Math.min(50 + pctAbove * 2, 100)) : 50;
+
+                    return (
+                      <div className="tile" style={{ position:"relative", cursor:"pointer" }} onClick={() => setModal("roberts40w")}>
+                        <div style={{ position:"absolute", top:8, right:8, fontSize:9, color:"#334155", fontWeight:600 }}>display</div>
+                        <div className="lbl" style={{ marginBottom:4, paddingRight:36, fontSize:10 }}>40-Week Signal</div>
+
+                        <div style={{ fontSize:20, fontWeight:900, color:stateColor, letterSpacing:"-0.01em", lineHeight:1, marginBottom:3 }}>
+                          {stateLabel}
+                        </div>
+                        <div style={{ fontSize:10, color:"#64748b", lineHeight:1.4, marginBottom:6 }}>{stateNote}</div>
+
+                        {/* Proximity bar */}
+                        <div style={{ position:"relative", height:3, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80,#fbbf24,#ff6b88)", marginBottom:6 }}>
+                          <div style={{ position:"absolute", top:-3, left:`${barPct}%`, transform:"translateX(-50%)", width:2, height:9, background:"#fff", borderRadius:2 }} />
+                        </div>
+
+                        {/* Tranche tracker — compact */}
+                        <div style={{ fontSize:9, fontWeight:700, color:"#475569", letterSpacing:"0.08em", marginBottom:4 }}>RE-ENTRY</div>
+                        {[
+                          { label:"① MA Reclaimed", active:t1 },
+                          { label:"② Retest Holds", active:t2 },
+                          { label:"③ Breadth >55%", active:t3 },
+                        ].map(r => (
+                          <div key={r.label} style={{ display:"flex", alignItems:"center", gap:5, marginBottom:3 }}>
+                            <div style={{ width:7, height:7, borderRadius:"50%", background:r.active?"#4ade80":"#202a64", border:`1px solid ${r.active?"#4ade80":"#334155"}`, flexShrink:0 }} />
+                            <div style={{ fontSize:9, color:r.active?"#4ade80":"#475569" }}>{r.label}</div>
+                          </div>
+                        ))}
+                        <div style={{ fontSize:9, color:"#334155", marginTop:4, lineHeight:1.4 }}>
+                          {t3?"All tranches ✓ — re-entry confirmed":t2?"Await breadth confirm":t1?"Await retest":"Await MA reclaim"}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                </div>
+              );
+            })()}
+          </section>
+
+          {/* ③ SPX TECHNICAL CHART */}
+          <section className="panel">
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div>
+                <div className="panelTitle">S&P 500 — Technical Chart</div>
+                <div className="panelSub">Price · Moving Averages · Bollinger Bands · RSI · MACD</div>
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                {rangeBtn("1M",21)}{rangeBtn("3M",63)}{rangeBtn("6M",126)}{rangeBtn("1Y",252)}
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:16, marginBottom:10, flexWrap:"wrap" }}>
+              {[["SPX","#60a5fa"],["20-DMA","#fbbf24"],["50-DMA","#a78bfa"],["100-DMA","#f97316"],["200-DMA","#ef4444"]].map(([l,c])=>(
+                <span key={l} style={{ fontSize:11, color:"#94a3b8", display:"flex", alignItems:"center", gap:5 }}>
+                  <span style={{ width:18, height:2, background:c, display:"inline-block" }} />{l}
+                </span>
+              ))}
+              <span style={{ fontSize:11, color:"#94a3b8", display:"flex", alignItems:"center", gap:5 }}>
+                <span style={{ width:18, height:4, background:"rgba(148,163,184,0.2)", display:"inline-block", borderRadius:1 }} />Bollinger
+              </span>
+            </div>
+            <div style={{ position:"relative", width:"100%", height:320 }}><canvas id="spxPriceChart" /></div>
+            <div style={{ marginTop:4 }}>
+              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", margin:"8px 0 3px" }}>RSI (14)</div>
+              <div style={{ position:"relative", width:"100%", height:80 }}><canvas id="spxRsiChart" /></div>
+            </div>
+            <div style={{ marginTop:4 }}>
+              <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#475569", margin:"8px 0 3px" }}>MACD (12, 26, 9)</div>
+              <div style={{ position:"relative", width:"100%", height:90 }}><canvas id="spxMacdChart" /></div>
+            </div>
+          </section>
+
+          {/* ② STRESS CONFIRMATION */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div><div className="panelTitle">Stress Confirmation</div><div className="panelSub">Layer 2: Stress signals — is the 200-DMA break real or a head-fake? · Layer 3: Dow Theory — economic confirmation</div></div>
+            </div>
+
+            <div className="grid5" style={{ marginBottom:8 }}>
+              {/* 1. HY Spread */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("hy")}>
+                <div className="lbl" style={{ marginBottom:6 }}>HY Spread</div>
+                <div className="valHero" style={{ color:"#fff" }}>{Math.round(hySpread*100)}<span style={{ fontSize:20, fontWeight:600 }}>bps</span></div>
+                <div className="status" style={{ color:hySpread>=5?"#ff6b88":hySpread>=4?"#fbbf24":hySpread>=3.5?"#fbbf24":hySpread>=3?"#94a3b8":"#4ade80" }}>
+                  {hySpread>=5?"Stress":hySpread>=4?"⚠ Trigger":hySpread>=3.5?"Caution":hySpread>=3?"Firm":"Tight"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  {(() => {
+                    const toPos = (v: number) =>
+                      v <= 3.5 ? Math.max(0,(v-2)/1.5*30)
+                      : v <= 4.5 ? 30+(v-3.5)*20
+                      : v <= 5   ? 50+(v-4.5)*20
+                      : v <= 7   ? 60+(v-5)/2*25
+                      : Math.min(100, 85+(v-7)/3*15);
+                    const pos = toPos(hySpread);
+                    const p400 = toPos(4); const p500 = toPos(5);
+                    return <>
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos,p400)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {hySpread>4 && <div style={{ position:"absolute", left:`${p400}%`, top:0, height:6, width:`${Math.min(pos,p500)-p400}%`, background:"#fbbf24" }} />}
+                      {hySpread>5 && <div style={{ position:"absolute", left:`${p500}%`, top:0, height:6, width:`${pos-p500}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                      {/* 400bps tick — your trigger (thin) */}
+                      <div style={{ position:"absolute", top:-4, left:`${p400}%`, width:2, height:14, background:"rgba(255,255,255,0.6)", borderRadius:2, zIndex:2 }} />
+                      {/* 500bps tick — industry red line (heavy) */}
+                      <div style={{ position:"absolute", top:-6, left:`${p500}%`, width:3, height:18, background:"rgba(255,255,255,0.9)", borderRadius:2, zIndex:2 }} />
+                    </>;
+                  })()}
+                </div>
+                {/* Scale labels — positioned using same toPos function so they align with ticks */}
+                {(() => {
+                  const toPos = (v: number) =>
+                    v <= 3.5 ? Math.max(0,(v-2)/1.5*30)
+                    : v <= 4.5 ? 30+(v-3.5)*20
+                    : v <= 5   ? 50+(v-4.5)*20
+                    : v <= 7   ? 60+(v-5)/2*25
+                    : Math.min(100, 85+(v-7)/3*15);
+                  const labels: [number, string][] = [[2,"200"],[4,"400"],[5,"500"],[7,"700"],[10,"1000+"]];
+                  return (
+                    <div style={{ position:"relative", height:14, marginTop:4 }}>
+                      {labels.map(([v, lbl]) => (
+                        <span key={lbl} style={{
+                          position:"absolute",
+                          left:`${toPos(v)}%`,
+                          transform:"translateX(-50%)",
+                          fontSize:10, color: v===4?"#fbbf24": v===5?"#ff6b88":"#475569",
+                          fontWeight: v===4||v===5 ? 700 : 400,
+                        }}>{lbl}</span>
+                      ))}
+                    </div>
+                  );
+                })()}
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {hySpread>=4 ? `▲ Trigger active · ${Math.round((5-hySpread)*100)}bps to red line`
+                  : `▲ ${Math.round((4-hySpread)*100)}bps to trigger · ${Math.round((5-hySpread)*100)}bps to red line`}
+                </div>
+              </div>
+              {/* 2. VIX */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("vix")}>
+                <div className="lbl" style={{ marginBottom:6 }}>VIX</div>
+                <div className="valHero">{vixValue != null ? fmt1(vixValue) : "—"}</div>
+                <div className="status" style={{ color:vixStatus.color }}>{vixValue==null?"Loading":vixValue>=30?"Stress":vixValue>=20?"Watch":"Normal"}</div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  {(() => {
+                    const v = vixValue ?? 0;
+                    const pos = Math.min(v/50*100,100);
+                    const p20 = 40; const p30 = 60;
+                    return <>
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos,p20)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {v>20 && <div style={{ position:"absolute", left:`${p20}%`, top:0, height:6, width:`${Math.min(pos,p30)-p20}%`, background:"#fbbf24" }} />}
+                      {v>30 && <div style={{ position:"absolute", left:`${p30}%`, top:0, height:6, width:`${pos-p30}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                    </>;
+                  })()}
+                  <div style={{ position:"absolute", top:-4, left:"40%", width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-6, left:"60%", width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0</span><span>20</span><span>30↑</span><span>50</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {vixValue!=null&&vixValue>=30?"▲ Stress — pause buying":vixValue!=null?`▲ ${(30-vixValue).toFixed(1)} pts from Stress`:""}
+                </div>
+              </div>
+              {/* 3. ERP */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("erp")}>
+                <div className="lbl" style={{ marginBottom:6 }}>Equity Risk Premium</div>
+                <div className="valHero" style={{ color:"#fff" }}>
+                  {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:18, fontWeight:600 }}>{erpBps!=null?"%":""}</span>
+                </div>
+                <div className="status" style={{ color:erpStatus(erpBps).color }}>
+                  {erpStatus(erpBps).shortLabel}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:"25%", background:"#ef4444", borderRadius:"9999px 0 0 9999px" }} />
+                  {erpBps!=null && erpBps>200 && (
+                    <div style={{ position:"absolute", left:"25%", top:0, height:6, width:`${Math.max(0,Math.min(((erpBps-200)/800)*100,75))}%`, background:"#fbbf24" }} />
+                  )}
+                  <div style={{ position:"absolute", top:-6, left:"25%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:"62.5%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ fontSize:11, marginTop:8, fontWeight:600, color:erpStatus(erpBps).tier==="danger"?"#ff6b88":erpStatus(erpBps).tier==="watch"?"#fbbf24":"#64748b" }}>
+                  {erpBps!=null&&erpBps<200?"▼ In danger zone":erpBps!=null&&erpBps<500?`▼ ${((erpBps-200)/100).toFixed(2)}% from danger`:"Above healthy threshold"}
+                </div>
+              </div>
+              {/* 4. DXY */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("dxy")}>
+                <div className="lbl" style={{ marginBottom:6 }}>US Dollar (DXY)</div>
+                <div className="valHero" style={{ color:"#fff" }}>{dxy!=null?dxy.toFixed(2):"—"}</div>
+                <div className="status" style={{ color:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }}>
+                  {dxy==null?"Loading":dxy>104?"Strong":dxy>100?"Elevated":"Neutral"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((dxy??100)-88)/32*100,100))}%`, borderRadius:9999, background:dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((100-88)/32)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.5)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:`${((104-88)/32)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>88</span><span>100</span><span>104</span><span>120</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {dxyChangePct!=null?`${dxyChangePct>0?"▲":"▼"} ${Math.abs(dxyChangePct).toFixed(2)}% today`:"↑ Dollar = tighter liquidity"}
+                </div>
+              </div>
+              {/* 5. Advance/Decline Line */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("ad")}>
+                <div className="lbl" style={{ marginBottom:8 }}>Advance / Decline</div>
+
+                {/* ── Divergence Arrow Display ── */}
+                {(() => {
+                  const adDir = adLine?.adTrend === "higher_lows" ? "up"
+                    : adLine?.adTrend === "lower_lows" ? "down" : "flat";
+                  const spxDir = adLine?.spxTrend === "rising" ? "up"
+                    : adLine?.spxTrend === "falling" ? "down" : "flat";
+                  const isDiverging = adDir !== spxDir;
+                  const adColor = adDir === "up" ? "#4ade80" : adDir === "down" ? "#ff6b88" : "#fbbf24";
+                  const spxColor = spxDir === "up" ? "#4ade80" : spxDir === "down" ? "#ff6b88" : "#fbbf24";
+                  const adArrow = adDir === "up" ? "↗" : adDir === "down" ? "↘" : "→";
+                  const spxArrow = spxDir === "up" ? "↗" : spxDir === "down" ? "↘" : "→";
+                  return (
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
+                      {/* A/D arrow */}
+                      <div style={{ flex:1, background:"#141b47", borderRadius:8, padding:"7px 8px", textAlign:"center" }}>
+                        <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:3 }}>A/D Line</div>
+                        <div style={{ fontSize:22, fontWeight:800, color:adColor, lineHeight:1 }}>{adArrow}</div>
+                        <div style={{ fontSize:10, fontWeight:600, color:adColor, marginTop:2 }}>
+                          {adDir === "up" ? "Higher Lows" : adDir === "down" ? "Lower Lows" : "Flat"}
+                        </div>
+                      </div>
+                      {/* Divergence indicator */}
+                      <div style={{ display:"flex", flexDirection:"column" as const, alignItems:"center", gap:2 }}>
+                        <div style={{ width:18, height:18, borderRadius:"50%", background: isDiverging ? "rgba(251,191,36,0.2)" : "rgba(148,163,184,0.1)", border:`1px solid ${isDiverging?"#fbbf24":"#334155"}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9 }}>
+                          {isDiverging ? "≠" : "="}
+                        </div>
+                        <div style={{ fontSize:8, color: isDiverging ? "#fbbf24" : "#334155", fontWeight:700, textTransform:"uppercase" as const }}>
+                          {isDiverging ? "DIV" : "CON"}
+                        </div>
+                      </div>
+                      {/* SPX arrow */}
+                      <div style={{ flex:1, background:"#141b47", borderRadius:8, padding:"7px 8px", textAlign:"center" }}>
+                        <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:3 }}>SPX</div>
+                        <div style={{ fontSize:22, fontWeight:800, color:spxColor, lineHeight:1 }}>{spxArrow}</div>
+                        <div style={{ fontSize:10, fontWeight:600, color:spxColor, marginTop:2 }}>
+                          {spxDir === "up" ? "Rising" : spxDir === "down" ? "Falling" : "Flat"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* ── Signal Strength Bar ── */}
+                {(() => {
+                  // Map signal to position: bullish_divergence=10, neutral=50, confirming_weakness=90
+                  const barPos = adLine?.signal === "bullish_divergence" ? 10
+                    : adLine?.signal === "confirming_weakness" ? 90
+                    : adLine?.signal === "bearish_divergence" ? 80 : 50;
+                  const sigColor = adLine?.signal === "bullish_divergence" ? "#4ade80"
+                    : (adLine?.signal === "confirming_weakness" || adLine?.signal === "bearish_divergence") ? "#ff6b88" : "#fbbf24";
+                  return (
+                    <div style={{ marginBottom:8 }}>
+                      <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", overflow:"visible" }}>
+                        {/* Green left zone */}
+                        <div style={{ position:"absolute", left:0, top:0, height:6, width:"33%", background:"rgba(74,222,128,0.25)", borderRadius:"9999px 0 0 9999px" }} />
+                        {/* Amber center zone */}
+                        <div style={{ position:"absolute", left:"33%", top:0, height:6, width:"34%", background:"rgba(251,191,36,0.2)" }} />
+                        {/* Red right zone */}
+                        <div style={{ position:"absolute", left:"67%", top:0, height:6, width:"33%", background:"rgba(239,68,68,0.25)", borderRadius:"0 9999px 9999px 0" }} />
+                        {/* Needle */}
+                        <div style={{ position:"absolute", top:-5, left:`calc(${barPos}% - 5px)`, width:10, height:16, borderRadius:3, background:sigColor, zIndex:2, boxShadow:`0 0 6px ${sigColor}` }} />
+                      </div>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, color:"#334155", marginTop:4 }}>
+                        <span style={{ color:"#4ade80" }}>Hidden Strength</span>
+                        <span style={{ color:"#fbbf24" }}>Neutral</span>
+                        <span style={{ color:"#ff6b88" }}>Weak Breadth</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div style={{ fontSize:9, color:"#334155", marginTop:2 }}>Updated {adLine?.updatedDate ?? "—"} · Manual</div>
+              </div>
+            </div>
+
+            {/* ── Confluence banner — action-oriented state machine ── */}
+            {(() => {
+              const signals = [
+                hySpread < 4,
+                vixValue != null && vixValue < 30,
+                erpBps != null && erpBps >= 300,
+                dxy != null && dxy < 104,
+                adLine?.signal === "bullish_divergence" || adLine?.signal === "neutral",
+                schannepSignal === "bull" || schannepSignal === "non_confirmation_bull",
+              ];
+              const greenCount = signals.filter(Boolean).length;
+              const redCount = 6 - greenCount;
+              const labels = ["HY","VIX","ERP","DXY","A/D","DowTh"];
+
+              // ── State machine: 4 states based on 200-DMA + confirmation count ──
+              type ConfluenceState = "intact" | "headfake" | "mixed" | "confirmed";
+              const state: ConfluenceState =
+                !is200Broken                      ? "intact"
+                : greenCount >= 5                 ? "headfake"
+                : greenCount >= 3                 ? "mixed"
+                :                                   "confirmed";
+
+              // Action sentences — keyed to your specific portfolio and levels
+              const spx200Str  = fmtWhole(spx200);
+              const spxStr     = spxPrice != null ? fmtWhole(spxPrice) : "—";
+              const hyTrigStr  = `HY ${hySpread.toFixed(2)}% (trigger: 4.00%)`;
+              const vixStr     = vixValue != null ? `VIX ${fmt1(vixValue)}` : "VIX —";
+
+              const stateConfig: Record<ConfluenceState, {
+                badge: string; badgeColor: string; borderColor: string;
+                title: string; titleColor: string;
+                action: string; actionColor: string;
+              }> = {
+                intact: {
+                  badge: "HOLD",
+                  badgeColor: "#475569",
+                  borderColor: "rgba(71,85,105,0.3)",
+                  title: `200-DMA intact · ${spxStr} vs ${spx200Str} · No defensive action`,
+                  titleColor: "#64748b",
+                  action: `Signals are for context only. 200-DMA is holding — no rule-based trigger is active. Continue current 40/60 positioning. Next watch: two consecutive Friday closes below ${spx200Str}.`,
+                  actionColor: "#64748b",
+                },
+                headfake: {
+                  badge: "HOLD",
+                  badgeColor: "#4ade80",
+                  borderColor: "rgba(74,222,128,0.35)",
+                  title: `Head-Fake Signal · ${greenCount}/6 healthy · Credit & Transports NOT confirming break`,
+                  titleColor: "#4ade80",
+                  action: `${greenCount} of 6 signals remain healthy (${hyTrigStr}, ${vixStr} below 30). Roberts' scorecard: 200-DMA slope still rising, RSI oversold, AAII bears elevated — matches 2015/Q4 2018 brief breaks, not 2008. Schannep signal: ${schannepLabel} — Dow Theory not confirming a bear. Brief breaks without credit+transport confirmation produced +19.8% avg 12-month returns. Hold VTI, SCHD, VEA. Do NOT trim equity into this flush. Watch the 200-DMA slope weekly — if it begins declining, the thesis shifts. Two Friday closes below ${spx200Str} with credit confirmation remains the only rule-based trigger.`,
+                  actionColor: "#4ade80",
+                },
+                mixed: {
+                  badge: "WATCH",
+                  badgeColor: "#fbbf24",
+                  borderColor: "rgba(245,158,11,0.4)",
+                  title: `Mixed Confirmation · ${greenCount}/6 healthy · Elevated caution`,
+                  titleColor: "#fbbf24",
+                  action: `${redCount} of 6 signals are flashing (${signals.map((g,i) => !g ? labels[i] : null).filter(Boolean).join(", ")}). Downside risk is real but not yet rule-based. Raise mental stops on VTI at ${spx200Str} SPX. Ensure SGOV + VTIP are at full allocation. Do not add new equity risk. If one more signal breaks — move to Confirmed state and trim VTI.`,
+                  actionColor: "#fbbf24",
+                },
+                confirmed: {
+                  badge: "ACT",
+                  badgeColor: "#ff6b88",
+                  borderColor: "rgba(239,68,68,0.55)",
+                  title: `Confirmed Stress · ${greenCount}/6 healthy · Defense trigger active`,
+                  titleColor: "#ff6b88",
+                  action: `${redCount} of 6 signals confirmed (${signals.map((g,i) => !g ? labels[i] : null).filter(Boolean).join(", ")}). Rule-based defensive action: trim VTI from 10% → 5%, move proceeds to SGOV. Hold SCHD and VEA — quality equity with lower drawdown profiles. Do not touch SGOV, VTIP, VGIT, or GLDM. Reset trigger: two weekly closes back above ${spx200Str} with VIX sustainably below 20.`,
+                  actionColor: "#ff6b88",
+                },
+              };
+
+              const v = stateConfig[state];
+
+              return (
+                <div style={{ background:"#0f172a", border:`1px solid ${v.borderColor}`, borderRadius:10, padding:"12px 14px", marginTop:0 }}>
+                  {/* Row 1: badge + title + signal pills */}
+                  <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" as const, marginBottom:8 }}>
+                    <span style={{ fontSize:10, fontWeight:800, letterSpacing:"0.08em", padding:"2px 8px", borderRadius:4, background:`${v.badgeColor}22`, color:v.badgeColor, border:`1px solid ${v.badgeColor}55`, flexShrink:0 }}>{v.badge}</span>
+                    <span style={{ fontSize:12, fontWeight:700, color:v.titleColor }}>{v.title}</span>
+                    <span style={{ marginLeft:"auto", display:"flex", gap:6, flexWrap:"wrap" as const }}>
+                      {signals.map((g, i) => (
+                        <span key={i} style={{ fontSize:10, fontWeight:700, color: g ? "#4ade80" : "#ff6b88", background: g ? "rgba(74,222,128,0.08)" : "rgba(239,68,68,0.08)", padding:"1px 7px", borderRadius:4, border:`1px solid ${g ? "rgba(74,222,128,0.2)" : "rgba(239,68,68,0.2)"}` }}>
+                          {g ? "✓" : "✗"} {labels[i]}
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                  {/* Row 2: action sentence */}
+                  <div style={{ fontSize:12, color:v.actionColor === "#64748b" ? "#475569" : "#94a3b8", lineHeight:1.6, borderTop:"1px solid rgba(255,255,255,0.04)", paddingTop:8 }}>
+                    <span style={{ fontWeight:700, color:v.actionColor, marginRight:6 }}>→</span>{v.action}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── Layer 3: Dow Theory Confirmation ── */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", margin:"10px 0 6px" }}>
+              Dow Theory — Market Confirmation
+            </div>
+            <div className="grid5">
+
+              {/* DJT Price tile */}
+              <div className="tile">
+                <div className="tileTop">
+                  <span className="lbl">Transports</span>
+                  <span className="ytd">DJT</span>
+                </div>
+                <div className="valHero">{djtPrice != null ? fmtWhole(djtPrice) : "—"}</div>
+                {djtTrend14d.length > 0 && (
+                  <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(djtTrend14d, djtChangePct != null && djtChangePct >= 0 ? "#4ade80" : "#ff6b88") }} />
+                )}
+                <div className="subSpx">
+                  {djtChangePct != null
+                    ? `${djtChangePct >= 0 ? "▲" : "▼"} ${Math.abs(djtChangePct).toFixed(1)}% today`
+                    : "Dow Jones Transports"}
+                </div>
+              </div>
+
+              {/* DJT 200-DMA tile */}
+              <div className={!djtAbove200 ? "tile tile200Red" : "tile tile200"}>
+                <div className="tileTop">
+                  <span className="lbl" style={{ color: !djtAbove200 ? "#ff6b88" : "#f59e0b" }}>DJT 200-DMA</span>
+                  <span className="badge" style={{ background: !djtAbove200 ? "#ef4444" : "#f59e0b", color: !djtAbove200 ? "#fff" : "#000" }}>!</span>
+                </div>
+                <div className="valHero">{djt200dma != null ? fmtWhole(djt200dma) : "—"}</div>
+                <div className="status" style={{ color: djtVs200 == null ? "#94a3b8" : !djtAbove200 ? "#ff6b88" : djtVs200 <= 2 ? "#fbbf24" : "#4ade80" }}>
+                  {djtVs200 == null ? "Loading" : !djtAbove200 ? "Bearish" : djtVs200 <= 2 ? "Testing Support" : "Holding Above"}
+                </div>
+                <div className="sub" style={{ color: !djtAbove200 ? "#ff6b88" : "#f59e0b" }}>
+                  {djtVs200 != null ? `DJT ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}% ${djtVs200 >= 0 ? "above" : "below"}` : "Waiting"}
+                </div>
+                {djt200slope != null && (
+                  <div style={{ fontSize:10, marginTop:3, fontWeight:700, color: djt200slope > 0.02 ? "#4ade80" : djt200slope < -0.02 ? "#ff6b88" : "#fbbf24" }}>
+                    Slope {djt200slope > 0 ? "↗ +" : djt200slope < 0 ? "↘ " : "→ "}{djt200slope.toFixed(1)}% · {djt200slope > 0.02 ? "Bullish" : djt200slope < -0.02 ? "Bearish" : "Neutral"}
+                  </div>
+                )}
+              </div>
+
+              {/* Market Confirmation (Dow Theory) — spans 3 */}
+              {(() => {
+                // ── Slope-aware state machine ─────────────────────────────────
+                // Uses both position (above/below 200-DMA) AND slope direction
+                // to avoid false positives where price is barely above but trend rolling over
+                const spxRising = slope200 != null && slope200 > 0.02;
+                const spxFalling = slope200 != null && slope200 < -0.02;
+                const djtRising = djt200slope != null && djt200slope > 0.02;
+                const djtFalling = djt200slope != null && djt200slope < -0.02;
+
+                // 5-state machine: confirmed up/down + 3 shades of non-confirmation
+                type ConfState = "confirmed_bull" | "confirmed_bear" | "non_conf_transition" | "non_conf_bear_warn" | "non_conf_bull_recovery";
+                const confState: ConfState =
+                  // Both above AND both rising = clean bull
+                  (!is200Broken && djtAbove200 && spxRising && djtRising)   ? "confirmed_bull" :
+                  // Both below AND both falling = confirmed bear
+                  (is200Broken && !djtAbove200 && spxFalling && djtFalling)  ? "confirmed_bear" :
+                  // SPX below, DJT above = classic non-confirmation (most common transition state)
+                  (is200Broken && djtAbove200)                               ? "non_conf_bull_recovery" :
+                  // SPX above, DJT below = leading warning (economy rolling before equities)
+                  (!is200Broken && !djtAbove200)                             ? "non_conf_bear_warn" :
+                  // Everything else = transition (above/below but slopes not aligned)
+                                                                               "non_conf_transition";
+
+                const stateLabel: Record<ConfState, string> = {
+                  confirmed_bull:        "✅ Confirmed Uptrend",
+                  confirmed_bear:        "🔴 Confirmed Downtrend",
+                  non_conf_transition:   "⚠️ Non-Confirmation — Transition",
+                  non_conf_bear_warn:    "⚠️ Early Warning — Transports Leading Down",
+                  non_conf_bull_recovery:"⚠️ Non-Confirmation — Potential Recovery",
+                };
+                const stateColor: Record<ConfState, string> = {
+                  confirmed_bull:        "#4ade80",
+                  confirmed_bear:        "#ff6b88",
+                  non_conf_transition:   "#fbbf24",
+                  non_conf_bear_warn:    "#ff6b88",
+                  non_conf_bull_recovery:"#fbbf24",
+                };
+                const stateInterpretation: Record<ConfState, string> = {
+                  confirmed_bull:        "Structural agreement: both equity and economic trend rising above long-term averages. High-probability bull environment. Pullbacks are buyable.",
+                  confirmed_bear:        "Structural confirmation: equity weakness and economic deterioration aligned. Both indices below falling 200-DMAs. Rallies are suspect — this is the highest-conviction bear signal in this framework.",
+                  non_conf_transition:   "Mixed signals: one or both indices above/below 200-DMA but slopes not aligned. Early-stage regime shift. Monitor weekly — slope convergence will resolve direction.",
+                  non_conf_bear_warn:    "Early warning: Transports breaking down while equities still elevated — historically a leading indicator of economic weakness before it shows in large-caps. Watch for SPX confirmation.",
+                  non_conf_bull_recovery:"Structural disagreement: equity trend weakening while economic activity remains firm. Historically resolves with either SPX reclaim OR DJT breakdown.",
+                };
+                const stateResolution: Record<ConfState, string> = {
+                  confirmed_bull:        `Watch: SPX 200-DMA slope turning flat or negative is the first warning of regime change.`,
+                  confirmed_bear:        `Watch: SPX reclaim of ${fmtWhole(spx200)} with rising slope → regime upgrade. DJT reclaim of its 200-DMA → secondary confirmation.`,
+                  non_conf_transition:   `Resolution: slope alignment in same direction over 2–3 weeks will confirm the next regime.`,
+                  non_conf_bear_warn:    `Resolution trigger: SPX breaks below ${fmtWhole(spx200)} → bear confirmed. DJT reclaims 200-DMA → false alarm.`,
+                  non_conf_bull_recovery:`Resolution trigger: SPX reclaims ${fmtWhole(spx200)} → bull confirmed. DJT breaks below its 200-DMA (${djt200dma != null ? fmtWhole(djt200dma) : "—"}) → bear confirmed.`,
+                };
+
+                const sc = stateColor[confState];
+
+                return (
+                  <div className="tile" style={{ gridColumn:"span 3" }}>
+                    <div className="tileTop">
+                      <span className="lbl">Market Confirmation</span>
+                      <span style={{ fontSize:10, fontWeight:700, color:"#475569" }}>Dow Theory · SPX + DJT</span>
+                    </div>
+                    <div style={{ fontSize:20, fontWeight:700, color: sc, marginBottom:6 }}>
+                      {stateLabel[confState]}
+                    </div>
+
+                    {/* SPX vs DJT position + slope boxes */}
+                    <div style={{ display:"flex", gap:8, marginTop:4 }}>
+                      <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
+                        <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>SPX vs 200-DMA</div>
+                        <div style={{ fontSize:13, fontWeight:700, color: is200Broken ? "#ff6b88" : "#4ade80", marginTop:2 }}>
+                          {is200Broken ? "↘ Below" : "↗ Above"}{spx200Pct != null ? ` ${fmtSigned1(spx200Pct)}` : ""}
+                        </div>
+                        {slope200 != null && (
+                          <div style={{ fontSize:10, color: spxRising ? "#4ade80" : spxFalling ? "#ff6b88" : "#fbbf24", marginTop:2 }}>
+                            Slope {spxRising ? "↗" : spxFalling ? "↘" : "→"} {slope200 > 0 ? "+" : ""}{slope200.toFixed(1)}%
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", fontSize:18, fontWeight:700, color: confState === "confirmed_bull" || confState === "confirmed_bear" ? "#334155" : "#fbbf24" }}>
+                        {confState === "confirmed_bull" || confState === "confirmed_bear" ? "=" : "≠"}
+                      </div>
+                      <div style={{ flex:1, background:"#141b47", borderRadius:6, padding:"6px 10px" }}>
+                        <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", letterSpacing:"0.06em" }}>DJT vs 200-DMA</div>
+                        <div style={{ fontSize:13, fontWeight:700, color: djtAbove200 ? "#4ade80" : "#ff6b88", marginTop:2 }}>
+                          {djtAbove200 ? "↗ Above" : "↘ Below"}{djtVs200 != null ? ` ${djtVs200 >= 0 ? "+" : ""}${djtVs200.toFixed(1)}%` : ""}
+                        </div>
+                        {djt200slope != null && (
+                          <div style={{ fontSize:10, color: djtRising ? "#4ade80" : djtFalling ? "#ff6b88" : "#fbbf24", marginTop:2 }}>
+                            Slope {djtRising ? "↗" : djtFalling ? "↘" : "→"} {djt200slope > 0 ? "+" : ""}{djt200slope.toFixed(1)}%
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Interpretation */}
+                    <div style={{ fontSize:11, color:"#94a3b8", marginTop:8, lineHeight:1.55 }}>
+                      {stateInterpretation[confState]}
+                    </div>
+
+                    {/* Resolution trigger */}
+                    <div style={{ fontSize:11, color:"#475569", marginTop:5, lineHeight:1.5, borderTop:"1px solid rgba(255,255,255,0.04)", paddingTop:5 }}>
+                      <span style={{ fontWeight:700, color:"#334155" }}>Resolution → </span>
+                      {stateResolution[confState]}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+          </section>
+
+          {/* ④ MARKET STRESS — CONTEXT */}
+          <section className="panel">
+            <div className="panelTitle" style={{ marginBottom:10 }}>Market Stress — Context</div>
+            {/* ── ROW 2: Policy & Rates ── */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6, marginTop:10 }}>Policy &amp; Rates</div>
+            <div className="grid5" style={{ marginBottom:8 }}>
+              {/* 10Y Nominal */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("nom10y")}>
+                <div className="lbl" style={{ marginBottom:6 }}>10Y Yield (Nominal)</div>
+                <div className="valHero" style={{ color:"#fff" }}>{nom10y.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                <div className="status" style={{ color:nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80" }}>
+                  {nom10y>4.5?"Restrictive":nom10y>4?"Watch":"Neutral"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((nom10y/6)*100,100))}%`, borderRadius:9999, background:nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(4/6)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:`${(4.5/6)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>2%</span><span>4%</span><span>4.5%</span><span>6%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Real: {real10y.toFixed(2)}% · Premium: {(nom10y-real10y).toFixed(2)}%</div>
+              </div>
+              {/* Real 10Y */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("real10y")}>
+                <div className="lbl" style={{ marginBottom:6 }}>Real 10Y</div>
+                <div className="valHero" style={{ color:"#fff" }}>{fmt2(real10y)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                <div className="status" style={{ color:real10y>=2.5?"#ff6b88":real10y>=1.5?"#fbbf24":"#4ade80" }}>
+                  {real10y>=2.5?"Restrictive":real10y>=1.5?"Watch":"Neutral"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((real10y/3)*100,100))}%`, borderRadius:9999, background:real10y>=2.5?"#ff6b88":real10y>=1.5?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(1.5/3)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.5)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:`${(2.5/3)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>1.5%</span><span>2.5%</span><span>3%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Equity headwind above 1.5%</div>
+              </div>
+              {/* Fed Funds */}
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom:6 }}>Fed Funds Rate</div>
+                <div className="valHero" style={{ color:"#fff" }}>{fedFunds.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                <div className="status" style={{ color:fedFunds>4.5?"#ff6b88":fedFunds>3?"#fbbf24":"#4ade80" }}>
+                  {fedFunds>4.5?"Restrictive":fedFunds>3?"Elevated":"Accommodative"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((fedFunds/6)*100,100))}%`, borderRadius:9999, background:fedFunds>4.5?"#ff6b88":fedFunds>3?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(4.5/6)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>3%</span><span>4.5%</span><span>6%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Real rate: {(fedFunds-breakeven5y).toFixed(2)}%</div>
+              </div>
+              {/* 5Y Breakeven */}
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom:6 }}>5Y Breakeven Infl.</div>
+                <div className="valHero" style={{ color:"#fff" }}>{breakeven5y.toFixed(2)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                <div className="status" style={{ color:breakeven5y>3?"#ff6b88":breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }}>
+                  {breakeven5y>3?"Danger":breakeven5y>2.5?"Watch":breakeven5y>2?"On Target":"Low"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min((breakeven5y/4)*100,100))}%`, borderRadius:9999, background:breakeven5y>3?"#ff6b88":breakeven5y>2.5?"#fbbf24":breakeven5y>2?"#4ade80":"#94a3b8" }} />
+                  <div style={{ position:"absolute", top:-6, left:"62.5%", width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-4, left:"50%", width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0%</span><span>2%</span><span>2.5%</span><span>4%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>Market-implied inflation · Fed target: 2%</div>
+              </div>
+              {/* Yield Curve */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("yc")}>
+                <div className="lbl" style={{ marginBottom:6 }}>Yield Curve</div>
+                <div className="valHero" style={{ color:"#fff" }}>{yieldCurve>0?"+":""}{fmt2(yieldCurve)}<span style={{ fontSize:20, fontWeight:600 }}>%</span></div>
+                <div className="status" style={{ color:yieldCurve<-0.5?"#ff6b88":yieldCurve<0?"#fbbf24":"#4ade80" }}>
+                  {yieldCurve<-0.5?"Inverted":yieldCurve<0?"Flattening":"Healthy"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((yieldCurve+1.5)/3)*100,100))}%`, borderRadius:9999, background:yieldCurve<-0.5?"#ff6b88":yieldCurve<0?"#fbbf24":"#4ade80" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(1.5/3)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>-1.5%</span><span>0%</span><span>+1.5%</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {yieldCurve>=0?`Re-steepened ${fmt2(yieldCurve)}% from inversion`:`Inverted ${fmt2(Math.abs(yieldCurve))}%`}
+                </div>
+              </div>
+              {/* Put/Call Ratio */}
+              <div className="tile">
+                <div className="lbl" style={{ marginBottom:6 }}>Put / Call Ratio</div>
+                <div className="valHero" style={{ color:"#fff" }}>{putCallRatio!=null?putCallRatio.toFixed(2):"—"}</div>
+                <div className="status" style={{ color:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }}>
+                  {putCallRatio==null?"Loading":putCallRatio>1.2?"Fearful":putCallRatio>0.9?"Neutral":putCallRatio>0.7?"Complacency":"Extreme"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.max(0,Math.min(((putCallRatio??0.9)-0.4)/1.2*100,100))}%`, borderRadius:9999, background:putCallRatio==null?"#475569":putCallRatio>1.2?"#4ade80":putCallRatio>0.9?"#94a3b8":putCallRatio>0.7?"#fbbf24":"#ff6b88" }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((0.7-0.4)/1.2)*100}%`, width:2, height:14, background:"rgba(255,255,255,0.3)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-6, left:`${((1.0-0.4)/1.2)*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.7)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>0.4</span><span>0.7</span><span>1.0</span><span>1.6</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>&gt;1.0 contrarian buy · &lt;0.7 complacency</div>
+              </div>
+            </div>
+
+            {/* ── ROW 3: Valuation Risk ── */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6, marginTop:10 }}>Valuation Risk</div>
+            <div className="grid5" style={{ marginBottom:8 }}>
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => setModal("cape")}>
+                <div className="lbl" style={{ marginBottom:6 }}>CAPE Ratio (Shiller P/E)</div>
+                <div className="valHero" style={{ color:"#fff" }}>{capeRatio.toFixed(1)}<span style={{ fontSize:20, fontWeight:600 }}>x</span></div>
+                <div className="status" style={{ color:capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80" }}>
+                  {capeRatio>35?"Extreme":capeRatio>25?"Overvalued":capeRatio>20?"Elevated":"Fairly Valued"}
+                </div>
+                <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:12, overflow:"visible" }}>
+                  {(() => {
+                    const toPos = (x: number) => Math.max(0,Math.min((x-5)/45*100,100));
+                    const pos=toPos(capeRatio), p25=toPos(25), p35=toPos(35);
+                    return <>
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(pos,p25)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {capeRatio>25 && <div style={{ position:"absolute", left:`${p25}%`, top:0, height:6, width:`${Math.min(pos,p35)-p25}%`, background:"#fbbf24" }} />}
+                      {capeRatio>35 && <div style={{ position:"absolute", left:`${p35}%`, top:0, height:6, width:`${pos-p35}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                    </>;
+                  })()}
+                  <div style={{ position:"absolute", top:-4, left:`${(25-5)/45*100}%`, width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
+                  <div style={{ position:"absolute", top:-6, left:`${(35-5)/45*100}%`, width:2.5, height:18, background:"rgba(255,255,255,0.8)", borderRadius:2, zIndex:2 }} />
+                </div>
+                <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>5x</span><span>25x</span><span>35x↑</span><span>50x</span></div>
+                <div style={{ fontSize:11, marginTop:6, fontWeight:600, color:"#64748b" }}>
+                  {capeRatio>35?`▲ ${(capeRatio-16).toFixed(1)}x above hist. avg (16x)`:"Hist. avg ~16x · Dot-com peak 44x"}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ⑤ ECONOMY */}
+          <section className="panel">
+            <div className="panelHeader"><div><div className="panelTitle">Economy</div><div className="panelSub">Macro Conditions · 3-Month Trend</div></div><div className="pstamp">FRED &amp; ISM · weekly/monthly</div></div>
+            <div className="grid5" style={{ marginBottom:8 }}>
+              {[
+                { label:"CPI Inflation",    val:"2.8%",  date:"YoY",     chg:"▼ 0.2% easing",    chgColor:"#4ade80", sub:"3-mo: slowly easing",  pill:"Above Target",  pillC:"pillA", sColor:"#fbbf24", pts:"0,16 25,15 50,14 75,13 100,12", mid:false, isMeter:true, mW:"56%", mC:"#fbbf24", sc:["0%","2%","5%"] },
+                { label:"GDP Growth",       val:"2.3%",  date:"Q4 '24",  chg:"▼ 0.8% from prior", chgColor:"#ff6b88", sub:"3-mo: moderating",      pill:"Positive",      pillC:"pillG", sColor:"#4ade80", pts:"0,14 25,13 50,11 75,10 100,12", mid:false, isMeter:true, mW:"46%", mC:"#4ade80", sc:["-2%","0%","5%"] },
+                { label:"Nonfarm Payrolls", val:"151K",  date:"Feb '25", chg:"▼ 56K from prior",  chgColor:"#ff6b88", sub:"3-mo: decelerating",    pill:"Below Trend",   pillC:"pillA", sColor:"#fbbf24", pts:"0,8 25,9 50,11 75,13 100,15",  mid:false, isMeter:true, mW:"38%", mC:"#fbbf24", sc:["0","200K","400K"] },
+                { label:"ISM Mfg PMI",      val:"49.0",  date:"",        chg:"▼ 0.6 from prior",  chgColor:"#ff6b88", sub:"3-mo: contracting",     pill:"Below 50",      pillC:"pillR", sColor:"#ff6b88", pts:"0,8 25,9 50,11 75,12 100,14",  mid:true,  isMeter:false },
+              ].map(t => (
+                <div key={t.label} className="tile">
+                  <div className="lbl">{t.label}</div>
+                  <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>{t.val}{t.date && <span style={{ fontSize:11, color:"#475569", marginLeft:4 }}>{t.date}</span>}</div>
+                  <div style={{ fontSize:12, fontWeight:600, color:t.chgColor, marginTop:3 }}>{t.chg}</div>
+                  {t.isMeter ? (
+                    <><div className="meterTrack"><div className="meterFill" style={{ width:t.mW!, background:t.mC! }} /><div className="meterMarker" style={{ left:t.mW! }} /></div>
+                    <div className="meterScale"><span>{t.sc![0]}</span><span>{t.sc![1]}</span><span>{t.sc![2]}</span></div></>
+                  ) : (
+                    <svg viewBox="0 0 100 24" width="100%" height="18" style={{ margin:"5px 0 2px" }}>
+                      {t.mid && <line x1="0" y1="12" x2="100" y2="12" stroke="rgba(255,255,255,0.07)" strokeWidth="1" strokeDasharray="3,3" />}
+                      <polyline fill="none" stroke={t.sColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={t.pts} />
+                    </svg>
+                  )}
+                  <div className="sub">{t.sub}</div>
+                  <span className={t.pillC}>{t.pill}</span>
+                </div>
+              ))}
+
+              {/* ── Fed Balance Sheet (WALCL) — LIVE from FRED ── */}
+              {(() => {
+                const trillions = walclBn != null ? walclBn / 1000 : null;
+                const dir = walclDirection || (walclChgBn == null ? "" : walclChgBn > 10 ? "expanding" : walclChgBn < -10 ? "contracting" : "flat");
+                const chgLabel = walclChgBn != null
+                  ? `${walclChgBn > 0 ? "▲" : "▼"} $${Math.abs(walclChgBn)}B WoW`
+                  : "▼ $180B from prior";
+                const chgColor = walclChgBn != null ? (walclChgBn > 0 ? "#4ade80" : "#ff6b88") : "#ff6b88";
+                const pill = dir === "expanding" ? "Expanding" : dir === "flat" ? "Stable" : "Tightening";
+                const pillC = dir === "expanding" ? "pillG" : dir === "flat" ? "pillA" : "pillR";
+                const barColor = dir === "expanding" ? "#4ade80" : dir === "flat" ? "#fbbf24" : "#ff6b88";
+                const barW = trillions != null ? Math.max(5, Math.min((trillions / 10) * 100, 100)) : 61;
+                const subText = dir === "expanding" ? "3-mo: expanding" : dir === "flat" ? "3-mo: stable" : "3-mo: draining";
+                return (
+                  <div className="tile">
+                    <div className="lbl">Fed Balance Sheet</div>
+                    <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>
+                      {trillions != null ? `$${trillions.toFixed(2)}T` : "$—"}
+                      <span style={{ fontSize:10, color:"#475569", marginLeft:5 }}>WALCL</span>
+                    </div>
+                    <div style={{ fontSize:12, fontWeight:600, color:chgColor, marginTop:3 }}>{chgLabel}</div>
+                    <div className="meterTrack"><div className="meterFill" style={{ width:`${barW}%`, background:barColor }} /><div className="meterMarker" style={{ left:`${barW}%` }} /></div>
+                    <div className="meterScale"><span>$5T</span><span>$7.5T</span><span>$10T</span></div>
+                    <div className="sub" style={{ marginTop:4 }}>{subText}</div>
+                    <span className={pillC}>{pill}</span>
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="grid5">
+              {[
+                { label:"ISM Services PMI", val:"53.5", date:"",     chg:"▼ 1.2 from prior", chgColor:"#fbbf24", sub:"3-mo: softening",   pill:"Slowing",  pillC:"pillA", sColor:"#fbbf24", pts:"0,6 25,7 50,9 75,10 100,12", mid:true },
+                { label:"Initial Claims",   val:"225K", date:"",     chg:"▲ 8K from prior",  chgColor:"#fbbf24", sub:"3-mo: drifting up", pill:"Watch",    pillC:"pillA", sColor:"#fbbf24", pts:"0,18 25,16 50,15 75,12 100,9", mid:false },
+              ].map(t => (
+                <div key={t.label} className="tile">
+                  <div className="lbl">{t.label}</div>
+                  <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>{t.val}</div>
+                  <div style={{ fontSize:12, fontWeight:600, color:t.chgColor, marginTop:3 }}>{t.chg}</div>
+                  <svg viewBox="0 0 100 24" width="100%" height="18" style={{ margin:"5px 0 2px" }}>
+                    {t.mid && <line x1="0" y1="12" x2="100" y2="12" stroke="rgba(255,255,255,0.07)" strokeWidth="1" strokeDasharray="3,3" />}
+                    <polyline fill="none" stroke={t.sColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={t.pts} />
+                  </svg>
+                  <div className="sub">{t.sub}</div>
+                  <span className={t.pillC}>{t.pill}</span>
+                </div>
+              ))}
+
+              {/* ── Brent Crude Oil — LIVE · Roberts' "master switch" for Fed policy ── */}
+              {(() => {
+                const price = brentPrice;
+                const chgPct = brentChangePct;
+                const regime = brentRegime;
+                const statusLabel = regime === "frozen" ? "Fed Frozen" : regime === "watch" ? "Watch Zone" : regime === "neutral" ? "Neutral" : regime === "room" ? "Fed Has Room" : "Loading";
+                const statusColor = regime === "frozen" ? "#ff6b88" : regime === "watch" ? "#fbbf24" : regime === "neutral" ? "#94a3b8" : "#4ade80";
+                const pillC = regime === "frozen" ? "pillR" : regime === "watch" ? "pillA" : regime === "neutral" ? "" : "pillG";
+                // Bar: $60=0%, $80=25%, $95=50%, $110=75%, $130=100%
+                const barW = price != null ? Math.max(2, Math.min(((price - 60) / 70) * 100, 100)) : 50;
+                const p80 = ((80-60)/70)*100;
+                const p95 = ((95-60)/70)*100;
+                const p110 = ((110-60)/70)*100;
+                return (
+                  <div className="tile" style={{ gridColumn:"span 3" }}>
+                    <div className="tileTop">
+                      <span className="lbl">Brent Crude</span>
+                      <span style={{ fontSize:10, fontWeight:700, color:"#475569" }}>LIVE · BZ=F</span>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
+                      <div style={{ fontSize:32, fontWeight:700, color:"#fff" }}>
+                        {price != null ? `$${price.toFixed(2)}` : "—"}
+                      </div>
+                      {chgPct != null && (
+                        <div style={{ fontSize:13, fontWeight:600, color: chgPct >= 0 ? "#ff6b88" : "#4ade80" }}>
+                          {chgPct >= 0 ? "▲" : "▼"} {Math.abs(chgPct).toFixed(1)}%
+                        </div>
+                      )}
+                    </div>
+                    <div className="status" style={{ color: statusColor }}>{statusLabel}</div>
+                    {/* Threshold bar */}
+                    <div style={{ position:"relative", height:6, borderRadius:9999, background:"#202a64", marginTop:10, overflow:"visible" }}>
+                      <div style={{ position:"absolute", left:0, top:0, height:6, width:`${Math.min(barW, p80)}%`, background:"#4ade80", borderRadius:"9999px 0 0 9999px" }} />
+                      {price != null && price > 80 && <div style={{ position:"absolute", left:`${p80}%`, top:0, height:6, width:`${Math.min(barW,p95)-p80}%`, background:"#94a3b8" }} />}
+                      {price != null && price > 95 && <div style={{ position:"absolute", left:`${p95}%`, top:0, height:6, width:`${Math.min(barW,p110)-p95}%`, background:"#fbbf24" }} />}
+                      {price != null && price > 110 && <div style={{ position:"absolute", left:`${p110}%`, top:0, height:6, width:`${barW-p110}%`, background:"#ff6b88", borderRadius:"0 9999px 9999px 0" }} />}
+                      {/* Threshold ticks */}
+                      <div style={{ position:"absolute", top:-4, left:`${p80}%`, width:2, height:14, background:"rgba(255,255,255,0.4)", borderRadius:2, zIndex:2 }} />
+                      <div style={{ position:"absolute", top:-4, left:`${p95}%`, width:2, height:14, background:"rgba(255,255,255,0.6)", borderRadius:2, zIndex:2 }} />
+                      <div style={{ position:"absolute", top:-6, left:`${p110}%`, width:3, height:18, background:"rgba(255,255,255,0.9)", borderRadius:2, zIndex:2 }} />
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginTop:4 }}>
+                      <span>$60</span><span>$80</span><span>$95</span><span style={{ color:"#ff6b88", fontWeight:700 }}>$110↑</span><span>$130</span>
+                    </div>
+                    <div style={{ fontSize:11, marginTop:5, color:"#64748b", lineHeight:1.5 }}>
+                      {regime === "frozen" ? `▲ Above $110 — Fed frozen. Oil keeping inflation elevated, cuts off the table. Deepens economic landing risk.`
+                      : regime === "watch" ? `⚠ $95–110 watch zone — Fed limited. Every dollar above $95 tightens financial conditions without a rate hike.`
+                      : regime === "neutral" ? `→ $80–95 neutral range — manageable for Fed. Cuts remain possible if other conditions allow.`
+                      : `▼ Below $80 — Fed has room. Oil not a constraint on rate policy.`}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </section>
+
+          {/* ⑥ BREADTH */}
+          <section className="panel">
+            <div className="panelHeader"><div><div className="panelTitle">Market Breadth</div><div className="panelSub">% of S&P 500 stocks above key moving averages</div></div><div className="pstamp">Updated daily</div></div>
+            <div className="grid5" style={{ marginBottom:8 }}>
+              <div className="tile">
+                <div className="lbl">% Above 200-DMA</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>44%</div>
+                <div className="bbar"><div className="bbarFill" style={{ width:"44%", background:"#fbbf24" }} /></div>
+                <div className="meterScale"><span>0%</span><span>50%</span><span>100%</span></div>
+                <div className="sub" style={{ marginTop:4 }}>3-mo: deteriorating</div>
+                <span className="pillA">Weakening</span>
+              </div>
+              <div className="tile">
+                <div className="lbl">% Above 50-DMA</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>31%</div>
+                <div className="bbar"><div className="bbarFill" style={{ width:"31%", background:"#ff6b88" }} /></div>
+                <div className="meterScale"><span>0%</span><span>50%</span><span>100%</span></div>
+                <div className="sub" style={{ marginTop:4 }}>3-mo: sharp decline</div>
+                <span className="pillR">Bearish</span>
+              </div>
+              <div className="tile">
+                <div className="lbl">NYSE Adv / Dec</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff", marginTop:4 }}>-412</div>
+                <div className="sub" style={{ marginTop:6 }}>More declines than advances</div>
+                <span className="pillR">Weak</span>
+              </div>
+              <div className="tile">
+                <div className="lbl">52-Wk Highs / Lows</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff", marginTop:4 }}>48 / <span style={{ color:"#fff" }}>187</span></div>
+                <div className="sub" style={{ marginTop:4 }}>3-mo: lows dominating</div>
+                <span className="pillR">Bearish</span>
+              </div>
+              <div className="tile">
+                <div className="lbl">McClellan Oscillator</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff", marginTop:4 }}>-42</div>
+                <div className="meterTrack"><div className="meterFill" style={{ width:"29%", background:"#ff6b88" }} /><div className="meterMarker" style={{ left:"29%" }} /></div>
+                <div className="meterScale"><span>-100</span><span>0</span><span>+100</span></div>
+                <span className="pillA">Oversold</span>
+              </div>
+            </div>
+            <div className="grid5">
+              <div className="tile">
+                <div className="lbl">% Above 100-DMA</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>38%</div>
+                <div className="bbar"><div className="bbarFill" style={{ width:"38%", background:"#ff6b88" }} /></div>
+                <div className="meterScale"><span>0%</span><span>50%</span><span>100%</span></div>
+                <div className="sub" style={{ marginTop:4 }}>3-mo: declining</div>
+                <span className="pillR">Bearish</span>
+              </div>
+              <div className="tile">
+                <div className="lbl">% Above 20-DMA</div>
+                <div style={{ fontSize:26, fontWeight:700, color:"#fff" }}>28%</div>
+                <div className="bbar"><div className="bbarFill" style={{ width:"28%", background:"#ff6b88" }} /></div>
+                <div className="meterScale"><span>0%</span><span>50%</span><span>100%</span></div>
+                <div className="sub" style={{ marginTop:4 }}>3-mo: capitulating</div>
+                <span className="pillR">Oversold</span>
+              </div>
+            </div>
+          </section>
+
+          {/* ⑧ VALUATION */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div><div className="panelTitle">Valuation, Recession &amp; Sentiment Models</div><div className="panelSub">Sigma scores vs historical norm · Standard deviation from mean</div></div>
+              <div style={{ textAlign:"right" }}><div className="pstamp">Updated Oct 31 · Next: Nov 8</div><div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Manual weekly · Saturday</div></div>
+            </div>
+
+            {/* Valuation Models */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Valuation Models</div>
+            <table className="valTable" style={{ marginBottom:8 }}>
+              <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
+              <tbody>
+                {[
+                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.33", color:"#ff6b88" },
+                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.07", color:"#ff6b88" },
+                  { name:"Price/Sales",            rating:"Overvalued",          score:"1.40", color:"#fbbf24" },
+                  { name:"Interest Rate Model",    rating:"Strongly Overvalued", score:"2.04", color:"#ff6b88" },
+                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.32", color:"#ff6b88" },
+                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.27", color:"#94a3b8", muted:true },
+                ].map(r => (
+                  <tr key={r.name} style={{ opacity:(r as any).muted?0.4:1 }}>
+                    <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:(r as any).muted?"italic":"normal" }}>{r.name}</td>
+                    <td style={{ fontWeight:700, color:r.color, fontSize:13 }}>{r.rating}</td>
+                    <td style={{ fontWeight:700, color:r.color, fontSize:15, textAlign:"right" }}>{r.score}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="sumBar" style={{ marginBottom:16 }}>
+              <span className="sumBarLabel">Valuation Signal</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>4 of 5 Strongly Overvalued · Oct 31 · Historically stretched</span>
+              <span style={{ fontSize:12, color:"#475569" }}>·</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>All five models eased again in October as the S&P fell for a second straight month. Buffett slipped to 2.33σ, CAPE to 2.07σ (40.1x) and Price/Sales to 1.40σ. Interest Rate Model gave back its September jump, falling to 2.04σ after the Fed held. The tiers haven't changed, so this is still historically stretched, just less extreme than in August.</span>
+            </div>
+
+            {/* Recession Models */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Recession Models</div>
+            <table className="valTable" style={{ marginBottom:8 }}>
+              <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
+              <tbody>
+                {[
+                  { name:"Yield Curve",       rating:"Very High Risk", score:"2.00",  color:"#ff6b88", updated:"Oct 31" },
+                  { name:"Sahm Rule",         rating:"Low",            score:"N/A",   color:"#4ade80", updated:"Sep 30" },
+                  { name:"State Coincidence", rating:"Normal",         score:"0.21",  color:"#4ade80", updated:"Sep 30" },
+                ].map(r => (
+                  <tr key={r.name}>
+                    <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
+                      {r.name}
+                      <span style={{ fontSize:10, color:"#475569", marginLeft:8 }}>{r.updated}</span>
+                    </td>
+                    <td style={{ fontWeight:700, color:r.color, fontSize:13 }}>{r.rating}</td>
+                    <td style={{ fontWeight:700, color:r.color, fontSize:15, textAlign:"right" }}>{r.score}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="sumBar" style={{ marginBottom:16 }}>
+              <span className="sumBarLabel">Recession Signal</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Mixed · Yield Curve back to Very High</span>
+              <span style={{ fontSize:12, color:"#475569" }}>·</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Yield Curve ticked back up to Very High Risk at 2.00σ (from 1.98σ). Re-steepening after inversion has historically preceded recession by 12 to 18 months. Sahm Rule (Low, as of Sep 30) and State Coincidence (Normal at 0.21σ, up from -0.42σ) aren't confirming yet, but September payrolls rose only 29k with July revised negative, so the Nov 6 jobs report matters.</span>
+            </div>
+
+            {/* Sentiment Models */}
+            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#334155", marginBottom:6 }}>Sentiment Models</div>
+
+            {/* CNN Fear & Greed Live Gauge */}
+            <div style={{ background:"#050a35", borderRadius:10, padding:14, marginBottom:10, border:"0.5px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.04em" }}>CNN Fear &amp; Greed Index</div>
+                  <div style={{ fontSize:10, color:"#475569", marginTop:2 }}>Live · 0 = Max Fear · 100 = Max Greed</div>
+                </div>
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ fontSize:32, fontWeight:700, color: fearGreedScore <= 25 ? "#ff6b88" : fearGreedScore <= 45 ? "#fbbf24" : fearGreedScore <= 55 ? "#94a3b8" : fearGreedScore <= 75 ? "#4ade80" : "#22c55e", lineHeight:1 }}>{Math.round(fearGreedScore)}</div>
+                  <div style={{ fontSize:11, fontWeight:700, color: fearGreedScore <= 25 ? "#ff6b88" : fearGreedScore <= 45 ? "#fbbf24" : fearGreedScore <= 55 ? "#94a3b8" : "#4ade80", marginTop:2 }}>{fearGreedRating}</div>
+                </div>
+              </div>
+              {/* Gauge bar */}
+              <div style={{ position:"relative", height:8, borderRadius:9999, overflow:"hidden", background:"linear-gradient(to right, #ef4444 0%, #f97316 25%, #94a3b8 45%, #4ade80 65%, #22c55e 100%)" }}>
+                <div style={{ position:"absolute", top:0, left:`${Math.min(Math.max(fearGreedScore,0),100)}%`, width:3, height:8, background:"#fff", borderRadius:2, transform:"translateX(-50%)", boxShadow:"0 0 4px rgba(255,255,255,0.8)" }} />
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginTop:4 }}>
+                <span>Extreme Fear</span><span>Fear</span><span>Neutral</span><span>Greed</span><span>Extreme Greed</span>
+              </div>
+              {/* Contrarian note when extreme */}
+              {fearGreedScore <= 20 && (
+                <div style={{ marginTop:8, fontSize:11, fontWeight:600, color:"#4ade80" }}>
+                  ▲ Contrarian signal — readings ≤20 historically precede sharp short-term rallies (Zeberg &quot;most hated rally&quot; setup)
+                </div>
+              )}
+              {fearGreedScore >= 80 && (
+                <div style={{ marginTop:8, fontSize:11, fontWeight:600, color:"#ff6b88" }}>
+                  ▼ Extreme greed — historically precedes corrections. Grantham bubble warning applies.
+                </div>
+              )}
+            </div>
+
+            <table className="valTable" style={{ marginBottom:8 }}>
+              <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
+              <tbody>
+                {[
+                  { name:"Economic Uncertainty Index", rating:"Very Pessimistic", score:"2.00",  color:"#4ade80", updated:"Oct 31", note:"jumped from 1.04σ" },
+                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.80", color:"#4ade80", updated:"Oct 31", note:"contrarian bullish" },
+                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.00",  color:"#fbbf24", updated:"Sep 30", note:"cooling, still elevated" },
+                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.76",  color:"#94a3b8", updated:"Oct 31", note:"tight, no stress" },
+                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.28", color:"#94a3b8", updated:"Oct 31", note:"below 20, calm" },
+                ].map(r => (
+                  <tr key={r.name}>
+                    <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
+                      {r.name}
+                      <span style={{ fontSize:10, color:"#475569", marginLeft:8 }}>{r.updated}</span>
+                    </td>
+                    <td>
+                      <span style={{ fontWeight:700, color:r.color, fontSize:13 }}>{r.rating}</span>
+                      <span style={{ fontSize:10, color:"#475569", marginLeft:8, fontStyle:"italic" }}>{r.note}</span>
+                    </td>
+                    <td style={{ fontWeight:700, color:r.color, fontSize:15, textAlign:"right" }}>{r.score}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="sumBar">
+              <span className="sumBarLabel">Sentiment Signal</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism · Contrarian Bullish · Oct 31</span>
+              <span style={{ fontSize:12, color:"#475569" }}>·</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Economic Uncertainty jumped to Very Pessimistic at 2.00σ (from 1.04σ), and Consumer Confidence held at -2.80σ. Both are at the pessimistic extreme together. Margin Debt cooled to 1.00σ but is still Optimistic, so retail leverage hasn't unwound. VIX and junk spreads remain calm, so the fear is in surveys, not in markets. Contrarian signal still intact.</span>
+            </div>
+          </section>
+
+          {/* ⑨ IVY */}
+          <section className="panel">
+            <div className="panelHeader">
+              <div><div className="panelTitle">Ivy Portfolio</div><div className="panelSub">10-Month SMA Signals · Mebane Faber Model · End-of-month rule</div></div>
+              <div style={{ textAlign:"right" }}>
+                <div className="pstamp">{ivyLive ? "LIVE · Yahoo Finance" : "Fallback data"}</div>
+                <div style={{ fontSize:10, color:"#334155", marginTop:2 }}>Signal fires at month-end close only</div>
+              </div>
+            </div>
+            <table className="ivyTable">
+              <thead>
+                <tr>
+                  <th style={{ width:"8%" }}>Fund</th>
+                  <th style={{ width:"16%" }}>Name</th>
+                  <th style={{ width:"16%", textAlign:"center" }}>
+                    Current Position
+                    <div style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0 }}>as of {ivyOfficialDate}</div>
+                  </th>
+                  <th style={{ width:"22%", textAlign:"center" }}>
+                    {ivyEOMDate} Forecast
+                    <div style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0 }}>live price vs 10-mo SMA</div>
+                  </th>
+                  <th style={{ width:"14%", textAlign:"right" }}>
+                    Price
+                    <div style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0 }}>live</div>
+                  </th>
+                  <th style={{ width:"14%", textAlign:"right" }}>
+                    10-mo SMA
+                    <div style={{ fontSize:9, fontWeight:400, color:"#475569", textTransform:"none", letterSpacing:0 }}>month-end avg</div>
+                  </th>
+                  <th style={{ width:"10%", textAlign:"right" }}>Variance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ivyPositions.map(r => {
+                  const isAtRisk = r.variance != null && r.variance <= 0;
+                  const isWatch = r.variance != null && r.variance > 0 && r.variance <= 2;
+                  return (
+                    <tr key={r.ticker} style={{ background: isAtRisk ? "rgba(239,68,68,0.03)" : isWatch ? "rgba(245,158,11,0.03)" : "transparent" }}>
+                      {/* Fund */}
+                      <td style={{ fontWeight:700, color:"#cbd5e1" }}>{r.ticker}</td>
+                      {/* Name */}
+                      <td style={{ color:"#64748b", fontSize:12 }}>{r.name}</td>
+                      {/* Current Official Position */}
+                      <td style={{ textAlign:"center" }}>
+                        <span style={{ fontWeight:700, color: r.officialSignal === "Cash" ? "#ff6b88" : "#4ade80", fontSize:13 }}>
+                          {r.officialSignal === "Cash" ? "✕" : "✓"} {r.officialSignal}
+                        </span>
+                      </td>
+                      {/* EOM Forecast */}
+                      <td style={{ textAlign:"center" }}>
+                        <span className={r.forecastPill || "pillG"} style={{ fontSize:11 }}>
+                          {r.forecastLabel}
+                        </span>
+                        {r.variance != null && r.variance <= 0 && (
+                          <div style={{ fontSize:10, color:"#ff6b88", marginTop:3 }}>
+                            {Math.abs(r.variance).toFixed(1)}% below SMA now
+                          </div>
+                        )}
+                        {r.variance != null && r.variance > 0 && r.variance <= 2 && (
+                          <div style={{ fontSize:10, color:"#fbbf24", marginTop:3 }}>
+                            only {r.variance.toFixed(1)}% above SMA
+                          </div>
+                        )}
+                      </td>
+                      {/* Price */}
+                      <td style={{ textAlign:"right", fontWeight:600, color:"#e2e8f0", fontSize:13 }}>
+                        {r.price != null ? r.price.toFixed(2) : "—"}
+                      </td>
+                      {/* 10-mo SMA */}
+                      <td style={{ textAlign:"right", fontWeight:600, color:"#94a3b8", fontSize:13 }}>
+                        {r.sma != null ? r.sma.toFixed(2) : "—"}
+                      </td>
+                      {/* Variance % — number only, no bar */}
+                      <td style={{ textAlign:"right", fontWeight:700, fontSize:13, color: r.forecastColor }}>
+                        {r.variance != null ? `${r.variance >= 0 ? "+" : ""}${r.variance.toFixed(1)}%` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* EOM Risk Summary — shows confirmed flips vs pending risks */}
+            {(() => {
+              // Positions that officially flipped to Cash this month-end
+              const confirmedCash = Object.entries(ivyOfficialSignals)
+                .filter(([,v]) => v === "Cash")
+                .map(([k]) => k.toUpperCase());
+              // Positions that are live-below-SMA but still officially Invested (next month risk)
+              const pendingRisk = ivyPositions.filter(p =>
+                p.variance != null && p.variance <= 0 && ivyOfficialSignals[p.key] === "Invest"
+              );
+              return (<>
+                {confirmedCash.length > 0 && (
+                  <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.35)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
+                    <span style={{ fontSize:15, flexShrink:0 }}>🔴</span>
+                    <div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#ff6b88", marginBottom:3 }}>
+                        {confirmedCash.length} position{confirmedCash.length > 1 ? "s" : ""} flipped to Cash — {ivyOfficialDate} official signal
+                      </div>
+                      <div style={{ fontSize:12, color:"#fca5a5", lineHeight:1.6 }}>
+                        <strong>{confirmedCash.join(", ")}</strong> closed below their 10-month SMA at {ivyOfficialDate} month-end. Ivy rule now signals <strong>Cash</strong> for these positions. Signal valid until {ivyEOMDate} close. Next action: monitor {ivyEOMDate} for potential re-entry if price reclaims SMA.
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {pendingRisk.length > 0 && (
+                  <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
+                    <span style={{ fontSize:15, flexShrink:0 }}>⚠️</span>
+                    <div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:3 }}>{ivyEOMDate} flip risk</div>
+                      <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>
+                        <strong>{pendingRisk.map(p => p.ticker).join(", ")}</strong> currently trading below SMA but officially still Invested. If below at {ivyEOMDate} close, signal flips to Cash.
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {ivyLive && confirmedCash.length === 0 && pendingRisk.length === 0 && ivyPositions.some(p => p.variance != null && p.variance > 0 && p.variance <= 2) && (
+                  <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, padding:"10px 14px", marginTop:8, display:"flex", alignItems:"flex-start", gap:10 }}>
+                    <span style={{ fontSize:15, flexShrink:0 }}>⚠️</span>
+                    <div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:3 }}>Near-Signal Watch</div>
+                      <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>
+                        {ivyPositions.filter(p => p.variance != null && p.variance > 0 && p.variance <= 2).map(p => `${p.ticker} (+${p.variance?.toFixed(1)}%)`).join(", ")} within 2% of signal line. Monitor into {ivyEOMDate} close.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>);
+            })()}
+
+            <div className="sumBar" style={{ marginTop:8 }}>
+              <span className="sumBarLabel">Ivy Signal</span>
+              <span style={{ fontSize:12, fontWeight:700, color: ivyAtRiskCount === 0 ? "#4ade80" : "#fbbf24" }}>
+                {ivyInvestedCount} / 5 Invested
+              </span>
+              <span style={{ fontSize:12, color:"#475569" }}>·</span>
+              <span style={{ fontSize:12, color: ivyAtRiskCount > 0 ? "#fbbf24" : "#94a3b8" }}>
+                {ivyLive && ivyAtRiskCount > 0
+                  ? `⚠ ${ivyAtRiskCount} position${ivyAtRiskCount > 1 ? "s" : ""} at risk of flipping on ${ivyEOMDate} — official signal fires at month-end close only`
+                  : `Official positions as of ${ivyOfficialDate} · Next reading: ${ivyEOMDate}`}
+              </span>
+            </div>
+          </section>
+
+        </div>
+      </div>
+
+      {/* MODALS */}
+      {modal==="portfolioDetail" && detailKey && portfolioDetailData[detailKey] && (() => {
+        const d = portfolioDetailData[detailKey];
+        const hasAllYtd = d.components.every(c => c.ytd != null);
+        return (
+          <ModalWrapper onClose={()=>{ setModal(null); setDetailKey(null); }} title={d.title} sub={d.subtitle}>
+            <div style={{ display:"flex", gap:24, marginBottom:16 }}>
+              <div>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>YTD</div>
+                <div style={{ fontSize:26, fontWeight:700, color: d.ytd == null ? "#fff" : d.ytd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {d.ytd != null ? `${d.ytd >= 0 ? "+" : ""}${d.ytd.toFixed(1)}%` : "—"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>1-YR</div>
+                <div style={{ fontSize:26, fontWeight:700, color: d.oneYear == null ? "#fff" : d.oneYear >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {d.oneYear != null ? `${d.oneYear >= 0 ? "+" : ""}${d.oneYear.toFixed(1)}%` : "—"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#64748b" }}>5-YR</div>
+                <div style={{ fontSize:26, fontWeight:700, color: d.fiveYear == null ? "#fff" : d.fiveYear >= 0 ? "#4ade80" : "#ff6b88" }}>
+                  {d.fiveYear != null ? `${d.fiveYear >= 0 ? "+" : ""}${d.fiveYear.toFixed(1)}%` : "—"}
+                </div>
+              </div>
+            </div>
+            <table className="valTable">
+              <thead>
+                <tr>
+                  <th style={{ textAlign:"left" }}>Ticker</th>
+                  <th style={{ textAlign:"left" }}>Description</th>
+                  <th style={{ textAlign:"right" }}>Weight</th>
+                  <th style={{ textAlign:"right" }}>YTD</th>
+                  <th style={{ textAlign:"right" }}>1-YR</th>
+                  <th style={{ textAlign:"right" }}>5-YR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...d.components].sort((a, b) => b.weight - a.weight).map(c => {
+                  return (
+                    <tr key={c.ticker}>
+                      <td style={{ fontWeight:700, color:"#cbd5e1" }}>{c.ticker}</td>
+                      <td style={{ color:"#94a3b8" }}>{TICKER_LABELS[c.ticker] ?? "—"}</td>
+                      <td style={{ textAlign:"right", color:"#94a3b8" }}>{c.weight}%</td>
+                      <td style={{ textAlign:"right", fontWeight:600, color: c.ytd == null ? "#64748b" : c.ytd >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {c.ytd != null ? `${c.ytd >= 0 ? "+" : ""}${c.ytd.toFixed(1)}%` : "—"}
+                      </td>
+                      <td style={{ textAlign:"right", fontWeight:600, color: c.oneYear == null ? "#64748b" : c.oneYear >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {c.oneYear != null ? `${c.oneYear >= 0 ? "+" : ""}${c.oneYear.toFixed(1)}%` : "—"}
+                      </td>
+                      <td style={{ textAlign:"right", fontWeight:600, color: c.fiveYear == null ? "#64748b" : c.fiveYear >= 0 ? "#4ade80" : "#ff6b88" }}>
+                        {c.fiveYear != null ? `${c.fiveYear >= 0 ? "+" : ""}${c.fiveYear.toFixed(1)}%` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {!hasAllYtd && (
+              <div style={{ fontSize:11, color:"#64748b", marginTop:10 }}>
+                One or more components are still loading — the total above will resolve once all figures are in.
+              </div>
+            )}
+          </ModalWrapper>
+        );
+      })()}
+
+      {modal==="roberts40w" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="Roberts 40-Week Signal" sub="Lance Roberts · RIA Advisors · The primary trend gate for all allocation decisions">
+          <ModalGrid
+            left={<>
+              <SH>Current state</SH>
+              {(() => {
+                const stateColor = is200Broken?(spxDailyPct!=null&&spxDailyPct>0?"#60a5fa":"#ff6b88"):spx200Pct!=null&&spx200Pct<=3?"#fbbf24":"#4ade80";
+                const stateLabel = is200Broken&&spxDailyPct!=null&&spxDailyPct>0?"RECLAIMING":is200Broken?"RISK OFF":spx200Pct!=null&&spx200Pct<=3?"RISK WATCH":"RISK ON";
+                const t1 = !is200Broken && spx200Pct != null && spx200Pct > 0;
+                const t2 = t1 && spx200Pct != null && spx200Pct > 3;
+                const t3 = t2 && breadthPct != null && breadthPct > 55;
+                return <>
+                  <div style={{ fontSize:36, fontWeight:900, color:stateColor, letterSpacing:"-0.02em", lineHeight:1, marginBottom:4 }}>{stateLabel}</div>
+                  <div style={{ display:"flex", gap:16, marginBottom:12 }}>
+                    <div><div style={{ fontSize:9, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>SPX</div><div style={{ fontSize:18, fontWeight:800, color:"#fff" }}>{spxPrice!=null?fmtWhole(spxPrice):"—"}</div></div>
+                    <div><div style={{ fontSize:9, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>40-Wk MA</div><div style={{ fontSize:18, fontWeight:800, color:"#64748b" }}>{fmtWhole(spx200)}</div></div>
+                    <div><div style={{ fontSize:9, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>Gap</div><div style={{ fontSize:18, fontWeight:800, color:stateColor }}>{spx200Pct!=null?`${spx200Pct>=0?"+":""}${spx200Pct.toFixed(1)}%`:"—"}</div></div>
+                    <div><div style={{ fontSize:9, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>MA Slope</div><div style={{ fontSize:18, fontWeight:800, color:slope200!=null&&slope200>0?"#4ade80":"#ff6b88" }}>{slope200!=null?`${slope200>0?"↗":"↘"} ${slope200.toFixed(1)}%`:"—"}</div></div>
+                  </div>
+                  {/* Proximity bar */}
+                  <div style={{ position:"relative", height:4, borderRadius:9999, background:"linear-gradient(to right,#ff6b88,#fbbf24,#4ade80,#fbbf24,#ff6b88)", marginBottom:10 }}>
+                    <div style={{ position:"absolute", top:"50%", left:`${Math.max(2,Math.min(spx200Pct!=null?50+spx200Pct*2:50,98))}%`, transform:"translate(-50%,-50%)", width:10, height:10, borderRadius:"50%", background:"#fff", border:`2px solid ${stateColor}` }} />
+                  </div>
+                  {/* Re-entry tranche tracker */}
+                  <div style={{ background:"#0d1240", borderRadius:8, padding:"10px 12px", marginBottom:12 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Re-Entry Tranche Tracker</div>
+                    {[
+                      { label:"① MA Reclaimed — SPX above 40-wk MA", active:t1 },
+                      { label:"② Retest Holds — held above MA (+3% buffer)", active:t2 },
+                      { label:"③ Breadth >55% — broad market confirms", active:t3 },
+                    ].map(r => (
+                      <div key={r.label} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                        <div style={{ width:8, height:8, borderRadius:"50%", background:r.active?"#4ade80":"#202a64", border:`1.5px solid ${r.active?"#4ade80":"#334155"}`, flexShrink:0 }} />
+                        <div style={{ fontSize:11, color:r.active?"#4ade80":"#475569" }}>{r.label}</div>
+                      </div>
+                    ))}
+                    <div style={{ fontSize:10, color:t3?"#4ade80":"#fbbf24", marginTop:4, fontWeight:600 }}>
+                      {t3?"All tranches confirmed — full re-entry":t2?"Awaiting breadth confirmation":t1?"Awaiting retest to hold":"Awaiting MA reclaim"}
+                    </div>
+                  </div>
+                  {/* The core rule */}
+                  <MCard>
+                    <SH>The core rule</SH>
+                    <div style={{ display:"grid", gap:6, marginTop:8 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", background:"rgba(74,222,128,0.08)", borderRadius:8, border:"0.5px solid rgba(74,222,128,0.2)" }}>
+                        <div style={{ width:8, height:8, borderRadius:"50%", background:"#4ade80", flexShrink:0 }} />
+                        <div style={{ fontSize:11, color:"#cbd5e1", lineHeight:1.5 }}><span style={{ color:"#4ade80", fontWeight:700 }}>Above 40-wk MA</span> — portfolio allocated 100% to equity risk</div>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", background:"rgba(255,107,136,0.08)", borderRadius:8, border:"0.5px solid rgba(255,107,136,0.2)" }}>
+                        <div style={{ width:8, height:8, borderRadius:"50%", background:"#ff6b88", flexShrink:0 }} />
+                        <div style={{ fontSize:11, color:"#cbd5e1", lineHeight:1.5 }}><span style={{ color:"#ff6b88", fontWeight:700 }}>Below 40-wk MA</span> — reduce to 50% equity allocation</div>
+                      </div>
+                    </div>
+                  </MCard>
+                </>;
+              })()}
+            </>}
+            right={<>
+              {/* 6-indicator scorecard */}
+              <MCard>
+                <SH>Sustained vs brief break — 6-indicator scorecard</SH>
+                <BC>When the 40-wk MA breaks, these 6 indicators determine whether the break is a whipsaw (buy the dip) or a sustained bear. 3+ firing = sustained decline. 0–1 firing = whipsaw recovery.</BC>
+                <div style={{ display:"grid", gap:5, marginTop:10 }}>
+                  {[
+                    { label:"200-DMA slope direction", bearish: slope200!=null&&slope200<0, bearNote:"Flat/falling = sustained", bullNote:"Rising = whipsaw likely", live: slope200!=null?`${slope200>0?"↗":"↘"} ${slope200.toFixed(1)}%`:"—" },
+                    { label:"Weekly MACD", bearish: false, bearNote:"Negative before price confirms = sustained", bullNote:"Positive = corrective", live:"Manual — check chart" },
+                    { label:"RSI at break", bearish: false, bearNote:"Above 40 at break = no capitulation", bullNote:"Below 32 = fear capitulated = contrarian buy", live:"Manual — check chart" },
+                    { label:"AAII Bears", bearish: false, bearNote:"Below 45% = not enough pessimism", bullNote:"Above 45% = too bearish = contrarian buy", live:"Manual — check weekly" },
+                    { label:"Breadth at break", bearish: breadthPct!=null&&breadthPct<40, bearNote:"<40% above 200-DMA = broad selling", bullNote:">40% = large-cap only = whipsaw", live: breadthPct!=null?`${breadthPct.toFixed(0)}%`:"—" },
+                    { label:"Death cross forming", bearish: false, bearNote:"50-DMA converging toward 200-DMA = sustained", bullNote:"No convergence = whipsaw", live:"Display only" },
+                  ].map((ind, i) => (
+                    <div key={i} style={{ background:"#0d1240", borderRadius:7, padding:"8px 10px", border:`0.5px solid ${ind.bearish?"rgba(255,107,136,0.2)":"rgba(74,222,128,0.1)"}` }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:"#e2e8f0" }}>{ind.label}</div>
+                        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                          <div style={{ fontSize:10, color:"#64748b" }}>{ind.live}</div>
+                          <div style={{ width:7, height:7, borderRadius:"50%", background:ind.bearish?"#ff6b88":"#4ade80", flexShrink:0 }} />
+                        </div>
+                      </div>
+                      <div style={{ fontSize:9, color:"#475569", lineHeight:1.4 }}>
+                        <span style={{ color:"#ff6b88" }}>Bear: </span>{ind.bearNote} · <span style={{ color:"#4ade80" }}>Bull: </span>{ind.bullNote}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop:10, padding:"8px 10px", background:"rgba(251,191,36,0.08)", borderRadius:8, border:"0.5px solid rgba(251,191,36,0.2)" }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#fbbf24", marginBottom:2 }}>Base rates since 2000 — 12 breaks total</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, fontSize:10, color:"#94a3b8" }}>
+                    <div><span style={{ color:"#ff6b88", fontWeight:700 }}>7 sustained</span> — avg 12-mo return: –4.0% · zero positive first months</div>
+                    <div><span style={{ color:"#4ade80", fontWeight:700 }}>5 whipsaws</span> — avg 12-mo return: +19.8% · 100% positive at 3/6/9/12 mo</div>
+                  </div>
+                </div>
+              </MCard>
+              {/* Historical breaks table */}
+              <MCard>
+                <SH>Every 40-wk break since 2008</SH>
+                <BC>All resolved above the 200-week MA. None became a structural bear while above it.</BC>
+                <div style={{ display:"grid", gap:4, marginTop:8 }}>
+                  {[
+                    { year:"2012", event:"Euro crisis", outcome:"Corrective · Fed QE2 reversed it", result:"whipsaw" },
+                    { year:"2015", event:"Brexit / China", outcome:"Corrective · central bank response", result:"whipsaw" },
+                    { year:"2018", event:"Fed taper tantrum", outcome:"Corrective · Powell pivot", result:"whipsaw" },
+                    { year:"2020", event:"COVID crash", outcome:"Corrective · largest stimulus in history", result:"whipsaw" },
+                    { year:"2022", event:"Russia/Ukraine + inflation", outcome:"Sustained · 9 months · held 200-wk", result:"sustained" },
+                    { year:"2025", event:"Tariff shock", outcome:"Corrective · resolved, back above MA", result:"whipsaw" },
+                    { year:"Now", event:`SPX ${spx200Pct!=null?`+${spx200Pct.toFixed(1)}%`:"+8%"} above`, outcome:"RISK ON · trend intact · slope rising", result:"on" },
+                  ].map((r, i) => (
+                    <div key={i} style={{ display:"flex", gap:8, alignItems:"flex-start", padding:"6px 8px", borderRadius:6, background: r.year==="Now"?"rgba(74,222,128,0.06)":"rgba(255,255,255,0.02)", border:`0.5px solid ${r.year==="Now"?"rgba(74,222,128,0.2)":"rgba(255,255,255,0.04)"}` }}>
+                      <div style={{ fontSize:11, fontWeight:700, color: r.result==="sustained"?"#ff6b88":r.result==="on"?"#4ade80":"#94a3b8", minWidth:32, flexShrink:0 }}>{r.year}</div>
+                      <div style={{ fontSize:11, fontWeight:600, color:"#cbd5e1", minWidth:80, flexShrink:0 }}>{r.event}</div>
+                      <div style={{ fontSize:10, color:"#475569", lineHeight:1.4 }}>{r.outcome}</div>
+                    </div>
+                  ))}
+                </div>
+              </MCard>
+              {/* Roberts quote */}
+              <ActionCard>
+                {is200Broken
+                  ? "40-wk MA breached. Roberts rule: reduce to 50% equity immediately. Do not wait for confirmation — the rule exists so emotion doesn't override discipline at exactly this moment."
+                  : `SPX is ${spx200Pct!=null?`+${spx200Pct.toFixed(1)}%`:"well"} above the 40-wk MA with slope rising. Roberts rule: remain fully allocated to equity risk. "It may not be possible to time the market, but it is possible to reach intelligent conclusions about whether the market offers good value." The trend says yes. Valuation says be selective.`}
+              </ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+      {modal==="vix" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="VIX — Volatility Index" sub="CBOE Volatility Index · Implied 30-day S&P 500 volatility">
+          <ModalGrid
+            left={<><SH>Current reading</SH><div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{vixValue!=null?fmt1(vixValue):"—"}</div><Tag label={vixStatus.label} color={vixStatus.color} bg={`${vixStatus.color}22`} /><BC>{vixStatus.sub||"Monitor conditions."}</BC>
+              <BandTrack segs={[{w:"37.5%",color:"#047857"},{w:"12.5%",color:"#4ade80"},{w:"25%",color:"#f59e0b"},{w:"25%",color:"#ef4444"}]} needle={vixValue!=null?vixNeedlePct(vixValue):56} scaleNums={["0","15","20","30","40+"]} scaleNames={["Low","Normal","Elevated","Stress","Crisis"]} />
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
+                <SH>Historical percentile · since 1990</SH>
+                <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", marginBottom:8 }}>
+                  <div style={{ fontSize:32, fontWeight:700, color:"#fff", lineHeight:1 }}>{vixPct}<span style={{ fontSize:16 }}>th</span></div>
+                  <div style={{ fontSize:11, color:"#94a3b8", textAlign:"right", lineHeight:1.5 }}>{vixPct>=75?"Elevated · top 25%":"Above median"}<br/>of all readings</div>
+                </div>
+                <div style={{ height:8, borderRadius:9999, background:"#1e2a5e", overflow:"hidden" }}><div style={{ height:8, borderRadius:9999, background:"#fbbf24", width:`${vixPct}%` }} /></div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569", marginTop:4 }}><span>0th</span><span>50th</span><span>75th</span><span>90th</span><span>100th</span></div>
+              </div></>}
+            right={<><MCard><SH>What it measures</SH><BC>The VIX measures expected 30-day S&P 500 volatility from options pricing. When fear rises, traders pay more for protective puts — and the VIX moves higher. Called the "fear gauge."</BC></MCard>
+              <MCard><SH>Historical context</SH><div style={{ display:"grid", gap:5, marginTop:8 }}><HistRow val="82.7" event="COVID Mar 2020" note="All-time high · months to recover" /><HistRow val="79.1" event="GFC Nov 2008" note="Sustained · 18 months of pain" /><HistRow val="45.3" event="Euro crisis 2011" note="Flash crash · resolved quickly" /><HistRow val="38.6" event="Yen unwind 2024" note="Carry trade · 2 weeks" /><HistRow val={vixValue!=null?fmt1(vixValue):"—"} event="Today" note={vixValue!=null&&vixValue>=30?"Above trigger":"Elevated · below danger zone"} active /><HistRow val="20" event="Long-run avg" note="Mean · median ~17" /></div></MCard>
+              <ActionCard>{vixValue!=null&&vixValue>=30?"VIX above 30. Pause all new equity buying until VIX drops back below 30 for two consecutive sessions.":`VIX at ${vixValue!=null?fmt1(vixValue):"—"} is below 30. No buying restriction active. Continue normal plan — but do not treat the tape as calm.`}</ActionCard></>}
+          />
+        </ModalWrapper>
+      )}
+      {modal==="hy" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="HY Spread — High Yield Credit Spread" sub="ICE BofA US High Yield Spread · The bond market's early warning system">
+          <ModalGrid
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{Math.round(hySpread*100)}<span style={{ fontSize:22 }}>bps</span></div>
+              <Tag
+                label={hySpread>=5?"Stress — Above Industry Red Line":hySpread>=4?"⚠ Above Your Trigger":hySpread>=3.5?"Caution — Widening":hySpread>=3?"Firm — Watch Direction":"Tight — Historically Risk-On"}
+                color={hySpread>=4?"#ff6b88":hySpread>=3.5?"#fbbf24":hySpread>=3?"#94a3b8":"#4ade80"}
+                bg={hySpread>=4?"rgba(255,79,114,0.15)":hySpread>=3.5?"rgba(245,158,11,0.15)":hySpread>=3?"rgba(148,163,184,0.15)":"rgba(74,222,128,0.15)"}
+              />
+              <BC>{hySpread>=5?"Credit stress confirmed above industry red line. Serious default risk being priced. Both your trigger and the industry 500bps threshold are breached."
+                :hySpread>=4?"Above your 400bps trigger. Credit markets signaling stress. Combined with VIX >30 this activates your defensive posture."
+                :hySpread>=3.5?"Spreads widening toward caution zone. Direction of travel matters more than absolute level. Watch for continued widening toward 400bps."
+                :hySpread>=3?`At ${Math.round(hySpread*100)}bps, spreads are firm but not yet in caution territory. Still ${Math.round((4-hySpread)*100)}bps from your trigger. Watch direction of travel weekly.`
+                :`At ${Math.round(hySpread*100)}bps, spreads are historically tight — credit markets are in risk-on mode, priced for perfection. A move toward 400bps would be a ~${Math.round((4-hySpread)/hySpread*100)}% widening from here.`}
+              </BC>
+              <BandTrack
+                segs={[{w:"30%",color:"#047857"},{w:"20%",color:"#4ade80"},{w:"10%",color:"#f59e0b"},{w:"25%",color:"#ef4444"},{w:"15%",color:"#7f1d1d"}]}
+                needle={
+                  hySpread <= 3.5 ? Math.max(0,(hySpread-2)/1.5*30)
+                  : hySpread <= 4.5 ? 30+(hySpread-3.5)*20
+                  : hySpread <= 5   ? 50+(hySpread-4.5)*20
+                  : hySpread <= 7   ? 60+(hySpread-5)/2*25
+                  : Math.min(99, 85+(hySpread-7)/3*15)
+                }
+                scaleNums={["200","350","450","500","700","1000+"]}
+                scaleNames={["Tight","Firm","Caution","Red Line","Stress","Crisis"]}
+              />
+              {/* Dual threshold boxes */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 }}>
+                <div style={{ background:"#141b47", border:`1px solid ${hySpread>=4?"rgba(255,107,136,0.5)":"rgba(245,158,11,0.3)"}`, borderRadius:10, padding:12 }}>
+                  <SH>Your trigger</SH>
+                  <div style={{ fontSize:18, fontWeight:700, color: hySpread>=4?"#ff6b88":"#fbbf24" }}>400bps</div>
+                  <div style={{ fontSize:11, color:"#94a3b8", marginTop:3, lineHeight:1.5 }}>Conservative early warning. Combined with VIX &gt;30 fires defensive posture.</div>
+                  <div style={{ fontSize:11, fontWeight:700, color: hySpread>=4?"#ff6b88":"#64748b", marginTop:4 }}>
+                    {hySpread>=4 ? "⚠ ACTIVE" : `${Math.round((4-hySpread)*100)}bps away`}
+                  </div>
+                </div>
+                <div style={{ background:"#141b47", border:`1px solid ${hySpread>=5?"rgba(255,107,136,0.5)":"rgba(148,163,184,0.2)"}`, borderRadius:10, padding:12 }}>
+                  <SH>Industry red line</SH>
+                  <div style={{ fontSize:18, fontWeight:700, color: hySpread>=5?"#ff6b88":"#94a3b8" }}>500bps</div>
+                  <div style={{ fontSize:11, color:"#94a3b8", marginTop:3, lineHeight:1.5 }}>Historical pivot — credit cycle turning. Long-term avg is ~540bps.</div>
+                  <div style={{ fontSize:11, fontWeight:700, color: hySpread>=5?"#ff6b88":"#64748b", marginTop:4 }}>
+                    {hySpread>=5 ? "⚠ BREACHED" : `${Math.round((5-hySpread)*100)}bps away`}
+                  </div>
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>What it measures — and why it leads equities</SH>
+                <BC>HY spread is the extra yield investors demand to hold junk-rated corporate bonds vs. Treasuries. Credit is the lifeblood of the economy — businesses borrow to operate, consumers borrow to spend. When lenders get nervous, credit conditions tighten weeks before equities reprice. The bond market is harder to talk up than stocks and is not susceptible to retail momentum. When credit speaks, listen.</BC>
+              </MCard>
+              <MCard>
+                <SH>The threshold framework</SH>
+                <div style={{ fontSize:12, lineHeight:1.9, color:"#cbd5e1", marginTop:6 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#4ade80" }}>{"<"}350bps</span><span>Tight · Risk-on · Priced for perfection</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#fbbf24" }}>350–400bps</span><span>Caution · Widening trend to watch</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#fbbf24", fontWeight:700 }}>400bps ←</span><span style={{ fontWeight:700 }}>Your defensive trigger</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#f97316" }}>450–500bps</span><span>Watch zone · Default risk rising</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#ff6b88", fontWeight:700 }}>500bps ←</span><span style={{ fontWeight:700 }}>Industry red line</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#ff6b88" }}>700bps+</span><span>Stress · Recession territory</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ color:"#7f1d1d" }}>1000bps+</span><span>Crisis · GFC / COVID level</span></div>
+                </div>
+              </MCard>
+              <MCard>
+                <SH>Historical CDX warning instances</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="1000bps+" event="GFC 2008-09" note="Credit markets frozen" />
+                  <HistRow val="800bps" event="COVID Mar 2020" note="Sharp spike · rapid recovery" />
+                  <HistRow val="700bps" event="Energy crisis 2016" note="Oil-driven stress" />
+                  <HistRow val="580bps" event="2022 rate shock" note="Fed hiking cycle · peak" />
+                  <HistRow val={`${Math.round(hySpread*100)}bps`} event="Today" note={hySpread>=4?"Above your trigger · stress building":hySpread>=3.5?"Caution zone · watch direction":hySpread>=3?"Firm · below caution threshold":"Tight · historically risk-on"} active />
+                  <HistRow val="540bps" event="Long-run average" note="Historical mean" />
+                </div>
+              </MCard>
+              <ActionCard>
+                {hySpread>=5
+                  ? `HY at ${Math.round(hySpread*100)}bps — above both your trigger AND the 500bps industry red line. Full defensive posture warranted if VIX >30 confirms.`
+                  : hySpread>=4
+                  ? `HY at ${Math.round(hySpread*100)}bps — your trigger is active. ${Math.round((5-hySpread)*100)}bps from the industry red line. Combined with VIX >30 this fires your defensive posture.`
+                  : `HY at ${Math.round(hySpread*100)}bps — ${Math.round((4-hySpread)*100)}bps below your 400bps trigger, ${Math.round((5-hySpread)*100)}bps below the 500bps industry red line. CDX warning signal is active — direction of travel matters. Monitor weekly. Both VIX >30 AND HY >400bps must confirm to activate defensive posture.`}
+              </ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+      {modal==="yc" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="Yield Curve — 10Y minus 2Y" sub="US Treasury spread · Most reliable recession leading indicator since 1955">
+          <ModalGrid
+            left={<><SH>Current reading</SH><div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{yieldCurve>0?"+":""}{fmt2(yieldCurve)}<span style={{ fontSize:22 }}>%</span></div><Tag label={yieldCurve>0?"Healthy — Positive Slope":"Inverted — Recession Signal"} color={yieldCurve>0?"#4ade80":"#ff6b88"} bg={yieldCurve>0?"rgba(74,222,128,0.15)":"rgba(255,79,114,0.15)"} /><BC>{yieldCurve>0?"Curve is upward sloping — normal state. Long rates above short rates suggest the bond market is not pricing a near-term recession.":"Curve is inverted — short rates above long rates. Bond market is pricing a recession."}</BC>
+              <BandTrack segs={[{w:"25%",color:"#ef4444"},{w:"15%",color:"#f59e0b"},{w:"20%",color:"#94a3b8"},{w:"40%",color:"#047857"}]} needle={Math.max(0,Math.min(((yieldCurve+1.5)/3.5)*100,99))} scaleNums={["-1.5%","-0.5%","0%","+0.5%","+2%"]} scaleNames={["Deep inv.","Inverted","Flat","Normal","Steep"]} />
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
+                <SH>Re-steepening watch</SH>
+                <div style={{ fontSize:13, lineHeight:1.7, color:"#cbd5e1" }}>After deep inversion reaching -1.08% in Jul 2023, the curve re-steepened to {yieldCurve>0?"+":""}{fmt2(yieldCurve)}%. Re-steepening after inversion has historically preceded recession — this phase warrants monitoring.</div>
+              </div></>}
+            right={<><MCard><SH>What it measures</SH><BC>The 10Y-2Y spread shows whether long-term rates are above short-term. Inversion means markets expect the Fed to cut — usually because recession is expected. It has predicted every US recession since 1955 with only one false positive.</BC></MCard>
+              <MCard><SH>Historical context</SH><div style={{ display:"grid", gap:5, marginTop:8 }}><HistRow val="-1.08%" event="Jul 2023 low" note="Most inverted since 1981" /><HistRow val="-0.5%" event="Avg 2022-2023" note="Sustained inversion · rate hikes" /><HistRow val="0%" event="Re-steepen start" note="Curve uninverting · watch phase" /><HistRow val={`${yieldCurve>0?"+":""}${fmt2(yieldCurve)}%`} event="Today" note={yieldCurve>0?"Positive · healthy slope":"Still inverted"} active /><HistRow val="+2%+" event="Bull market norm" note="Healthy growth expectations" /></div></MCard>
+              <ActionCard>Yield curve is {yieldCurve>0?"positive — no inversion signal. However, re-steepening after deep inversion is a watch signal. The curve often steepens just before recession as the Fed cuts short rates.":"inverted — watch for recession signal to develop over the next 6-18 months."}</ActionCard></>}
+          />
+        </ModalWrapper>
+      )}
+      {modal==="real10y" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="Real 10Y — Inflation-Adjusted Rate" sub="10-Year Treasury minus 10-Year Breakeven Inflation · True cost of money">
+          <ModalGrid
+            left={<><SH>Current reading</SH><div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{fmt2(real10y)}<span style={{ fontSize:22 }}>%</span></div><Tag label={real10y>=2?"Elevated — Equity Headwind":"Moderate"} color={real10y>=2?"#fbbf24":"#94a3b8"} bg={real10y>=2?"rgba(245,158,11,0.15)":"rgba(148,163,184,0.12)"} /><BC>{real10y>=2?"Real rates above 1.5% create meaningful competition for equities. At current levels, bonds offer real yield that compresses equity multiples over time.":"Real rates in moderate range — some competition for equities but not extreme."}</BC>
+              <BandTrack segs={[{w:"20%",color:"#047857"},{w:"30%",color:"#4ade80"},{w:"25%",color:"#f59e0b"},{w:"25%",color:"#ef4444"}]} needle={Math.max(0,Math.min(((real10y+2)/5)*100,99))} scaleNums={["-2%","0%","1%","2%","3%+"]} scaleNames={["Neg. real","Loose","Neutral","Firm","Tight"]} />
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
+                <SH>Equity valuation impact</SH>
+                <div style={{ fontSize:13, lineHeight:1.7, color:"#cbd5e1" }}>Every 100bps rise in real rates historically reduces fair-value P/E by ~3-5x. At {fmt2(real10y)}%, this creates a headwind vs. the near-zero real rates of 2020-2021 that drove the bull market.</div>
+              </div></>}
+            right={<><MCard><SH>What it measures</SH><BC>The real 10-year rate is nominal Treasury yield minus expected inflation. It represents the true inflation-adjusted return on safe assets. When real rates rise, the hurdle rate for all risky assets rises — directly compressing equity multiples.</BC></MCard>
+              <MCard><SH>Historical context</SH><div style={{ display:"grid", gap:5, marginTop:8 }}><HistRow val="-1.0%" event="2020-2021" note="Deeply negative · fueled bull run" /><HistRow val="0%" event="Pre-hike 2022" note="Near zero · inflection point" /><HistRow val="2.5%" event="Peak 2023" note="Multi-decade high · equity headwind" /><HistRow val={`${fmt2(real10y)}%`} event="Today" note="Elevated · equity headwind" active /><HistRow val="0.5%" event="Historical neutral" note="Equities fairly valued vs. bonds" /></div></MCard>
+              <ActionCard>No direct trigger on real rates, but {fmt2(real10y)}% is a structural headwind for equity multiples. It supports your valuation models showing overvaluation — the market is priced for a lower-rate world than we&apos;re in.</ActionCard></>}
+          />
+        </ModalWrapper>
+      )}
+      {modal==="dma200" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="200-DMA — Long-Term Trend" sub="200-Day Moving Average of SPX · The most widely watched trend line in markets">
+          <ModalGrid
+            left={<><SH>Current levels</SH>
+              <div style={{ display:"flex", alignItems:"baseline", gap:16, marginBottom:6 }}><div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1 }}>{fmtWhole(spx200)}</div><div style={{ fontSize:13, color:"#64748b" }}>200-DMA</div></div>
+              <div style={{ fontSize:24, fontWeight:700, color:"#fff", marginBottom:8 }}>{spxPrice!=null?fmtWhole(spxPrice):"—"} <span style={{ fontSize:13, color:"#64748b" }}>SPX today</span></div>
+              {(() => {
+                const pct200 = spxVs(spx200);
+                const isBelow = pct200 != null && pct200 < 0;
+                const isTesting = pct200 != null && pct200 >= 0 && pct200 <= 2;
+                const tagLabel = pct200 == null ? "Loading"
+                  : isBelow ? `Bearish · ${fmtSigned1(pct200)}`
+                  : isTesting ? `Testing Support · ${fmtSigned1(pct200)} above`
+                  : `Holding Above · ${fmtSigned1(pct200)}`;
+                const tagColor = isBelow ? "#ff6b88" : isTesting ? "#fbbf24" : "#4ade80";
+                const tagBg = isBelow ? "rgba(255,79,114,0.15)" : isTesting ? "rgba(245,158,11,0.15)" : "rgba(74,222,128,0.15)";
+                const pts = spxPrice != null ? Math.abs(spxPrice - spx200).toFixed(0) : "—";
+                const direction = isBelow ? "below" : "above";
+                const barPct = Math.min(Math.abs(pct200 ?? 1.6) / 2, 10);
+                return (<>
+                  <Tag label={tagLabel} color={tagColor} bg={tagBg} />
+                  <BC>SPX is {spxPrice != null ? `${pts} points ${direction} its 200-DMA.` : "near its 200-DMA."} {isBelow ? "The 200-DMA has been broken — this is the level that separates corrections from bear markets. Watch for two consecutive Friday closes below to confirm." : "This is the critical long-term support level — a sustained break below triggers your defensive posture."}</BC>
+                  <div style={{ marginTop:14 }}>
+                    <SH>Distance from 200-DMA</SH>
+                    <div style={{ position:"relative", height:8, background:"#1e2a5e", borderRadius:9999, margin:"8px 0", overflow:"hidden" }}>
+                      {isBelow
+                        ? <div style={{ position:"absolute", right:"50%", top:0, height:8, width:`${barPct * 5}%`, background:"#ff6b88", borderRadius:"9999px 0 0 9999px" }} />
+                        : <div style={{ position:"absolute", left:"50%", top:0, height:8, width:`${barPct * 5}%`, background: isTesting ? "#fbbf24" : "#4ade80", borderRadius:"0 9999px 9999px 0" }} />
+                      }
+                      <div style={{ position:"absolute", top:-2, left:"50%", width:2, height:12, background:"rgba(255,255,255,0.5)", borderRadius:1 }} />
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#475569" }}><span>-10% below</span><span>At 200-DMA</span><span>+10% above</span></div>
+                  </div>
+                  <div style={{ marginTop:16, background:"#141b47", border:`1px solid ${isBelow ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.3)"}`, borderRadius:10, padding:14 }}>
+                    <SH>Your defensive trigger</SH>
+                    <div style={{ fontSize:13, lineHeight:1.6, color: isBelow ? "#ff6b88" : "#fbbf24" }}>Two consecutive Friday closes below {fmtWhole(spx200)} AND VIX &gt;30 or HY &gt;400bps activates defensive posture.</div>
+                  </div>
+                </>);
+              })()}
+            </>}
+            right={<><MCard><SH>Why the 200-DMA matters</SH><BC>The 200-day moving average represents roughly one year of trading. It is the single most watched trend line by institutional investors, hedge funds, and systematic strategies. When SPX breaks below it, many models automatically reduce equity exposure — creating self-reinforcing selling pressure.</BC></MCard>
+              <MCard><SH>Historical 200-DMA breaks</SH><div style={{ display:"grid", gap:5, marginTop:8 }}>
+                <HistRow val="-34%" event="COVID 2020" note="Broke · recovered in 23 days" />
+                <HistRow val="-20%" event="2022 bear" note="Broke Jan · stayed below 10 months" />
+                <HistRow val="-19%" event="Q4 2018" note="Broke Dec · recovered Feb 2019" />
+                <HistRow val="-57%" event="GFC 2008" note="Broke Oct 2007 · 2 year bear" />
+                <HistRow
+                  val={spxVs(spx200)!=null?fmtSigned1(spxVs(spx200)!):"—"}
+                  event="Today"
+                  note={spxVs(spx200)==null?"Loading" : spxVs(spx200)! < 0 ? "Bearish · watch for confirmation" : spxVs(spx200)! <= 2 ? "Testing support zone" : "Holding above · trend intact"}
+                  active
+                />
+              </div></MCard>
+              {(() => {
+                const pct200 = spxVs(spx200);
+                const isBelow = pct200 != null && pct200 < 0;
+                const pts = spxPrice != null ? Math.abs(spxPrice - spx200).toFixed(0) : "—";
+                return (
+                  <ActionCard>
+                    {isBelow
+                      ? `SPX is ${pts} pts below its 200-DMA (${fmtWhole(spx200)}). Roberts' scorecard currently shows 2/6 sustained-break indicators firing — CAUTION zone, not confirmed bear. The 200-DMA slope is still rising (bullish), RSI is deeply oversold (bullish), and AAII bears are above 45% (contrarian bullish). Weekly MACD and breadth are the two bearish confirms. This pattern matches 2015 and Q4 2018 — both found a lower low before recovering. Do NOT go to cash. Wait for a second consecutive Friday close below ${fmtWhole(spx200)} plus VIX >30 or HY >400bps before trimming VTI. Watch the 200-DMA slope weekly — if it starts declining, the scorecard upgrades and the playbook shifts.`
+                      : `SPX is ${pts} pts above its 200-DMA. No break to evaluate. Watch for two consecutive Friday closes below ${fmtWhole(spx200)} — that is the trigger. If a break occurs, immediately run the Roberts 6-indicator scorecard: slope direction, weekly MACD, RSI level, AAII bears, breadth %, and death cross proximity. 0-2 bearish indicators = likely whipsaw, hold. 3+ = reduce risk.`
+                    }
+                  </ActionCard>
+                );
+              })()}
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      {modal==="nom10y" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="10Y Treasury Yield — Nominal" sub="US 10-Year Treasury Yield · The gravity of all asset valuations">
+          <ModalGrid
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>{nom10y.toFixed(2)}<span style={{ fontSize:22 }}>%</span></div>
+              <Tag label={nom10y>4.5?"Restrictive — Equity Headwind":nom10y>4?"Elevated — Watch":"Neutral"} color={nom10y>4.5?"#ff6b88":nom10y>4?"#fbbf24":"#4ade80"} bg={nom10y>4.5?"rgba(255,79,114,0.15)":nom10y>4?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
+              <BC>{nom10y>4?"At "+nom10y.toFixed(2)+"%, the 10Y yield is creating real competition for equities. Every dollar in bonds earns more than at any point in the 2010s — raising the bar for equity returns.":"Nominal yield is in a relatively neutral range — limited pressure on equity valuations."}</BC>
+              <BandTrack
+                segs={[{w:"33%",color:"#047857"},{w:"34%",color:"#f59e0b"},{w:"33%",color:"#ef4444"}]}
+                needle={Math.max(0,Math.min(nom10y/6*100,99))}
+                scaleNums={["0%","2%","4%","5%","6%"]}
+                scaleNames={["Low","Neutral","Elevated","Restrictive",""]}
+              />
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
+                <SH>Rate decomposition</SH>
+                <div style={{ display:"grid", gap:6, marginTop:8, fontSize:13, color:"#cbd5e1", lineHeight:1.7 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Nominal 10Y yield</span><span style={{ color:"#fff", fontWeight:600 }}>{nom10y.toFixed(2)}%</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>5Y Breakeven inflation</span><span style={{ color:"#fff", fontWeight:600 }}>{breakeven5y.toFixed(2)}%</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Real 10Y (TIPS)</span><span style={{ color:"#fff", fontWeight:600 }}>{real10y.toFixed(2)}%</span></div>
+                  <div style={{ height:1, background:"rgba(255,255,255,0.08)", margin:"4px 0" }} />
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontWeight:600 }}>Inflation premium</span><span style={{ color:"#fbbf24", fontWeight:700 }}>{(nom10y-real10y).toFixed(2)}%</span></div>
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>Why it matters</SH>
+                <BC>The 10Y yield is the "gravity" of all financial markets. When it rises, it discounts future corporate earnings more heavily — compressing P/E multiples. Growth stocks, long-duration assets, and high-multiple equities are most sensitive. Every 100bps rise historically reduces fair-value P/E by 3-5x.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical context</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="0.5%" event="2020 COVID low" note="Emergency levels · bull market fuel" />
+                  <HistRow val="1.5%" event="2021 avg" note="Still accommodative · P/E expansion" />
+                  <HistRow val="4.0%" event="Late 2022" note="First 4% breach since 2008" />
+                  <HistRow val="5.0%" event="Oct 2023 peak" note="Multi-decade high · equity selloff" />
+                  <HistRow val={nom10y.toFixed(2)+"%"} event="Today" note={nom10y>4.5?"Restrictive — headwind for multiples":"Elevated — still above neutral"} active />
+                  <HistRow val="3.0%" event="Neutral estimate" note="Fed long-run rate estimate" />
+                </div>
+              </MCard>
+              <ActionCard>{nom10y>4.5?`At ${nom10y.toFixed(2)}%, yields are restrictive. This is a structural headwind for equity P/E multiples. Combined with thin ERP, it supports a cautious posture on equity valuations.`:`At ${nom10y.toFixed(2)}%, the 10Y is elevated but below the 4.5% restrictive threshold. Monitor for a move above 4.5% — that would increase pressure on equity multiples significantly.`}</ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      {modal==="erp" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="Equity Risk Premium" sub="Earnings Yield minus Real 10Y Rate · The core math of equity vs bond valuation">
+          <ModalGrid
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>
+                {erpBps!=null?(erpBps/100).toFixed(2):"—"}<span style={{ fontSize:22 }}>%</span>
+              </div>
+              <Tag label={erpStatus(erpBps).label} color={erpStatus(erpBps).color} bg={erpStatus(erpBps).bg} />
+              <BC>Stocks currently offer {erpBps!=null?(erpBps/100).toFixed(2):"—"}% extra return over risk-free bonds. Below 5% means equities are not compensating adequately for the risk of owning them.</BC>
+              <div style={{ marginTop:14 }}>
+                <SH>How it&apos;s calculated</SH>
+                <div style={{ background:"#050a35", borderRadius:10, padding:12, marginTop:6, fontSize:12, lineHeight:1.8, color:"#94a3b8" }}>
+                  <div>Trailing P/E: <span style={{ color:"#fff", fontWeight:600 }}>{trailingPE!=null?trailingPE.toFixed(1)+"x":"~24.2x"}</span></div>
+                  <div>Earnings Yield (1÷PE): <span style={{ color:"#fff", fontWeight:600 }}>{trailingPE!=null?(100/trailingPE).toFixed(2)+"%":"~4.13%"}</span></div>
+                  <div>Real 10Y Rate: <span style={{ color:"#fff", fontWeight:600 }}>{real10y.toFixed(2)}%</span></div>
+                  <div style={{ borderTop:"0.5px solid rgba(255,255,255,0.08)", marginTop:6, paddingTop:6 }}>ERP = {trailingPE!=null?(100/trailingPE).toFixed(2):"4.13"}% − {real10y.toFixed(2)}% = <span style={{ color:erpBps!=null&&erpBps<500?"#fbbf24":"#4ade80", fontWeight:700 }}>{erpBps!=null?(erpBps/100).toFixed(2):"—"}%</span></div>
+                </div>
+              </div>
+              <BandTrack
+                segs={[{w:"25%",color:"#ef4444"},{w:"37.5%",color:"#f59e0b"},{w:"37.5%",color:"#047857"}]}
+                needle={Math.max(0,Math.min((erpBps??0)/8,99))}
+                scaleNums={["0%","2%","5%","8%+"]}
+                scaleNames={["Danger","Watch","Healthy",""]}
+              />
+            </>}
+            right={<>
+              <MCard>
+                <SH>Why it matters</SH>
+                <BC>ERP is the "smart money math check." When it collapses below 2%, a rational institutional investor has almost no incentive to own equities over Treasuries. Why accept a 30-40% drawdown risk for less than 2% extra yield? Short-term government bonds yield ~5% with zero equity risk.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical context</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="7.2%" event="2009 bottom" note="Stocks screaming cheap vs bonds" />
+                  <HistRow val="3.5%" event="2012-2019 avg" note="Healthy bull market premium" />
+                  <HistRow val="-2.1%" event="2000 Dot-Com" note="Bonds yielded more · 50% crash followed" />
+                  <HistRow val="0.5%" event="2021 peak" note="Near-zero — fueled by ZIRP" />
+                  <HistRow val={erpBps!=null?(erpBps/100).toFixed(2)+"%":"—"} event="Today" note={erpBps!=null&&erpBps<500?"Watch — below healthy threshold":"Healthy premium"} active />
+                  <HistRow val="5%+" event="Healthy threshold" note="Adequate compensation for equity risk" />
+                </div>
+              </MCard>
+              <ActionCard>ERP at {erpBps!=null?(erpBps/100).toFixed(2):"—"}% is {erpBps!=null&&erpBps<500?"below the 5% watch threshold. Equities are not offering a compelling premium over bonds at current rates. This supports a cautious stance on adding new equity exposure.":"above 5% — equities are offering adequate risk compensation."}</ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      {modal==="cape" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="CAPE Ratio — Cyclically Adjusted P/E" sub="Shiller P/E · 10-year inflation-adjusted earnings · Long-run valuation benchmark">
+          <ModalGrid
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>
+                {capeRatio.toFixed(1)}<span style={{ fontSize:22 }}>x</span>
+              </div>
+              <Tag label={capeRatio>35?"Extreme — Historically Dangerous":capeRatio>25?"Overvalued — Watch":"Elevated"} color={capeRatio>35?"#ff6b88":capeRatio>25?"#fbbf24":"#4ade80"} bg={capeRatio>35?"rgba(255,79,114,0.15)":capeRatio>25?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"} />
+              <BC>At {capeRatio.toFixed(1)}x, CAPE is {(capeRatio/16).toFixed(1)}x the historical average of ~16x. Only the 2000 dot-com peak (~44x) has been higher. Late 2021 peaked near 38x. This level has historically preceded below-average 10-year forward returns.</BC>
+              <BandTrack
+                segs={[{w:"33%",color:"#047857"},{w:"22%",color:"#4ade80"},{w:"22%",color:"#f59e0b"},{w:"23%",color:"#ef4444"}]}
+                needle={Math.max(0,Math.min(((capeRatio-5)/45)*100,99))}
+                scaleNums={["5x","15x","25x","35x","50x"]}
+                scaleNames={["Cheap","Fair","Elevated","Expensive","Extreme"]}
+              />
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:14 }}>
+                <SH>10-year forward return implication</SH>
+                <div style={{ fontSize:13, lineHeight:1.7, color:"#cbd5e1" }}>
+                  At CAPE {">"} 30x, historical median 10-year annualized real returns have been ~0–2%. At current {capeRatio.toFixed(1)}x, the market is pricing in near-perfection — any mean reversion compresses returns significantly.
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>What it measures</SH>
+                <BC>CAPE divides the S&P 500 price by 10 years of inflation-adjusted earnings, smoothing out business cycle noise. Created by Robert Shiller (Nobel laureate), it is the most cited long-run valuation metric. High CAPE does not predict the timing of a crash — but it reliably predicts below-average long-run returns from that level.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical context</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="27x" event="Black Tuesday 1929" note="Great Depression followed" />
+                  <HistRow val="44x" event="Dot-com peak 2000" note="S&P fell ~50% over 2 years" />
+                  <HistRow val="32x" event="Pre-GFC 2007" note="Financial crisis · -57% followed" />
+                  <HistRow val="38x" event="Late 2021 peak" note="2022 bear market followed · -25%" />
+                  <HistRow val={capeRatio.toFixed(1)+"x"} event="Today" note={capeRatio>35?"Extreme — near dot-com territory":"Overvalued — elevated risk"} active />
+                  <HistRow val="16x" event="Historical average" note="Long-run mean since 1871" />
+                </div>
+              </MCard>
+              <ActionCard>CAPE at {capeRatio.toFixed(1)}x is in the top 5% of all historical readings. This is not a timing signal — markets stayed expensive for years in the late 1990s. But it means the margin of safety is thin and the probability of below-average 10-year returns is elevated. Weight new equity purchases accordingly.</ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      {modal==="dxy" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="US Dollar Index (DXY)" sub="Trade-weighted basket of 6 major currencies · Global liquidity barometer">
+          <ModalGrid
+            left={<>
+              <SH>Current reading</SH>
+              <div style={{ fontSize:44, fontWeight:700, color:"#fff", letterSpacing:"-0.03em", lineHeight:1, marginBottom:6 }}>
+                {dxy!=null?dxy.toFixed(2):"—"}
+              </div>
+              <Tag
+                label={dxy==null?"Loading":dxy>104?"Strong Dollar — Liquidity Drain":dxy>100?"Elevated — Watch":dxy>96?"Neutral":"Weak — Liquidity Positive"}
+                color={dxy==null?"#475569":dxy>104?"#ff6b88":dxy>100?"#fbbf24":"#4ade80"}
+                bg={dxy==null?"rgba(71,85,105,0.15)":dxy>104?"rgba(255,79,114,0.15)":dxy>100?"rgba(245,158,11,0.15)":"rgba(74,222,128,0.15)"}
+              />
+              <BC>{dxy==null?"Loading current data."
+                :dxy>104?"A strong dollar tightens global liquidity. Countries with dollar-denominated debt face higher repayment costs. Commodities priced in dollars fall. Emerging markets under pressure. This often precedes risk-off selling in equities."
+                :dxy>100?"Dollar elevated but not extreme. Worth monitoring — a continued move above 104 would signal tightening liquidity conditions globally."
+                :"Dollar in neutral range. This is generally supportive of global risk assets and emerging markets. Commodities tend to benefit from dollar weakness."}</BC>
+              <BandTrack
+                segs={[{w:"25%",color:"#047857"},{w:"30%",color:"#4ade80"},{w:"20%",color:"#f59e0b"},{w:"25%",color:"#ef4444"}]}
+                needle={Math.max(0,Math.min(((dxy??100)-88)/32*100,99))}
+                scaleNums={["88","96","100","104","120+"]}
+                scaleNames={["Weak","Neutral","Elevated","Strong","Crisis"]}
+              />
+              <div style={{ marginTop:16, background:"#141b47", border:"1px solid rgba(245,158,11,0.25)", borderRadius:10, padding:14 }}>
+                <SH>Confluence signal</SH>
+                <div style={{ fontSize:13, lineHeight:1.7, color:"#cbd5e1" }}>
+                  A DXY spike above 104 alongside a 200-DMA break is a warning sign — it suggests the selloff is systemic (global de-risking), not just a US equity correction. When DXY is below 100 during an equity dip, liquidity is flowing normally and the dip is more likely technical.
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>What the DXY measures</SH>
+                <BC>The Dollar Index tracks the USD against a basket of 6 currencies (EUR 57.6%, JPY 13.6%, GBP 11.9%, CAD 9.1%, SEK 4.2%, CHF 3.6%). A rising dollar means US assets attract capital, but it also drains liquidity from the rest of the world — particularly emerging markets and commodity exporters that borrow in dollars.</BC>
+              </MCard>
+              <MCard>
+                <SH>Why it matters for your portfolio</SH>
+                <BC>Your VEA position (developed international) is directly affected — a rising dollar erodes returns for US investors in foreign assets. Your GLDM position typically moves inversely to the dollar. A strong dollar also compresses earnings for US multinationals in the SPX. The dollar is the plumbing of global markets — when it moves sharply, everything else feels it.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical context</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="114" event="Oct 2022 peak" note="20-year high · global EM stress" />
+                  <HistRow val="89" event="Jan 2021 low" note="Weak dollar · bull market fuel" />
+                  <HistRow val="103" event="Pre-COVID 2020" note="Typical strong-ish range" />
+                  <HistRow val={dxy!=null?dxy.toFixed(2):"—"} event="Today" note={dxy!=null&&dxy>104?"Above stress threshold":dxy!=null&&dxy>100?"Elevated but manageable":"Neutral — supportive of risk assets"} active />
+                  <HistRow val="100" event="Neutral zone" note="Below = dollar tailwind for global stocks" />
+                </div>
+              </MCard>
+              <ActionCard>
+                {dxy==null?"DXY data loading."
+                :dxy>104?`DXY at ${dxy.toFixed(2)} — above stress threshold. This is tightening global liquidity. Your VEA international position faces currency headwind. Watch for continued dollar strength alongside equity weakness — that combination signals systemic risk, not a technical dip.`
+                :dxy>100?`DXY at ${dxy.toFixed(2)} — elevated but below the critical 104 level. Dollar strength is a mild headwind for your VEA and GLDM positions. Not a standalone concern — monitor in context of other stress signals.`
+                :`DXY at ${dxy.toFixed(2)} — neutral and supportive. Dollar weakness is generally positive for global risk assets and your international holdings. No dollar-driven liquidity concern at this level.`}
+              </ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      {modal==="ad" && (
+        <ModalWrapper onClose={()=>setModal(null)} title="NYSE Advance / Decline Line" sub="Cumulative breadth of the NYSE · Hidden strength or broad-based weakness">
+          <ModalGrid
+            left={<>
+              <SH>Current signal</SH>
+              <div style={{ fontSize:32, fontWeight:700, lineHeight:1.1, marginBottom:8, color:
+                adLine?.signal==="bullish_divergence"?"#4ade80":(adLine?.signal==="confirming_weakness"||adLine?.signal==="bearish_divergence")?"#ff6b88":"#fbbf24" }}>
+                {adLine?.signal==="bullish_divergence"?"Bullish Divergence ↑":adLine?.signal==="bearish_divergence"?"Bearish Divergence ↓":adLine?.signal==="confirming_weakness"?"Confirming Weakness ↓":"Neutral, Tracking"}
+              </div>
+              <Tag
+                label={adLine?.signal==="bullish_divergence"?"Hidden Strength, Buy the Dip Setup":adLine?.signal==="bearish_divergence"?"Narrow Market, Index Masking Weakness":adLine?.signal==="confirming_weakness"?"Broad Selling, Defense Mode":"Neutral, Moving With SPX"}
+                color={adLine?.signal==="bullish_divergence"?"#4ade80":(adLine?.signal==="confirming_weakness"||adLine?.signal==="bearish_divergence")?"#ff6b88":"#fbbf24"}
+                bg={adLine?.signal==="bullish_divergence"?"rgba(74,222,128,0.15)":(adLine?.signal==="confirming_weakness"||adLine?.signal==="bearish_divergence")?"rgba(255,79,114,0.15)":"rgba(245,158,11,0.15)"}
+              />
+              <BC>{adLine?.note ?? "NYSE Advance/Decline line shows whether breadth is confirming or diverging from price."}</BC>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:14 }}>
+                <div style={{ background:"#141b47", borderRadius:10, padding:14 }}>
+                  <SH>A/D Trend (3 months)</SH>
+                  <div style={{ fontSize:20, fontWeight:700, marginTop:6, color:
+                    adLine?.adTrend==="higher_lows"?"#4ade80":adLine?.adTrend==="lower_lows"?"#ff6b88":"#fbbf24" }}>
+                    {adLine?.adTrend==="higher_lows"?"↗ Higher Lows":adLine?.adTrend==="lower_lows"?"↘ Lower Lows":"→ Flat"}
+                  </div>
+                  <div style={{ fontSize:11, color:"#64748b", marginTop:4, lineHeight:1.5 }}>
+                    {adLine?.adTrend==="higher_lows"?"Breadth improving, broad participation":adLine?.adTrend==="lower_lows"?"Breadth deteriorating, narrow market":"Breadth stalling"}
+                  </div>
+                </div>
+                <div style={{ background:"#141b47", borderRadius:10, padding:14 }}>
+                  <SH>vs SPX</SH>
+                  <div style={{ fontSize:20, fontWeight:700, marginTop:6, color:
+                    adLine?.adVsSpx==="diverging_up"?"#4ade80":adLine?.adVsSpx==="diverging_down"?"#ff6b88":"#94a3b8" }}>
+                    {adLine?.adVsSpx==="diverging_up"?"↑ Diverging Up":adLine?.adVsSpx==="diverging_down"?"↓ Diverging Down":"→ Tracking"}
+                  </div>
+                  <div style={{ fontSize:11, color:"#64748b", marginTop:4, lineHeight:1.5 }}>
+                    {adLine?.adVsSpx==="diverging_up"?"A/D strong while SPX weak, dip opportunity":adLine?.adVsSpx==="diverging_down"?"A/D weak while SPX holds up, few stocks carrying the index":"Breadth and price aligned"}
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop:12, background:"#141b47", border:"1px solid rgba(148,163,184,0.2)", borderRadius:10, padding:12 }}>
+                <div style={{ fontSize:10, color:"#475569", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>Data source</div>
+                <div style={{ fontSize:12, color:"#94a3b8", marginTop:4, lineHeight:1.6 }}>
+                  Manual monthly update · NYSE $NYAD cumulative via StockCharts · Updated {adLine?.updatedDate ?? "—"}
+                </div>
+              </div>
+            </>}
+            right={<>
+              <MCard>
+                <SH>What the A/D line measures</SH>
+                <BC>Every day, the NYSE counts how many stocks advanced (closed higher) vs. declined (closed lower). The Advance/Decline line is a running cumulative total of that difference. It tells you whether the market move is broad-based — driven by most stocks — or narrow, driven by just a handful of large-cap names.</BC>
+              </MCard>
+              <MCard>
+                <SH>Why it matters for the 200-DMA confirmation</SH>
+                <BC>The S&P 500 is cap-weighted — a few mega-cap tech stocks can move the index while hundreds of smaller companies are already declining. When SPX breaks its 200-DMA but the A/D line is making higher lows, it means the broad market is holding up. The large-caps dragging SPX down are masking underlying strength. That&apos;s a classic buy-the-dip setup. When the A/D line confirms the break — declining alongside SPX — the selling is truly broad-based and more dangerous.</BC>
+              </MCard>
+              <MCard>
+                <SH>Historical examples</SH>
+                <div style={{ display:"grid", gap:5, marginTop:8 }}>
+                  <HistRow val="2023" event="Bull market breakout" note="A/D made new highs — confirmed broad rally" />
+                  <HistRow val="2021" event="Late bull warning" note="A/D diverged lower while SPX at highs — signal" />
+                  <HistRow val="2022" event="Bear market" note="A/D confirmed — broad selling top to bottom" />
+                  <HistRow val="2020" event="COVID recovery" note="A/D diverged up quickly — predicted recovery" />
+                  <HistRow val="Today" event={`${adLine?.updatedDate ?? "—"} 2026`} note={adLine?.signal==="bearish_divergence"?"A/D falling while SPX near highs, similar setup to 2021":"Manual reading"} active />
+                </div>
+              </MCard>
+              <ActionCard>
+                {adLine?.signal==="bullish_divergence"
+                  ?"A/D line diverging bullishly — the broad market is holding up even as SPX tests the 200-DMA. This is a classic head-fake signal. The large-cap weakness may not reflect what most stocks are doing. Treat as a potential dip opportunity, not a defensive trigger."
+                  :adLine?.signal==="bearish_divergence"
+                  ?"A/D line diverging bearishly. The S&P is holding near its highs, but most NYSE stocks have been falling since mid-August. A few large names are carrying the index. This isn't a sell signal by itself, since divergences can run for months, but it's a classic late-cycle warning. Watch for the S&P to break its 40-week average, which would turn the divergence into confirmed weakness."
+                  :adLine?.signal==="confirming_weakness"
+                  ?"A/D line confirming the selloff — broad-based selling across the NYSE. This is not a head-fake. The weakness extends beyond large-caps into the broad market. This supports a defensive posture alongside the other stress signals."
+                  :"A/D line neutral and tracking SPX. No divergence signal currently. Monitor weekly for any change in direction relative to price."}
+              </ActionCard>
+            </>}
+          />
+        </ModalWrapper>
+      )}
+
+      <style dangerouslySetInnerHTML={{ __html:`
+        *{box-sizing:border-box;}
+        html,body{margin:0;padding:0;background:#0b0b2a;color:#fff;font-family:Inter,system-ui,-apple-system,sans-serif;}
+        .pageShell{min-height:100vh;}
+        .frame{max-width:1500px;margin:0 auto;padding:16px;}
+        .topBar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+        .title{margin:0;font-size:28px;font-weight:700;color:#16c75c;letter-spacing:-0.03em;}
+        .topRight{display:flex;align-items:center;gap:14px;}
+        .liveDot{display:flex;align-items:center;gap:6px;}
+        .dot{display:inline-block;width:8px;height:8px;border-radius:50%;}
+        .dotLive{background:#16c75c;box-shadow:0 0 6px #16c75c;animation:pulse 2s infinite;}
+        .dotError{background:#ff4f72;}
+        .dotLabel{font-size:12px;font-weight:600;color:#94a3b8;}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+        .meta{text-align:right;font-size:12px;font-weight:600;line-height:1.35;color:#e2e8f0;}
+        .errorBar{margin-bottom:12px;border:1px solid rgba(255,79,114,0.5);background:rgba(127,29,29,0.45);color:#fecdd3;border-radius:12px;padding:10px 14px;font-size:12px;font-weight:600;}
+        .panel{background:#23255a;border-radius:16px;padding:14px;margin-bottom:14px;}
+        .panelHeader{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;}
+        .panelTitle{font-size:17px;font-weight:700;}
+        .panelSub{font-size:11px;font-weight:600;color:#cbd5e1;margin-top:2px;}
+        .pstamp{font-size:11px;color:#475569;}
+        .damage{font-size:12px;font-weight:600;color:#cbd5e1;white-space:nowrap;}
+        .grid5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;}
+        .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+        .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+        .tile{background:#050a35;border-radius:10px;padding:12px;border:0.5px solid rgba(255,255,255,0.04);}
+        .tile200{background:rgba(245,158,11,0.07)!important;border:1.5px solid rgba(245,158,11,0.4)!important;}
+        .tile200Red{background:#1a0a0a!important;border:1.5px solid rgba(239,68,68,0.6)!important;}
+        .tileTop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;}
+        .lbl{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;}
+        .ytd{font-size:11px;font-weight:600;color:#64748b;}
+        .badge{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;}
+        .valHero{font-size:38px;font-weight:700;letter-spacing:-0.03em;line-height:1;color:#fff;}
+        .valMuted{font-size:26px;font-weight:700;letter-spacing:-0.02em;color:#94a3b8;}
+        .sparkWrap{margin:6px 0 4px;}
+        .status{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin-top:6px;}
+        .sub{font-size:11px;color:#64748b;margin-top:3px;}
+        .subSpx{font-size:11px;font-weight:600;color:#f8d7df;margin-top:3px;}
+        .alertStrip{background:#0f172a;border:1px solid rgba(245,158,11,0.35);border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+        .alertDot{width:7px;height:7px;border-radius:50%;background:#f59e0b;flex-shrink:0;box-shadow:0 0 5px #f59e0b;display:inline-block;}
+        .alertTitle{font-size:12px;font-weight:700;color:#f59e0b;white-space:nowrap;}
+        .alertBody{font-size:12px;color:#94a3b8;}
+        .alertStripCritical{background:#0f172a;border:1px solid rgba(239,68,68,0.5);border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+        .alertDotRed{width:7px;height:7px;border-radius:50%;background:#ef4444;flex-shrink:0;box-shadow:0 0 6px #ef4444;display:inline-block;animation:pulse 1.5s infinite;}
+        .alertTitleRed{font-size:12px;font-weight:700;color:#ff6b88;white-space:nowrap;}
+        .alertBodyRed{font-size:12px;color:#fca5a5;}
+        .meterTrack{position:relative;height:4px;border-radius:9999px;background:#202a64;margin-top:10px;}
+        .meterFill{position:absolute;left:0;top:0;height:4px;border-radius:9999px;}
+        .meterMarker{position:absolute;top:50%;width:2px;height:16px;transform:translateY(-50%);background:#f8fafc;}
+        .meterScale{margin-top:5px;display:flex;justify-content:space-between;font-size:10px;color:#475569;}
+        .bbar{height:7px;border-radius:9999px;background:#202a64;overflow:hidden;margin:8px 0 4px;}
+        .bbarFill{height:7px;border-radius:9999px;}
+        .pillR{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:0.04em;margin-top:6px;background:rgba(255,79,114,0.15);color:#ff6b88;}
+        .pillA{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:0.04em;margin-top:6px;background:rgba(245,158,11,0.15);color:#fbbf24;}
+        .pillG{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:0.04em;background:rgba(34,197,94,0.15);color:#4ade80;}
+        .valTable{width:100%;border-collapse:collapse;font-size:13px;}
+        .valTable th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#475569;padding:0 12px 8px;}
+        .valTable td{padding:9px 12px;border-top:0.5px solid rgba(255,255,255,0.05);}
+        .ivyTable{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;}
+        .ivyTable th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#475569;padding:6px 12px;text-align:left;border-bottom:0.5px solid rgba(255,255,255,0.08);}
+        .ivyTable td{padding:9px 12px;border-bottom:0.5px solid rgba(255,255,255,0.05);}
+        .sumBar{background:#030720;border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+        .sumBarLabel{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;flex-shrink:0;}
+        @media(max-width:900px){.title{font-size:22px;}.valHero{font-size:28px;}}
+        @media(max-width:700px){
+          .topBar,.panelHeader{flex-direction:column;align-items:flex-start;}
+          .grid5,.grid4{grid-template-columns:repeat(2,minmax(0,1fr));}
+          .allocGrid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}
+          .grid3{grid-template-columns:1fr;}
+          .alertStrip,.alertStripCritical{flex-direction:column;align-items:flex-start;gap:4px;}
+          .title{font-size:20px;}
+          .hideMobile{display:none;}
+          .sourceLabel{display:none;}
+          .topRight{display:flex;flex-direction:row;align-items:center;gap:8px;margin-top:4px;}
+          .meta{text-align:left;line-height:1.35;}
+        }
+      `}} />
+    </>
+  );
 }
