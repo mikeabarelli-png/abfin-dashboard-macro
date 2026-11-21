@@ -1067,13 +1067,15 @@ export default function Page() {
               const hyColor = hySpread>=5 ? "#ff6b88" : hySpread>=4 ? "#fbbf24" : "#4ade80";
               const vixColor2 = vixValue==null ? "#94a3b8" : vixValue>=30 ? "#ff6b88" : vixValue>=20 ? "#fbbf24" : "#4ade80";
               const ycColor = yieldCurve<0 ? "#ff6b88" : yieldCurve<0.5 ? "#fbbf24" : "#4ade80";
-              // Dot/status color: driven by the LIVE 12-month trend
-              // direction (rising rates = headwind = red), not the
-              // absolute level. The bar below answers a different
-              // question, where the rate sits historically, with its
-              // own independent zone coloring.
-              const fedColor = fedTrendDirection==="up" ? "#ff6b88" : fedTrendDirection==="down" ? "#4ade80" : "#fbbf24";
-              const fedStatus = fedTrendDirection==="up" ? "Tightening" : fedTrendDirection==="down" ? "Easing" : "Holding";
+              // Dot/status color: driven by the CURRENT policy direction
+              // (MANUAL_FED_STANCE in route.ts: tightening = headwind = red).
+              // The live 12-month change in the effective rate looks
+              // backward. In Nov 2026 it read "Easing" because of the late-
+              // 2025 cuts, while the Fed was days from hiking. It's shown in
+              // the caption as context, not used for the color.
+              const fedColor = fedStance==="tightening" ? "#ff6b88" : fedStance==="easing" ? "#4ade80" : "#fbbf24";
+              const fedStatus = fedStance==="tightening" ? "Tightening" : fedStance==="easing" ? "Easing" : "Holding";
+              const fedTrendLabel = fedTrendDirection==="up" ? "up" : fedTrendDirection==="down" ? "down" : "flat";
               const FED_ACCOM = "#4ade80", FED_NEUTRAL = "#94a3b8", FED_RESTRICT = "#ff6b88";
               const fedBands: Band[] = [{ color:FED_ACCOM, from:0, to:33.33 }, { color:FED_NEUTRAL, from:33.33, to:66.67 }, { color:FED_RESTRICT, from:66.67, to:100 }];
               const fedPos = Math.max(0, Math.min(100, (fedFundsRate / 6) * 100));
@@ -1169,7 +1171,7 @@ export default function Page() {
                 { rank:9,  label:"Fed Policy Stance",   value: `${fedFundsRate.toFixed(2)}%`, sub:"Rate policy backdrop", color: fedColor,
                   status: fedStatus, posPct: fedPos, bands: fedBands,
                   axisTicks: [{ pos:33.33, label:"2%" }, { pos:66.67, label:"4%" }],
-                  tickCaption: `Next: ${fedLeanLabel}, ${fedNextMove.hikeOdds}% hike odds (${fedNextMove.meeting}, Manual)` },
+                  tickCaption: `Next: ${fedLeanLabel}, ${fedNextMove.hikeOdds}% hike odds (${fedNextMove.meeting}, Manual) · 12-mo rate trend ${fedTrendLabel}` },
                 { rank:10, label:"AAII Bears",          value: `${aaiiBears.toFixed(1)}%`, sub:"Sentiment · Manual, updated weekly", color: aaiiColor,
                   status: aaiiStatus, posPct: aaiiPos, bands: aaiiBands,
                   axisTicks: [{ pos:50, label:"35" }, { pos:64.29, label:"45" }],
