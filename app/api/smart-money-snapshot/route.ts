@@ -588,23 +588,30 @@ export async function GET() {
   // ═══════════════════════════════════════════════════════════════════
   // SATURDAY MANUAL UPDATE CHECKLIST — update every weekend
   // ═══════════════════════════════════════════════════════════════════
-  const MANUAL_CAPE_FALLBACK       = 40.13;    // multpl.com/shiller-pe          · Oct 31 2026
-  const MANUAL_BUFFETT_SIGMA       = 2.33;     // currentmarketvaluation.com     · Oct 31 2026
-  const MANUAL_HY_FALLBACK         = 2.79;     // FRED BAMLH0A0HYM2 (÷100=%)    · Jun 26 2026
-  const MANUAL_FEAR_GREED_FALLBACK = 67;       // CNN Fear & Greed Index         · Jun 26 2026
-  const MANUAL_PE_FALLBACK         = 24.2;     // SPX trailing P/E               · May 3 2026
+  const MANUAL_CAPE_FALLBACK       = 36.44;    // multpl.com/shiller-pe          · Nov 20 2026
+  const MANUAL_BUFFETT_SIGMA       = 1.83;     // currentmarketvaluation.com     · Nov 20 2026 (Overvalued, down from 2.33 Strongly Overvalued on Oct 31)
+  const MANUAL_HY_FALLBACK         = 3.52;     // FRED BAMLH0A0HYM2 (÷100=%)    · Nov 19 2026 (up from 3.14 on Oct 28)
+  const MANUAL_FEAR_GREED_FALLBACK = 25;       // CNN Fear & Greed Index         · Nov 18 2026 (Extreme Fear)
+  const MANUAL_PE_FALLBACK         = 23.1;     // est. = Nov 20 close 6,910 ÷ MANUAL_SPX_TTM_EPS · Nov 20 2026
+  // Earnings denominators. Both live fetches (Nasdaq Data Link CAPE, Yahoo v7
+  // P/E) are failing, so when they fail the route now ESTIMATES CAPE and P/E
+  // from today's S&P price ÷ these denominators instead of freezing a stale
+  // ratio. The denominators move slowly: refresh E10 monthly, TTM EPS after
+  // each earnings season.
+  const MANUAL_CAPE_E10    = 189.64; // 10-yr avg real EPS implied by CAPE 36.44 at the Nov 20 close 6,910.39 · Nov 20 2026
+  const MANUAL_SPX_TTM_EPS = 298.9;  // FactSet trailing P/E 25.4 at the Nov 12 close 7,592.40 (operating basis) · Nov 13 2026
   // As-of dates for the fallbacks above. When a live fetch fails and a
   // fallback is used, the page shows the value WITH this date so a stale
   // number is never mistaken for a live one. Update the date whenever you
   // update the value.
   const FALLBACK_ASOF = {
-    cape:       "Oct 31 2026",
-    hy:         "Jun 26 2026",
-    fear_greed: "Jun 26 2026",
-    pe:         "May 3 2026",
+    cape:       "est. from price, E10 as of Nov 20 2026",
+    hy:         "Nov 19 2026",
+    fear_greed: "Nov 18 2026",
+    pe:         "est. from price, TTM EPS as of Nov 13 2026",
   };
   const MANUAL_BREADTH_FALLBACK    = 0;        // Deliberately impossible. 0% means the live historyofmarket.com fetch failed, not a real reading
-  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "tightening"; // Oct 28, 2026 FOMC: hawkish hold at 3.75-4.00%, 10-2 vote (Cook, Hammack dissented for a hike). Still a tightening cycle.
+  const MANUAL_FED_STANCE: "easing" | "holding" | "tightening" = "tightening"; // Nov 21, 2026: still tightening. Oct 28 hawkish hold at 3.75-4.00% (Cook, Hammack dissented for a hike). Nov 18 minutes divided. Waller wants 50 bp in Dec after a third straight 0.3% core CPI, Williams pushed back on 50, Cook warns of falling behind the curve.
   // Market-implied lean for the NEXT meeting — this is a genuine proxy,
   // not a live feed. True meeting-by-meeting odds (CME FedWatch-style)
   // come from Fed funds futures pricing, which isn't in this pipeline.
@@ -612,7 +619,7 @@ export async function GET() {
   // financial press coverage of the next FOMC meeting.
   const MANUAL_FED_NEXT_MOVE = {
     lean: "hawkish" as "hawkish" | "neutral" | "dovish",
-    hikeOdds: 85,                              // CME FedWatch, Dec hike odds after Oct 28 hold (84.6%) · Oct 28 2026
+    hikeOdds: 95,                              // CME FedWatch, Dec hike odds ~95% (mostly 25 bp, small 50 bp tail) · Nov 17 2026 close. Recheck Monday after Friday's selloff
     meeting: "Dec 8-9",
   };
   // Ivy Portfolio OFFICIAL month-end signals (Faber 10-mo SMA rule).
@@ -647,17 +654,18 @@ export async function GET() {
   // did next, then promote the tile or drop it.
   const MANUAL_ROAR_LOG: { date: string; score: number }[] = [
     { date: "2026-11-14", score: 40 },
+    { date: "2026-11-21", score: 20 },          // "Higher risk zone" after the 8.6% weekly drop
   ];
-  const MANUAL_AAII_BEARS = 41.4;             // AAII Sentiment Survey · week ending Oct 28 2026 · -4.4pts w/w, bullish 37.8%
-  const MANUAL_AD = {                          // StockCharts $NYAD cumulative, daily, 1Y · Oct 30 2026 · update MONTHLY
+  const MANUAL_AAII_BEARS = 42.2;             // AAII Sentiment Survey · week ending Nov 18 2026 · -9.2pts w/w (51.4% prior week), bullish 33.3%, neutral 24.4%
+  const MANUAL_AD = {                          // StockCharts $NYAD cumulative, daily, 1Y · Nov 20 2026 · update MONTHLY
     // signal: bearish_divergence = A/D falling while SPX holds near highs (narrow market)
     //         confirming_weakness = A/D and SPX falling together (broad selling)
-    signal:      "bearish_divergence" as "bullish_divergence" | "neutral" | "bearish_divergence" | "confirming_weakness",
+    signal:      "confirming_weakness" as "bullish_divergence" | "neutral" | "bearish_divergence" | "confirming_weakness",
     adTrend:     "lower_lows" as "higher_lows" | "flat" | "lower_lows",        // A/D line's own swing lows, last ~3 months
-    spxTrend:    "flat" as "rising" | "flat" | "falling",                       // S&P 500 over the same window
+    spxTrend:    "falling" as "rising" | "flat" | "falling",                    // S&P 500 over the same window
     adVsSpx:     "diverging_down" as "diverging_up" | "tracking" | "diverging_down",
-    note:        "A/D line peaked mid-Aug near 76,500 and fell about 13% to 66,300 by Oct 30, while the S&P sits roughly 2% off its high. A/D is below both its 50-day and 200-day averages, and the 50-day is about to cross under the 200-day. Breadth is not confirming the index.",
-    updatedDate: "Oct 30",
+    note:        "A/D line fell to 104,811 on Nov 20, about 15% below its mid-August peak near 122,800, and broke below the October base (111-113K) and its March low (about 108K) to the lowest level in a year. The S&P is falling with it but is still above its March low, so breadth is weaker than the index. A/D is below its 20-day (110,411), 50-day (112,139) and 200-day (116,195) averages, and the 50-day has been under the 200-day since early October.",
+    updatedDate: "Nov 20",
   };
   // ═══════════════════════════════════════════════════════════════════
 
@@ -1515,7 +1523,10 @@ export async function GET() {
 
   const putCallRatio: number | null = putCall.meta.regularMarketPrice ?? putCall.closes[putCall.closes.length - 1] ?? null;
 
-  const trailingPE: number | null = peData.value ?? spx.meta.trailingPE ?? MANUAL_PE_FALLBACK;
+  // Live P/E when a source works, otherwise price ÷ trailing EPS (tracks the
+  // market daily), and only as a last resort the static fallback.
+  const peFromPrice: number | null = spxPrice != null ? Math.round((spxPrice / MANUAL_SPX_TTM_EPS) * 10) / 10 : null;
+  const trailingPE: number | null = peData.value ?? spx.meta.trailingPE ?? peFromPrice ?? MANUAL_PE_FALLBACK;
   let erp: number | null = null;
   if (trailingPE != null && trailingPE > 0) {
     const earningsYield = (1 / trailingPE) * 100;
@@ -1523,7 +1534,8 @@ export async function GET() {
     console.log(`ERP: ${erp} bps`);
   }
 
-  const capeRatio: number = capeData.value ?? MANUAL_CAPE_FALLBACK;
+  const capeFromPrice: number | null = spxPrice != null ? Math.round((spxPrice / MANUAL_CAPE_E10) * 100) / 100 : null;
+  const capeRatio: number = capeData.value ?? capeFromPrice ?? MANUAL_CAPE_FALLBACK;
 
   const spxPctAbove200 = spx200dma != null && spxPrice != null
     ? ((spxPrice - spx200dma) / spx200dma) * 100 : null;
@@ -1643,9 +1655,9 @@ export async function GET() {
   // Surfaced on the page with its as-of date.
   const fallbacksInUse: { name: string; value: number; asOf: string }[] = [];
   if (fredHY.value == null) fallbacksInUse.push({ name: "HY spread", value: MANUAL_HY_FALLBACK, asOf: FALLBACK_ASOF.hy });
-  if (capeData.value == null) fallbacksInUse.push({ name: "CAPE", value: MANUAL_CAPE_FALLBACK, asOf: FALLBACK_ASOF.cape });
+  if (capeData.value == null) fallbacksInUse.push({ name: "CAPE", value: capeFromPrice ?? MANUAL_CAPE_FALLBACK, asOf: capeFromPrice != null ? FALLBACK_ASOF.cape : "Nov 20 2026" });
   if (fearGreedData.value == null) fallbacksInUse.push({ name: "Fear & Greed", value: MANUAL_FEAR_GREED_FALLBACK, asOf: FALLBACK_ASOF.fear_greed });
-  if (peData.value == null && spx.meta.trailingPE == null) fallbacksInUse.push({ name: "S&P trailing P/E", value: MANUAL_PE_FALLBACK, asOf: FALLBACK_ASOF.pe });
+  if (peData.value == null && spx.meta.trailingPE == null) fallbacksInUse.push({ name: "S&P trailing P/E", value: peFromPrice ?? MANUAL_PE_FALLBACK, asOf: peFromPrice != null ? FALLBACK_ASOF.pe : "Nov 20 2026" });
 
   const hasPartialData = spxPrice != null;
   const status = Object.keys(diagnostics).length === 0 ? "ok" : hasPartialData ? "partial" : "error";
