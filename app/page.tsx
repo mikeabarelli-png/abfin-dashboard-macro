@@ -1650,7 +1650,7 @@ export default function Page() {
               return { label:"Open", color:"#94a3b8" };
             };
             return (
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))", gap:16, marginTop:16 }}>
+              <div style={{ display:"flex", flexDirection:"column", gap:16, marginTop:16 }}>
                 <section className="panel">
                   <div className="panelHeader"><div><div className="panelTitle">Next 3 Weeks</div><div className="panelSub">Market events and plan dates</div></div></div>
                   {upcoming.length === 0 && <div style={{ fontSize:13, color:"#64748b" }}>Nothing scheduled. Add dates in MANUAL_CALENDAR.</div>}
