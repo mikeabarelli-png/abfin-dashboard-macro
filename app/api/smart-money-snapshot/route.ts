@@ -689,25 +689,22 @@ export async function GET() {
     { date: "2026-11-26", item: "Markets closed (Thanksgiving)", kind: "market" },
     { date: "2026-11-27", item: "Half day, 1 p.m. ET close", kind: "market" },
     { date: "2026-11-30", item: "Month-end: Ivy signals and 10-month trend check", kind: "plan" },
-    { date: "2026-12-01", item: "TOD tranche 1 window opens (through Dec 15)", kind: "plan" },
+
     { date: "2026-12-04", item: "November jobs report · Sahm update", kind: "market" },
     { date: "2026-12-09", item: "FOMC decision (Dec 8-9)", kind: "market" },
     { date: "2026-12-16", item: "Lance's 4-week 200-day clock expires", kind: "market" },
+    { date: "2026-12-31", item: "Last trading day for TOD sales to count in 2026", kind: "plan" },
     { date: "2027-01-02", item: "Quarterly rebalance", kind: "plan" },
     { date: "2027-01-15", item: "Q4 estimated tax check", kind: "plan" },
   ];
   // Action items: the household to-do list. Set status as you go
   // ("open" | "doing" | "done"). Overdue open items show in red.
   const MANUAL_ACTIONS: { item: string; due: string; status: "open" | "doing" | "done" }[] = [
-    { item: "Send the accountant the TOD lot export and get both tranches sized", due: "2026-11-09", status: "open" },
-    { item: "TOD prep: turn off DRIP on VTI and VXUS, switch to specific lot ID", due: "2026-11-30", status: "open" },
-    { item: "TOD tranche 1: harvest VTEB losses (FMUB swap), then sell highest-cost VTI lots", due: "2026-12-15", status: "open" },
+    { item: "TOD sales: work with the accountant on what to sell and when (lot export, 2026 vs 2027 split, VTEB loss harvest, Q4 estimated tax)", due: "2026-12-15", status: "open" },
+    { item: "Estate plan with Nicole M: mid-Dec meeting requested to finalize the docs, then update beneficiaries", due: "2026-12-15", status: "doing" },
     { item: "Consolidate Noelle's accounts: SEP IRA and Rollover IRA into her 401k", due: "2026-12-31", status: "open" },
     { item: "Roll the Alpine 401k and Traditional IRA into the Rollover IRA", due: "2026-12-31", status: "open" },
     { item: "Set up the dedicated financial email, move accounts to it, freeze credit", due: "2026-12-31", status: "open" },
-    { item: "Rewrite the Investment Rules as a one-page plan and share it with Chris", due: "2026-12-31", status: "open" },
-    { item: "TOD tranche 2 and the Q4 estimated tax check", due: "2027-01-15", status: "open" },
-    { item: "Estate plan with Kris Simms: will and trust, then update beneficiaries", due: "2027-01-31", status: "open" },
     { item: "Chris meeting: lower-return scenarios, 2008 and 2000-02 stress tests, 401k equity", due: "2027-02-28", status: "open" },
   ];
   // ═══════════════════════════════════════════════════════════════════
@@ -1700,9 +1697,12 @@ export async function GET() {
   // Surfaced on the page with its as-of date.
   const fallbacksInUse: { name: string; value: number; asOf: string }[] = [];
   if (fredHY.value == null) fallbacksInUse.push({ name: "HY spread", value: MANUAL_HY_FALLBACK, asOf: FALLBACK_ASOF.hy });
-  if (capeData.value == null) fallbacksInUse.push({ name: "CAPE", value: capeFromPrice ?? MANUAL_CAPE_FALLBACK, asOf: capeFromPrice != null ? FALLBACK_ASOF.cape : "Nov 20 2026" });
+  // CAPE and P/E estimated from price are the normal path now (both live
+  // sources are dead), so they only count as a fallback if the estimate
+  // itself is unavailable.
+  if (capeData.value == null && capeFromPrice == null) fallbacksInUse.push({ name: "CAPE", value: MANUAL_CAPE_FALLBACK, asOf: "Nov 20 2026" });
   if (fearGreedData.value == null) fallbacksInUse.push({ name: "Fear & Greed", value: MANUAL_FEAR_GREED_FALLBACK, asOf: FALLBACK_ASOF.fear_greed });
-  if (peData.value == null && spx.meta.trailingPE == null) fallbacksInUse.push({ name: "S&P trailing P/E", value: peFromPrice ?? MANUAL_PE_FALLBACK, asOf: peFromPrice != null ? FALLBACK_ASOF.pe : "Nov 20 2026" });
+  if (peData.value == null && spx.meta.trailingPE == null && peFromPrice == null) fallbacksInUse.push({ name: "S&P trailing P/E", value: MANUAL_PE_FALLBACK, asOf: "Nov 20 2026" });
 
   const hasPartialData = spxPrice != null;
   const status = Object.keys(diagnostics).length === 0 ? "ok" : hasPartialData ? "partial" : "error";
