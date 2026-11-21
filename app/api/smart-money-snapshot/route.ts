@@ -705,7 +705,7 @@ export async function GET() {
     { item: "Consolidate Noelle's accounts: SEP IRA and Rollover IRA into her 401k", due: "2026-12-31", status: "open" },
     { item: "Roll the Alpine 401k and Traditional IRA into the Rollover IRA", due: "2026-12-31", status: "open" },
     { item: "Set up the dedicated financial email, move accounts to it, freeze credit", due: "2026-12-31", status: "open" },
-    { item: "Chris meeting: lower-return scenarios, 2008 and 2000-02 stress tests, 401k equity", due: "2027-02-28", status: "open" },
+    { item: "Chris meeting: review M27 draft (gold to 3%, SGOV/VTIP into BND/VGIT), Spinnaker 401k off the 2035 fund, lower-return scenarios, 2008 and 2000-02 stress tests", due: "2027-02-28", status: "open" },
   ];
   // ═══════════════════════════════════════════════════════════════════
 
@@ -1052,6 +1052,30 @@ export async function GET() {
     : null;
   const m2OneYearPct = blendOneYear(m2Components);
   const m2FiveYearPct = blendFiveYear(m2Components);
+
+  // "M27" — early tracker for the 2027 conversation with Chris. Same equity
+  // sleeve as M26/M2. Two changes: gold trimmed 5% -> 3% (Chris's original
+  // size), and 10 points of short ballast (SGOV, VTIP) moved into
+  // intermediate duration (BND, VGIT) to lock in ~5% yields before the Fed
+  // eventually cuts. 50% equity / 42% fixed income / 8% alts. A draft to
+  // watch, not a decision.
+  const m27Weights: Record<string, number> = {
+    SCHD: 0.15, VEA: 0.15, VTI: 0.10, VTWO: 0.05, VIGI: 0.05,
+    SGOV: 0.10, VTIP: 0.10, BND: 0.15, VGIT: 0.07,
+    GLDM: 0.03, DBMF: 0.05,
+  };
+  const m27Components: { ticker: string; weight: number; ytd: number | null; today: number | null }[] =
+    Object.entries(m27Weights).map(([ticker, weight]) => ({
+      ticker, weight,
+      ytd: positions[ticker]?.ytdReturnPct ?? null,
+      today: positions[ticker]?.dailyChangePct ?? null,
+    }));
+  const m27YtdPct: number | null = m27Components.every((c) => c.ytd != null)
+    ? m27Components.reduce((sum, c) => sum + (c.ytd as number) * c.weight, 0) : null;
+  const m27TodayPct: number | null = m27Components.every((c) => c.today != null)
+    ? m27Components.reduce((sum, c) => sum + (c.today as number) * c.weight, 0) : null;
+  const m27OneYearPct = blendOneYear(m27Components);
+  const m27FiveYearPct = blendFiveYear(m27Components);
 
   // "M3" — same as M2, but VTWO restored to Chris's original 10% and
   // GLDM/DBMF each at 2.5% instead of 5%. Net effect: equity climbs back
@@ -2053,6 +2077,13 @@ export async function GET() {
         one_year_return_pct: m2OneYearPct,
         five_year_return_pct: m2FiveYearPct,
         components: serializeComponents(m2Components),
+      },
+      m27: {
+        ytd_return_pct: m27YtdPct,
+        today_change_pct: m27TodayPct,
+        one_year_return_pct: m27OneYearPct,
+        five_year_return_pct: m27FiveYearPct,
+        components: serializeComponents(m27Components),
       },
       m3: {
         ytd_return_pct: m3YtdPct,
