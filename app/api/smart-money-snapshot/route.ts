@@ -667,12 +667,57 @@ export async function GET() {
     note:        "A/D line fell to 104,811 on Nov 20, about 15% below its mid-August peak near 122,800, and broke below the October base (111-113K) and its March low (about 108K) to the lowest level in a year. The S&P is falling with it but is still above its March low, so breadth is weaker than the index. A/D is below its 20-day (110,411), 50-day (112,139) and 200-day (116,195) averages, and the 50-day has been under the 200-day since early October.",
     updatedDate: "Nov 20",
   };
+
+  // ─── WEEKLY VIEW inputs (main page) ─────────────────────────────────
+  // Earnings: FactSet "Earnings Insight" (free PDF every Friday). Record the
+  // forward 12-month EPS and whether estimates are rising, flat or falling.
+  // This is the signal that separates a valuation reset from an earnings
+  // recession, and the one Lance asks first ("have the fundamentals changed?").
+  const MANUAL_EARNINGS = {
+    fwdEps: 415.82,                            // FactSet forward 12-month EPS · Nov 5 2026
+    trend: "rising" as "rising" | "flat" | "falling",
+    note: "Q4 EPS estimates up 1.1% since Sep 30, Q3 growth about 31% (FactSet)",
+    asOf: "Nov 13",
+  };
+  const MANUAL_SAHM = { value: 0.00, asOf: "Oct" };   // FRED SAHMREALTIME · next release with the Dec 4 jobs report
+  const MANUAL_CORE_PCE = { value: 3.2, label: "Oct consensus" }; // core PCE y/y · replace with the actual after the Nov 25 release
+  // Calendar: shown on the main page for the next 3 weeks. Add, never edit history.
+  const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[] = [
+    { date: "2026-11-23", item: "Fed's Williams speaks · flash PMIs", kind: "market" },
+    { date: "2026-11-24", item: "Consumer confidence", kind: "market" },
+    { date: "2026-11-25", item: "Core PCE, Q3 GDP (2nd est.), claims, Beige Book", kind: "market" },
+    { date: "2026-11-26", item: "Markets closed (Thanksgiving)", kind: "market" },
+    { date: "2026-11-27", item: "Half day, 1 p.m. ET close", kind: "market" },
+    { date: "2026-11-30", item: "Month-end: Ivy signals and 10-month trend check", kind: "plan" },
+    { date: "2026-12-01", item: "TOD tranche 1 window opens (through Dec 15)", kind: "plan" },
+    { date: "2026-12-04", item: "November jobs report · Sahm update", kind: "market" },
+    { date: "2026-12-09", item: "FOMC decision (Dec 8-9)", kind: "market" },
+    { date: "2026-12-16", item: "Lance's 4-week 200-day clock expires", kind: "market" },
+    { date: "2027-01-02", item: "Quarterly rebalance", kind: "plan" },
+    { date: "2027-01-15", item: "Q4 estimated tax check", kind: "plan" },
+  ];
+  // Action items: the household to-do list. Set status as you go
+  // ("open" | "doing" | "done"). Overdue open items show in red.
+  const MANUAL_ACTIONS: { item: string; due: string; status: "open" | "doing" | "done" }[] = [
+    { item: "Send the accountant the TOD lot export and get both tranches sized", due: "2026-11-09", status: "open" },
+    { item: "TOD prep: turn off DRIP on VTI and VXUS, switch to specific lot ID", due: "2026-11-30", status: "open" },
+    { item: "TOD tranche 1: harvest VTEB losses (FMUB swap), then sell highest-cost VTI lots", due: "2026-12-15", status: "open" },
+    { item: "Consolidate Noelle's accounts: SEP IRA and Rollover IRA into her 401k", due: "2026-12-31", status: "open" },
+    { item: "Roll the Alpine 401k and Traditional IRA into the Rollover IRA", due: "2026-12-31", status: "open" },
+    { item: "Set up the dedicated financial email, move accounts to it, freeze credit", due: "2026-12-31", status: "open" },
+    { item: "Rewrite the Investment Rules as a one-page plan and share it with Chris", due: "2026-12-31", status: "open" },
+    { item: "TOD tranche 2 and the Q4 estimated tax check", due: "2027-01-15", status: "open" },
+    { item: "Estate plan with Kris Simms: will and trust, then update beneficiaries", due: "2027-01-31", status: "open" },
+    { item: "Chris meeting: lower-return scenarios, 2008 and 2000-02 stress tests, 401k equity", due: "2027-02-28", status: "open" },
+  ];
   // ═══════════════════════════════════════════════════════════════════
 
   // Started before the main batch so they run in parallel with it.
   const spxWeeklyP = fetchChart("^GSPC", 3660, "1wk");
   const veaDailyP = fetchChart("VEA", 420);   // Graded Ivy · Intl
   const spxMonthlyP = fetchChart("^GSPC", 5480, "1mo");
+  const claimsP = fetchFred("ICSA", 14, 13);          // weekly jobless claims, latest vs 13 weeks back
+  const tenYrMonthP = fetchFred("DGS10", 23, 21);     // 10-year yield, latest vs ~1 month back (stocks vs bonds)
   const [
     [spx, qqq, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthResult],
     positionResults,
@@ -1662,6 +1707,152 @@ export async function GET() {
   const hasPartialData = spxPrice != null;
   const status = Object.keys(diagnostics).length === 0 ? "ok" : hasPartialData ? "partial" : "error";
 
+  // ═══════════════════════════════════════════════════════════════════
+  // WEEKLY VIEW — the main page. Five signals, three context tiles, a
+  // story line and a "call Chris?" status. Plan: hold M2 and rebalance.
+  // A call is worth it only when trend, credit and economy turn together.
+  // ═══════════════════════════════════════════════════════════════════
+  const [claims, tenYrMonth] = await Promise.all([claimsP, tenYrMonthP]);
+  type Tone = "green" | "yellow" | "red";
+  const wkCloses = lastClosePerPeriod(spxWeekly.closes, spxWeekly.timestamps, "week");
+  const moCloses = lastClosePerPeriod(spxMonthly.closes, spxMonthly.timestamps, "month");
+  const avgOf = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+  const sma40w = wkCloses.length >= 40 ? avgOf(wkCloses.slice(-40)) : null;
+  const sma10m = moCloses.length >= 10 ? avgOf(moCloses.slice(-10)) : null;
+  const pctVs40w = spxPrice != null && sma40w != null ? ((spxPrice - sma40w) / sma40w) * 100 : null;
+  const pctVs10m = spxPrice != null && sma10m != null ? ((spxPrice - sma10m) / sma10m) * 100 : null;
+  const spxWeekAgoClose = spxCloses.length >= 6 ? spxCloses[spxCloses.length - 6] : null;
+  const spxWeekPct = spxPrice != null && spxWeekAgoClose ? ((spxPrice - spxWeekAgoClose) / spxWeekAgoClose) * 100 : null;
+  const spxMonthAgoClose = spxCloses.length >= 22 ? spxCloses[spxCloses.length - 22] : null;
+  const spxMonthPct = spxPrice != null && spxMonthAgoClose ? ((spxPrice - spxMonthAgoClose) / spxMonthAgoClose) * 100 : null;
+  const spxHigh52 = spxCloses.length ? Math.max(...spxCloses.slice(-252)) : null;
+  const spxOffHigh = spxPrice != null && spxHigh52 ? ((spxPrice - spxHigh52) / spxHigh52) * 100 : null;
+
+  // RSI(14), Wilder smoothing, on daily closes
+  const rsi14 = (() => {
+    const c = spxCloses; if (c.length < 30) return null;
+    let g = 0, l = 0;
+    for (let i = 1; i <= 14; i++) { const d = c[i] - c[i - 1]; if (d >= 0) g += d; else l -= d; }
+    g /= 14; l /= 14;
+    for (let i = 15; i < c.length; i++) { const d = c[i] - c[i - 1]; g = (g * 13 + Math.max(d, 0)) / 14; l = (l * 13 + Math.max(-d, 0)) / 14; }
+    return l === 0 ? 100 : 100 - 100 / (1 + g / l);
+  })();
+
+  const fmt = (v: number | null, d = 1) => (v == null ? "n/a" : v.toFixed(d));
+  const sgn = (v: number | null, d = 1) => (v == null ? "n/a" : `${v >= 0 ? "+" : ""}${v.toFixed(d)}`);
+
+  // 1. Trend: S&P vs 40-week average (live), 10-month average checked at month-end
+  const trendTone: Tone = pctVs40w == null ? "yellow" : pctVs40w < 0 ? "red" : pctVs40w < 3 ? "yellow" : "green";
+  const trend = {
+    key: "trend", title: "Trend", question: "Is the market breaking down?", tone: trendTone,
+    label: trendTone === "red" ? "Broken" : trendTone === "yellow" ? "Thin cushion" : "Uptrend",
+    value: pctVs40w == null ? "n/a" : `${sgn(pctVs40w)}%`, unit: "vs 40-wk avg",
+    detail: `10-month avg: ${sgn(pctVs10m)}% (official at month-end) · ${fmt(spxOffHigh)}% off the high`,
+    weekChange: spxWeekPct == null ? null : `${sgn(spxWeekPct)}% this week`,
+    direction: spxWeekPct == null ? "flat" : spxWeekPct > 0.5 ? "better" : spxWeekPct < -0.5 ? "worse" : "flat",
+  };
+
+  // 2. Credit: HY spread level and weekly change
+  const hyBps = hySpread * 100;
+  const hyChg = hyWeekAgo != null ? (hySpread - hyWeekAgo) * 100 : null;
+  const creditTone: Tone = hyBps < 350 ? "green" : hyBps < 450 ? "yellow" : "red";
+  const credit = {
+    key: "credit", title: "Credit", question: "Are lenders getting worried?", tone: creditTone,
+    label: creditTone === "green" ? "Calm" : creditTone === "yellow" ? "Caution" : "Stress",
+    value: `${Math.round(hyBps)}`, unit: "bps HY spread",
+    detail: "Calm under 350 · stress over 450 · 500+ is a recession-type level",
+    weekChange: hyChg == null ? null : `${hyChg >= 0 ? "+" : ""}${Math.round(hyChg)} bps this week`,
+    direction: hyChg == null ? "flat" : hyChg > 5 ? "worse" : hyChg < -5 ? "better" : "flat",
+  };
+
+  // 3. Economy: Sahm rule plus the claims trend
+  const claimsK = claims.value != null ? claims.value / 1000 : null;
+  const claimsChgPct = claims.value != null && claims.prev ? ((claims.value - claims.prev) / claims.prev) * 100 : null;
+  const econTone: Tone =
+    MANUAL_SAHM.value >= 0.5 || (claimsChgPct != null && claimsChgPct > 25) ? "red" :
+    MANUAL_SAHM.value >= 0.3 || (claimsChgPct != null && claimsChgPct > 10) ? "yellow" : "green";
+  const economy = {
+    key: "economy", title: "Economy", question: "Is a recession starting?", tone: econTone,
+    label: econTone === "green" ? "Healthy" : econTone === "yellow" ? "Softening" : "Recession risk",
+    value: MANUAL_SAHM.value.toFixed(2), unit: `Sahm (${MANUAL_SAHM.asOf}) · trigger 0.50`,
+    detail: claimsK == null ? "Jobless claims unavailable" : `Jobless claims ${Math.round(claimsK)}k · ${sgn(claimsChgPct, 0)}% vs 13 weeks ago`,
+    weekChange: null, direction: "flat",
+  };
+
+  // 4. Earnings: are analysts raising or cutting estimates?
+  const earnTone: Tone = MANUAL_EARNINGS.trend === "rising" ? "green" : MANUAL_EARNINGS.trend === "flat" ? "yellow" : "red";
+  const earnings = {
+    key: "earnings", title: "Earnings", question: "Are the fundamentals changing?", tone: earnTone,
+    label: earnTone === "green" ? "Estimates rising" : earnTone === "yellow" ? "Estimates flat" : "Estimates being cut",
+    value: `$${MANUAL_EARNINGS.fwdEps.toFixed(0)}`, unit: `fwd 12-mo EPS (${MANUAL_EARNINGS.asOf})`,
+    detail: MANUAL_EARNINGS.note,
+    weekChange: null, direction: "flat",
+  };
+
+  // 5. Fed: policy direction plus the real rate
+  const realFed = fedFunds - MANUAL_CORE_PCE.value;
+  const fedTone: Tone = MANUAL_FED_STANCE === "tightening" ? "red" : MANUAL_FED_STANCE === "holding" ? "yellow" : "green";
+  const fed = {
+    key: "fed", title: "Fed", question: "Is policy helping or hurting?", tone: fedTone,
+    label: fedTone === "red" ? "Headwind (hiking)" : fedTone === "yellow" ? "On hold" : "Tailwind (cutting)",
+    value: `${fedFunds.toFixed(2)}%`, unit: "fed funds",
+    detail: `${MANUAL_FED_NEXT_MOVE.hikeOdds}% odds of a ${MANUAL_FED_NEXT_MOVE.meeting} hike · real rate about ${realFed.toFixed(1)}% (core PCE ${MANUAL_CORE_PCE.value}%, ${MANUAL_CORE_PCE.label})`,
+    weekChange: null, direction: "flat",
+  };
+
+  // Context row: explains, never triggers a call
+  const valTone: Tone = MANUAL_BUFFETT_SIGMA >= 2 ? "red" : MANUAL_BUFFETT_SIGMA >= 1 ? "yellow" : "green";
+  const tenYrChgBp = tenYrMonth.value != null && tenYrMonth.prev != null ? (tenYrMonth.value - tenYrMonth.prev) * 100 : null;
+  const bondsHedging = spxMonthPct != null && tenYrChgBp != null && spxMonthPct < -2 && tenYrChgBp < 0;
+  const bothFalling = spxMonthPct != null && tenYrChgBp != null && spxMonthPct < -2 && tenYrChgBp > 10;
+  const context = [
+    { key: "valuation", title: "Valuation", tone: valTone,
+      label: valTone === "red" ? "Extreme" : valTone === "yellow" ? "Expensive" : "Reasonable",
+      value: `${MANUAL_BUFFETT_SIGMA.toFixed(2)}σ`, unit: "Buffett",
+      detail: `CAPE ${capeRatio.toFixed(1)}x · sets long-run returns, not timing` },
+    { key: "stocksBonds", title: "Stocks vs bonds", tone: (bothFalling ? "red" : bondsHedging ? "green" : "yellow") as Tone,
+      label: bothFalling ? "Both falling" : bondsHedging ? "Bonds hedging" : "Normal",
+      value: `${sgn(spxMonthPct)}%`, unit: "S&P, 1 month",
+      detail: tenYrChgBp == null ? "10-year change unavailable" : `10-year yield ${tenYrChgBp >= 0 ? "+" : ""}${Math.round(tenYrChgBp)} bps over the same month. Falling yields mean bonds are cushioning stocks` },
+    { key: "stretch", title: "Short-term stretch", tone: (rsi14 != null && rsi14 < 30 ? "green" : rsi14 != null && rsi14 > 70 ? "red" : "yellow") as Tone,
+      label: rsi14 == null ? "n/a" : rsi14 < 30 ? "Oversold, bounce likely" : rsi14 > 70 ? "Overbought" : "Neutral",
+      value: rsi14 == null ? "n/a" : rsi14.toFixed(0), unit: "RSI (14-day)",
+      detail: `VIX ${vixPrice != null ? vixPrice.toFixed(1) : "n/a"} · AAII bears ${MANUAL_AAII_BEARS}% · timing for bounces, not allocation` },
+  ];
+
+  // Call-Chris logic and story line
+  const core = [trend, credit, economy];
+  const coreReds = core.filter(c => c.tone === "red").length;
+  const opportunity = MANUAL_BUFFETT_SIGMA < 1 && trend.tone !== "red" && credit.tone !== "red" && (spxOffHigh ?? 0) < -15;
+  const callLevel = coreReds === 3 ? "call_worse" : opportunity ? "call_better" : coreReds === 2 ? "watch" : "none";
+  const callText =
+    callLevel === "call_worse" ? "Worth a call to Chris: trend, credit and the economy are turning together." :
+    callLevel === "call_better" ? "Worth a call to Chris: after a big decline, the trend is repairing, credit is calm and valuations are reasonable." :
+    callLevel === "watch" ? "Watch closely: two of the three core signals have turned. A third would be worth a call." :
+    "No call needed. Hold M2 and rebalance on schedule.";
+  const wvRegime =
+    coreReds === 3 ? "Broad deterioration" :
+    trend.tone === "red" && coreReds === 2 ? "Correction with stress spreading" :
+    trend.tone === "red" ? "Market-led correction" :
+    trend.tone === "yellow" && coreReds === 0 ? "Uptrend losing cushion" :
+    coreReds >= 1 ? `Market holding up while ${core.filter(c => c.tone === "red").map(c => c.title.toLowerCase()).join(" and ")} weakens` :
+    "Healthy uptrend";
+  const notConfirming = [credit, economy, earnings].filter(x => x.tone === "green").map(x => x.title.toLowerCase());
+  const watching = [credit, economy, earnings].filter(x => x.tone === "yellow");
+  const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+  const storyParts = [`${wvRegime}.`];
+  if (trend.tone === "red" && notConfirming.length) storyParts.push(`${cap(notConfirming.join(" and "))} ${notConfirming.length > 1 ? "are" : "is"} not confirming.`);
+  if (watching.length) storyParts.push(`Watch ${watching.map(w => `${w.title.toLowerCase()} (${w.label.toLowerCase()}${w.weekChange ? `, ${w.weekChange}` : ""})`).join(" and ")}.`);
+  const weeklyView = {
+    story: storyParts.join(" "),
+    call: { level: callLevel, text: callText },
+    signals: [trend, credit, economy, earnings, fed],
+    context,
+    calendar: MANUAL_CALENDAR,
+    actions: MANUAL_ACTIONS,
+    asOf: new Date().toISOString(),
+  };
+
   return NextResponse.json({
     ok: hasPartialData,
     status,
@@ -1677,6 +1868,7 @@ export async function GET() {
     spx_history: spxCloses,
     vix: vixPrice,
     fallbacks_in_use: fallbacksInUse,
+    weekly_view: weeklyView,
     metrics: {
       spx_price: spxPrice,
       spx_change_pct: spxChangePct,
