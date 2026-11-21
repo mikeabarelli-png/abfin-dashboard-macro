@@ -497,6 +497,10 @@ export default function Page() {
   const m2TodayPct = getNum(metrics?.m2?.today_change_pct, marketData?.m2?.today_change_pct);
   const m2OneYearPct = getNum(metrics?.m2?.one_year_return_pct, marketData?.m2?.one_year_return_pct);
   const m2FiveYearPct = getNum(metrics?.m2?.five_year_return_pct, marketData?.m2?.five_year_return_pct);
+  const m27YtdPct = getNum(metrics?.m27?.ytd_return_pct, marketData?.m27?.ytd_return_pct);
+  const m27TodayPct = getNum(metrics?.m27?.today_change_pct, marketData?.m27?.today_change_pct);
+  const m27OneYearPct = getNum(metrics?.m27?.one_year_return_pct, marketData?.m27?.one_year_return_pct);
+  const m27FiveYearPct = getNum(metrics?.m27?.five_year_return_pct, marketData?.m27?.five_year_return_pct);
   const m3YtdPct = getNum(metrics?.m3?.ytd_return_pct, marketData?.m3?.ytd_return_pct);
   const m3TodayPct = getNum(metrics?.m3?.today_change_pct, marketData?.m3?.today_change_pct);
   const m3OneYearPct = getNum(metrics?.m3?.one_year_return_pct, marketData?.m3?.one_year_return_pct);
@@ -539,7 +543,7 @@ export default function Page() {
 
   const portfolioDetailData: Record<string, { title: string; subtitle: string; ytd: number | null; today: number | null; oneYear: number | null; fiveYear: number | null; components: DetailComponent[] }> = {
     cur: {
-      title: "Your Current Portfolio",
+      title: "M25 40/55/5 · allocation through early Sept 2026",
       subtitle: "Weighted by actual allocation · estimate, not brokerage-reported return",
       ytd: portfolioYtdPct, today: portfolioTodayPct, oneYear: portfolioOneYearPct, fiveYear: portfolioFiveYearPct,
       components: curPositionCards.map(p => ({ ticker: p.ticker, weight: p.weight, ytd: p.ytdReturnPct, today: p.dailyPct, oneYear: p.oneYearReturnPct, fiveYear: p.fiveYearReturnPct })),
@@ -605,16 +609,22 @@ export default function Page() {
       components: apiComponents(metrics?.c1_tax ?? marketData?.c1_tax),
     },
     c1Ira: {
-      title: "C1 IRA",
+      title: "C26 · Chris's C1 IRA proposal",
       subtitle: "Chris's proposed uniform model across the six standard retirement accounts — 16% SCHD / 15% VEA / 15% VTIP / 14% SGOV / 10% VTI / 10% VTWO / 9% BND / 5% VIGI / 3% GLDM / 3% DBMF. Drops VGIT for BND (the anchor bond fund in Vanguard's own target-date funds). Excludes the Alpine 401k (pending rollover) and TOD accounts (see C1 TAX).",
       ytd: c1IraYtdPct, today: c1IraTodayPct, oneYear: c1IraOneYearPct, fiveYear: c1IraFiveYearPct,
       components: apiComponents(metrics?.c1_ira ?? marketData?.c1_ira),
     },
     m2: {
-      title: "M2 50/40/10",
+      title: "M26 50/40/10 · current allocation",
       subtitle: "Mike's dial-back of C1 IRA — same fund selection, VTWO cut from 10% to 5%, GLDM/DBMF each doubled to 5%. 50% equity / 40% fixed income / 10% alts.",
       ytd: m2YtdPct, today: m2TodayPct, oneYear: m2OneYearPct, fiveYear: m2FiveYearPct,
       components: apiComponents(metrics?.m2 ?? marketData?.m2),
+    },
+    m27: {
+      title: "M27 50/42/8 · draft",
+      subtitle: "Early tracker for the January conversation with Chris. Same equity sleeve as M26. Gold trimmed to 3% (Chris's original size) and 10 points of short ballast (SGOV, VTIP) moved into BND and VGIT to lock in today's yields. 50% equity / 42% fixed income / 8% alts.",
+      ytd: m27YtdPct, today: m27TodayPct, oneYear: m27OneYearPct, fiveYear: m27FiveYearPct,
+      components: apiComponents(metrics?.m27 ?? marketData?.m27),
     },
     m3: {
       title: "M3 55/40/5",
@@ -1153,7 +1163,7 @@ export default function Page() {
                 then the index comparisons, then what I'm considering". */}
             <div className="grid5" style={{ marginBottom:16 }}>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("cur"); }}>
-                <div className="lbl">CUR 40/55/5 YTD</div>
+                <div className="lbl">M25 40/55/5 YTD</div>
                 <div className="valHero">
                   {portfolioYtdPct != null ? `${portfolioYtdPct >= 0 ? "+" : ""}${portfolioYtdPct.toFixed(1)}%` : "—"}
                 </div>
@@ -1177,7 +1187,7 @@ export default function Page() {
                   40/55/5 (the allocation through early Sept) so the two are
                   directly comparable as "before" and "after". */}
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("m2"); }}>
-                <div className="lbl">M2 50/40/10 YTD</div>
+                <div className="lbl">M26 50/40/10 YTD</div>
                 <div className="valHero">
                   {m2YtdPct != null ? `${m2YtdPct >= 0 ? "+" : ""}${m2YtdPct.toFixed(1)}%` : "—"}
                 </div>
@@ -1193,6 +1203,27 @@ export default function Page() {
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
                   <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m2FiveYearPct == null ? "#cbd5e1" : m2FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
                     {m2FiveYearPct != null ? `${m2FiveYearPct >= 0 ? "+" : ""}${m2FiveYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+              {/* M27: draft for the January conversation with Chris, tracked early. */}
+              <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("m27"); }}>
+                <div className="lbl">M27 50/42/8 YTD <span style={{ color:"#93c5fd", fontWeight:700 }}>· draft</span></div>
+                <div className="valHero">
+                  {m27YtdPct != null ? `${m27YtdPct >= 0 ? "+" : ""}${m27YtdPct.toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m27TodayPct == null ? "#cbd5e1" : m27TodayPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m27TodayPct != null ? `${m27TodayPct >= 0 ? "+" : ""}${m27TodayPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>1-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m27OneYearPct == null ? "#cbd5e1" : m27OneYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m27OneYearPct != null ? `${m27OneYearPct >= 0 ? "+" : ""}${m27OneYearPct.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>5-YR</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: m27FiveYearPct == null ? "#cbd5e1" : m27FiveYearPct >= 0 ? "#4ade80" : "#ff6b88" }}>
+                    {m27FiveYearPct != null ? `${m27FiveYearPct >= 0 ? "+" : ""}${m27FiveYearPct.toFixed(1)}%` : "—"}
                   </div>
                 </div>
               </div>
@@ -1325,7 +1356,7 @@ export default function Page() {
               </div>
             </div>
               <div className="tile" style={{ cursor:"pointer" }} onClick={() => { setModal("portfolioDetail"); setDetailKey("c1Ira"); }}>
-                <div className="lbl">C1 IRA 56/38/6 YTD</div>
+                <div className="lbl">C26 56/38/6 YTD</div>
                 <div className="valHero">
                   {c1IraYtdPct != null ? `${c1IraYtdPct >= 0 ? "+" : ""}${c1IraYtdPct.toFixed(1)}%` : "—"}
                 </div>
