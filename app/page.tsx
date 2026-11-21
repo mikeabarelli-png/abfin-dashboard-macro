@@ -3063,12 +3063,12 @@ export default function Page() {
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Buffett Indicator",      rating:"Strongly Overvalued", score:"2.33", color:"#ff6b88" },
-                  { name:"Price/Earnings (CAPE)",  rating:"Strongly Overvalued", score:"2.07", color:"#ff6b88" },
-                  { name:"Price/Sales",            rating:"Overvalued",          score:"1.40", color:"#fbbf24" },
-                  { name:"Interest Rate Model",    rating:"Strongly Overvalued", score:"2.04", color:"#ff6b88" },
-                  { name:"S&P 500 Mean Reversion", rating:"Strongly Overvalued", score:"2.32", color:"#ff6b88" },
-                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.27", color:"#94a3b8", muted:true },
+                  { name:"Buffett Indicator",      rating:"Overvalued",          score:"1.83", color:"#fbbf24" },
+                  { name:"Price/Earnings (CAPE)",  rating:"Overvalued",          score:"1.62", color:"#fbbf24" },
+                  { name:"Price/Sales",            rating:"Fairly Valued",       score:"0.90", color:"#94a3b8" },
+                  { name:"Interest Rate Model",    rating:"Overvalued",          score:"1.58", color:"#fbbf24" },
+                  { name:"S&P 500 Mean Reversion", rating:"Overvalued",          score:"1.84", color:"#fbbf24" },
+                  { name:"Earnings Yield Gap",     rating:"Fairly Valued",       score:"0.04", color:"#94a3b8", muted:true },
                 ].map(r => (
                   <tr key={r.name} style={{ opacity:(r as any).muted?0.4:1 }}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13, fontStyle:(r as any).muted?"italic":"normal" }}>{r.name}</td>
@@ -3080,9 +3080,9 @@ export default function Page() {
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Valuation Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#ff6b88" }}>4 of 5 Strongly Overvalued · Oct 31 · Historically stretched</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>0 of 5 Strongly Overvalued · 4 Overvalued · Nov 20 · Still expensive, no longer extreme</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>All five models eased again in October as the S&P fell for a second straight month. Buffett slipped to 2.33σ, CAPE to 2.07σ (40.1x) and Price/Sales to 1.40σ. Interest Rate Model gave back its September jump, falling to 2.04σ after the Fed held. The tiers haven't changed, so this is still historically stretched, just less extreme than in August.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>The correction pulled every model out of Strongly Overvalued for the first time in this cycle. Buffett fell to 1.83σ (from 2.33σ), CAPE to 1.62σ (36.4x, from 40.1x), Mean Reversion to 1.84σ and the Interest Rate Model to 1.58σ. Price/Sales dropped to Fairly Valued at 0.90σ. Valuations are still well above average, so long-run return expectations stay low, but the extreme reading has cleared.</span>
             </div>
 
             {/* Recession Models */}
@@ -3091,8 +3091,8 @@ export default function Page() {
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Yield Curve",       rating:"Very High Risk", score:"2.00",  color:"#ff6b88", updated:"Oct 31" },
-                  { name:"Sahm Rule",         rating:"Low",            score:"N/A",   color:"#4ade80", updated:"Sep 30" },
+                  { name:"Yield Curve",       rating:"High Risk",      score:"1.83",  color:"#fbbf24", updated:"Nov 20" },
+                  { name:"Sahm Rule",         rating:"Low",            score:"0.00",  color:"#4ade80", updated:"Oct 31" },
                   { name:"State Coincidence", rating:"Normal",         score:"0.21",  color:"#4ade80", updated:"Sep 30" },
                 ].map(r => (
                   <tr key={r.name}>
@@ -3108,9 +3108,9 @@ export default function Page() {
             </table>
             <div className="sumBar" style={{ marginBottom:16 }}>
               <span className="sumBarLabel">Recession Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Mixed · Yield Curve back to Very High</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Mixed · Yield Curve High, labor not confirming</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Yield Curve ticked back up to Very High Risk at 2.00σ (from 1.98σ). Re-steepening after inversion has historically preceded recession by 12 to 18 months. Sahm Rule (Low, as of Sep 30) and State Coincidence (Normal at 0.21σ, up from -0.42σ) aren't confirming yet, but September payrolls rose only 29k with July revised negative, so the Nov 6 jobs report matters.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>Yield Curve eased to High Risk (1.83σ, Nov 20, from 2.00σ). Re-steepening after inversion has historically preceded recession by 12 to 18 months. The labor data is not confirming: October payrolls beat at +165k with +84k of upward revisions, unemployment is 4.1%, and the real-time Sahm reading is 0.00 (far from the 0.50 trigger). Next Sahm update with the Dec 4 jobs report.</span>
             </div>
 
             {/* Sentiment Models */}
@@ -3152,11 +3152,11 @@ export default function Page() {
               <thead><tr><th style={{ width:"45%", textAlign:"left" }}>Model</th><th style={{ textAlign:"left" }}>Rating</th><th style={{ textAlign:"right" }}>Score (σ)</th></tr></thead>
               <tbody>
                 {[
-                  { name:"Economic Uncertainty Index", rating:"Very Pessimistic", score:"2.00",  color:"#4ade80", updated:"Oct 31", note:"jumped from 1.04σ" },
-                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.80", color:"#4ade80", updated:"Oct 31", note:"contrarian bullish" },
-                  { name:"Margin Debt",                rating:"Optimistic",       score:"1.00",  color:"#fbbf24", updated:"Sep 30", note:"cooling, still elevated" },
-                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.76",  color:"#94a3b8", updated:"Oct 31", note:"tight, no stress" },
-                  { name:"VIX Index",                  rating:"Neutral",          score:"-0.28", color:"#94a3b8", updated:"Oct 31", note:"below 20, calm" },
+                  { name:"Economic Uncertainty Index", rating:"Neutral",          score:"0.15",  color:"#94a3b8", updated:"Nov 20", note:"fell from 2.00σ" },
+                  { name:"Consumer Confidence",        rating:"Very Pessimistic", score:"-2.60", color:"#4ade80", updated:"Oct 31", note:"contrarian bullish" },
+                  { name:"Margin Debt",                rating:"Neutral",          score:"0.66",  color:"#94a3b8", updated:"Sep 30", note:"CMV revised, leverage easing" },
+                  { name:"Junk Bond Spreads",          rating:"Neutral",          score:"0.66",  color:"#94a3b8", updated:"Nov 20", note:"widening, not stressed" },
+                  { name:"VIX Index",                  rating:"Pessimistic",      score:"1.18",  color:"#4ade80", updated:"Nov 20", note:"VIX 37, fear in markets" },
                 ].map(r => (
                   <tr key={r.name}>
                     <td style={{ fontWeight:600, color:"#cbd5e1", fontSize:13 }}>
@@ -3174,9 +3174,9 @@ export default function Page() {
             </table>
             <div className="sumBar">
               <span className="sumBarLabel">Sentiment Signal</span>
-              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Extreme Pessimism · Contrarian Bullish · Oct 31</span>
+              <span style={{ fontSize:12, fontWeight:700, color:"#4ade80" }}>Fear moved from surveys into markets · Nov 20</span>
               <span style={{ fontSize:12, color:"#475569" }}>·</span>
-              <span style={{ fontSize:12, color:"#94a3b8" }}>Economic Uncertainty jumped to Very Pessimistic at 2.00σ (from 1.04σ), and Consumer Confidence held at -2.80σ. Both are at the pessimistic extreme together. Margin Debt cooled to 1.00σ but is still Optimistic, so retail leverage hasn't unwound. VIX and junk spreads remain calm, so the fear is in surveys, not in markets. Contrarian signal still intact.</span>
+              <span style={{ fontSize:12, color:"#94a3b8" }}>The fear is now in prices, not just surveys. VIX moved to Pessimistic at 1.18σ while Economic Uncertainty fell back to Neutral (0.15σ, from 2.00σ). Consumer Confidence is still Very Pessimistic at -2.60σ (Oct 31). Margin Debt is Neutral at 0.66σ after CMV's revision, so leverage was already easing before the selloff. Junk spreads are widening but still Neutral at 0.66σ, so credit is not confirming stress yet. That is the one to watch.</span>
             </div>
           </section>
 
