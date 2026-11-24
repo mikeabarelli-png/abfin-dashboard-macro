@@ -280,15 +280,16 @@ export default function Page() {
   const dmaState = (pct: number | null, slope?: number | null, isLong = false) => {
     if (pct == null) return "Loading";
     if (pct < 0) {
-      // Below DMA — is SPX recovering toward it or moving away?
-      return (spxDailyPct != null && spxDailyPct > 0) ? "Recovering" : "Bearish";
+      // Below the DMA is a broken trend, full stop. One up day doesn't
+      // change that, so the label no longer flips on today's move.
+      return "Below";
     }
     if (isLong && pct <= 2) return "Testing Support";
     return "Holding Above";
   };
   const dmaTone = (pct: number | null, slope?: number | null, isLong = false) => {
     if (pct == null) return "neutral";
-    if (pct < 0) return (spxDailyPct != null && spxDailyPct > 0) ? "warning" : "danger";
+    if (pct < 0) return "danger";
     if (isLong && pct <= 2) return "warning";
     if (slope != null && slope > 0.02) return "healthy";
     return "healthy"; // above DMA is always at minimum healthy
@@ -301,14 +302,14 @@ export default function Page() {
   const positionDmaState = (pct: number | null, slope: number | null, dailyPct: number | null, isLong = false) => {
     if (pct == null) return "Loading";
     if (pct < 0) {
-      return (dailyPct != null && dailyPct > 0) ? "Recovering" : "Bearish";
+      return "Below";
     }
     if (isLong && pct <= 2) return "Testing Support";
     return "Holding Above";
   };
   const positionDmaTone = (pct: number | null, slope: number | null, dailyPct: number | null, isLong = false) => {
     if (pct == null) return "neutral";
-    if (pct < 0) return (dailyPct != null && dailyPct > 0) ? "warning" : "danger";
+    if (pct < 0) return "danger";
     if (isLong && pct <= 2) return "warning";
     if (slope != null && slope > 0.02) return "healthy";
     return "healthy";
