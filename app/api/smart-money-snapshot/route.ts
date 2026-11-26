@@ -680,7 +680,7 @@ export async function GET() {
     asOf: "Nov 13",
   };
   const MANUAL_SAHM = { value: 0.00, asOf: "Oct" };   // FRED SAHMREALTIME · next release with the Dec 4 jobs report
-  const MANUAL_CORE_PCE = { value: 3.2, label: "Oct consensus" }; // core PCE y/y · replace with the actual after the Nov 25 release
+  const MANUAL_CORE_PCE = { value: 3.3, label: "Oct actual (BEA, Nov 25)" }; // next release with Nov data in Dec
   // Calendar: shown on the main page for the next 3 weeks. Add, never edit history.
   const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[] = [
     { date: "2026-11-23", item: "Fed's Williams speaks · flash PMIs", kind: "market" },
@@ -705,7 +705,8 @@ export async function GET() {
     { item: "Consolidate Noelle's accounts: SEP IRA and Rollover IRA into her 401k", due: "2026-12-31", status: "open" },
     { item: "Roll the Alpine 401k and Traditional IRA into the Rollover IRA", due: "2026-12-31", status: "open" },
     { item: "Set up the dedicated financial email, move accounts to it, freeze credit", due: "2026-12-31", status: "open" },
-    { item: "Chris meeting: review M27 draft (gold to 3%, SGOV/VTIP into BND/VGIT), Spinnaker 401k off the 2035 fund, lower-return scenarios, 2008 and 2000-02 stress tests", due: "2027-02-28", status: "open" },
+    { item: "Gather plan inputs for Chris: spending estimate, Social Security statements, college costs, health insurance costs", due: "2027-01-15", status: "open" },
+    { item: "Chris meeting: retirement-window plan (retiring 2028 to 2031, send the brief ahead), M27 draft, Spinnaker 401k", due: "2027-02-28", status: "open" },
   ];
   // ═══════════════════════════════════════════════════════════════════
 
