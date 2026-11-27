@@ -1799,7 +1799,7 @@ export async function GET() {
   const economy = {
     key: "economy", title: "Economy", question: "Is a recession starting?", tone: econTone,
     label: econTone === "green" ? "Healthy" : econTone === "yellow" ? "Softening" : "Recession risk",
-    value: MANUAL_SAHM.value.toFixed(2), unit: `Sahm (${MANUAL_SAHM.asOf}) · trigger 0.50`,
+    value: MANUAL_SAHM.value.toFixed(2), unit: `Sahm rule (${MANUAL_SAHM.asOf})`,
     detail: claimsK == null ? "Jobless claims unavailable" : `Jobless claims ${Math.round(claimsK)}k · ${sgn(claimsChgPct, 0)}% vs 13 weeks ago`,
     weekChange: null, direction: "flat",
   };
@@ -1844,6 +1844,37 @@ export async function GET() {
       value: rsi14 == null ? "n/a" : rsi14.toFixed(0), unit: "RSI (14-day)",
       detail: `VIX ${vixPrice != null ? vixPrice.toFixed(1) : "n/a"} · AAII bears ${MANUAL_AAII_BEARS}% · timing for bounces, not allocation` },
   ];
+
+  // Visual specs for the tiles (gauges, chips, steps). Details stay in
+  // `detail` and show as a hover tooltip.
+  const clampv = (v: number | null, lo: number, hi: number) => v == null ? null : Math.max(lo, Math.min(hi, v));
+  (trend as any).viz = { type: "gauge", min: -10, max: 10, value: clampv(pctVs40w, -10, 10), ticks: [0, 3],
+    zones: [{ to: 0, tone: "red" }, { to: 3, tone: "yellow" }, { to: 10, tone: "green" }] };
+  (trend as any).sub = trend.weekChange;
+  (credit as any).viz = { type: "gauge", min: 250, max: 600, value: clampv(hyBps, 250, 600), ticks: [350, 450],
+    zones: [{ to: 350, tone: "green" }, { to: 450, tone: "yellow" }, { to: 600, tone: "red" }] };
+  (credit as any).sub = credit.weekChange;
+  (economy as any).viz = { type: "gauge", min: 0, max: 0.8, value: clampv(MANUAL_SAHM.value, 0, 0.8), ticks: [0.3, 0.5],
+    zones: [{ to: 0.3, tone: "green" }, { to: 0.5, tone: "yellow" }, { to: 0.8, tone: "red" }] };
+  (economy as any).sub = claimsK == null ? null : `Claims ${Math.round(claimsK)}k · ${sgn(claimsChgPct, 0)}% vs 13 wks`;
+  (earnings as any).viz = { type: "chip", text: MANUAL_EARNINGS.trend === "rising" ? "▲ Rising" : MANUAL_EARNINGS.trend === "flat" ? "→ Flat" : "▼ Being cut" };
+  (earnings as any).sub = MANUAL_EARNINGS.note.split(",")[0];
+  (fed as any).viz = { type: "steps", steps: ["Cut", "Hold", "Hike"], active: MANUAL_FED_STANCE === "tightening" ? 2 : MANUAL_FED_STANCE === "holding" ? 1 : 0 };
+  (fed as any).sub = `Real rate ${realFed.toFixed(1)}% · ${MANUAL_FED_NEXT_MOVE.hikeOdds}% hike odds`;
+  {
+    const [val, sb, st] = context as any[];
+    val.viz = { type: "gauge", min: -1, max: 3, value: clampv(MANUAL_BUFFETT_SIGMA, -1, 3), ticks: [1, 2],
+      zones: [{ to: 1, tone: "green" }, { to: 2, tone: "yellow" }, { to: 3, tone: "red" }] };
+    val.sub = `CAPE ${capeRatio.toFixed(1)}x`;
+    sb.viz = { type: "pair", items: [
+      { label: "S&P 1-mo", value: `${sgn(spxMonthPct)}%`, tone: spxMonthPct == null ? "flat" : spxMonthPct >= 0 ? "up" : "down" },
+      { label: "10-yr 1-mo", value: tenYrChgBp == null ? "n/a" : `${tenYrChgBp >= 0 ? "+" : ""}${Math.round(tenYrChgBp)} bps`, tone: tenYrChgBp == null ? "flat" : tenYrChgBp <= 0 ? "up" : "down" },
+    ] };
+    sb.sub = null;
+    st.viz = { type: "gauge", min: 0, max: 100, value: rsi14, ticks: [30, 70],
+      zones: [{ to: 30, tone: "green" }, { to: 70, tone: "yellow" }, { to: 100, tone: "red" }] };
+    st.sub = `VIX ${vixPrice != null ? vixPrice.toFixed(1) : "n/a"} · AAII bears ${MANUAL_AAII_BEARS}%`;
+  }
 
   // Call-Chris logic and story line
   const core = [trend, credit, economy];
