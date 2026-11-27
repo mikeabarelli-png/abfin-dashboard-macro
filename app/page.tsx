@@ -983,133 +983,159 @@ export default function Page() {
             );
           })()}
 
-          {/* ① MARKET STRUCTURE */}
-          <section className="panel">
-            <div className="panelHeader">
-              <div><div className="panelTitle">Market Structure</div><div className="panelSub">Price vs Key Moving Averages</div></div>
-              <div className="damage" style={{ color: nextReclaim ? "#fbbf24" : "#4ade80" }}>
-                {spxPrice == null ? "" : nextReclaim
-                  ? `Next level to reclaim: ${nextReclaim.label} ${fmtWhole(nextReclaim.level)} (+${(((nextReclaim.level - spxPrice) / spxPrice) * 100).toFixed(1)}%)`
-                  : "Above all 4 averages"}
-              </div>
-            </div>
+          {/* ① MARKET STRUCTURE: price ladder, four role tiles, one insight,
+              the 200-DMA clock. Tiles are ordered nearest first, so the
+              first tile is always the next test. */}
+          {(() => {
+            const px = spxPrice;
+            const avgs = [
+              { key: "200", label: "200-DMA", level: spx200, slope: slope200 },
+              { key: "100", label: "100-DMA", level: spx100, slope: slope100 },
+              { key: "50",  label: "50-DMA",  level: spx50,  slope: slope50  },
+              { key: "20",  label: "20-DMA",  level: spx20,  slope: slope20  },
+            ].filter(a => a.level != null) as { key: string; label: string; level: number; slope: number | null }[];
+            if (px == null || avgs.length === 0) return (
+              <section className="panel"><div className="panelTitle">Market Structure</div><div style={{ color:"#64748b", fontSize:13, marginTop:8 }}>Loading…</div></section>
+            );
+            const TEST_BAND = 1.0; // within 1% either way = testing
+            const withRole = avgs.map(a => {
+              const gap = ((a.level - px) / px) * 100; // + means the average is above the S&P
+              const role = Math.abs(gap) <= TEST_BAND ? "Testing" : gap > 0 ? "Resistance" : "Support";
+              const color = role === "Testing" ? "#fbbf24" : role === "Resistance" ? "#ff6b88" : "#4ade80";
+              const arrow = a.slope == null ? "" : a.slope > 0.02 ? "↗" : a.slope < -0.02 ? "↘" : "→";
+              const arrowColor = a.slope == null ? "#475569" : a.slope > 0.02 ? "#4ade80" : a.slope < -0.02 ? "#ff6b88" : "#fbbf24";
+              return { ...a, gap, role, color, arrow, arrowColor };
+            }).sort((x, y) => Math.abs(x.gap) - Math.abs(y.gap));
 
-            <div className="grid5" style={{ marginBottom:8 }}>
-              {/* Tile 1: SPX Price — stacked rows (Today, YTD) matching the
-                  portfolio tiles' layout. No arrow/Gap here — those apply
-                  to the DMA tiles below, not to the raw index itself. */}
-              <div className="tile">
-                <div className="tileTop"><span className="lbl">S&P 500</span></div>
-                <div className="valHero">{spxPrice != null ? fmtWhole(spxPrice) : "—"}</div>
-                <div className="sparkWrap" dangerouslySetInnerHTML={{ __html: sparkline(spxTrend, spxDailyPct != null && spxDailyPct >= 0 ? "#4ade80" : "#ff6b88") }} />
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", columnGap:8, rowGap:3, marginTop:8 }}>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Today</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxDailyPct == null ? "#cbd5e1" : spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {spxDailyPct != null ? `${spxDailyPct >= 0 ? "+" : ""}${spxDailyPct.toFixed(1)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
-                    {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
-                  </div>
-                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>From high</div>
-                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: offHigh == null ? "#cbd5e1" : offHigh > -5 ? "#cbd5e1" : offHigh > -10 ? "#fbbf24" : "#ff6b88" }}>
-                    {offHigh != null ? `${offHigh.toFixed(1)}%` : "—"}
-                  </div>
+            // Ladder scale
+            const all = [px, ...avgs.map(a => a.level)];
+            const lo = Math.min(...all), hi = Math.max(...all);
+            const pad = Math.max((hi - lo) * 0.12, px * 0.005);
+            const min = lo - pad, max = hi + pad;
+            const pos = (v: number) => ((v - min) / (max - min)) * 100;
+            const p200 = spx200 != null ? pos(spx200) : null;
+
+            // Merge labels for averages that sit on top of each other
+            const sortedByLevel = [...avgs].sort((a, b) => a.level - b.level);
+            const groups: { names: string[]; level: number }[] = [];
+            sortedByLevel.forEach(a => {
+              const g = groups[groups.length - 1];
+              if (g && Math.abs(pos(a.level) - pos(g.level)) < 4) { g.names.push(a.key); g.level = (g.level + a.level) / 2; }
+              else groups.push({ names: [a.key], level: a.level });
+            });
+
+            // Insight
+            const fmtPct = (v: number) => `${Math.abs(v).toFixed(1)}%`;
+            const above = withRole.filter(a => a.level > px).sort((a, b) => a.level - b.level);
+            const below = withRole.filter(a => a.level <= px).sort((a, b) => b.level - a.level);
+            const nearest = withRole[0];
+            const lines: string[] = [];
+            if (nearest.role === "Testing") {
+              lines.push(`Testing the ${nearest.label} from ${nearest.level > px ? "below" : "above"} at ${fmtWhole(nearest.level)}.`);
+              const nextUp = above.find(a => a.key !== nearest.key);
+              if (nearest.level > px && nextUp) lines.push(`Clear it and the next resistance is the ${nextUp.label} at ${fmtWhole(nextUp.level)}.`);
+            } else if (below.length === 0) {
+              lines.push(`Below all four averages. Nearest resistance is the ${above[0].label} at ${fmtWhole(above[0].level)}, ${fmtPct(above[0].gap)} overhead.`);
+            } else if (above.length === 0) {
+              lines.push(`Above all four averages. Nearest support is the ${below[0].label} at ${fmtWhole(below[0].level)}, ${fmtPct(below[0].gap)} below.`);
+            } else {
+              lines.push(`Between support at the ${below[0].label} (${fmtWhole(below[0].level)}) and resistance at the ${above[0].label} (${fmtWhole(above[0].level)}).`);
+            }
+            for (let i = 0; i < sortedByLevel.length - 1; i++) {
+              const a = sortedByLevel[i], b = sortedByLevel[i + 1];
+              if (Math.abs(b.level - a.level) / a.level * 100 < 0.5 && a.key !== nearest.key && b.key !== nearest.key) {
+                lines.push(`The ${a.key} and ${b.key}-DMAs are stacked near ${fmtWhole((a.level + b.level) / 2)}, a heavier ${(a.level + b.level) / 2 > px ? "ceiling" : "floor"}.`);
+              }
+            }
+            if (slope200 != null) lines.push(slope200 > 0.02 ? "The 200-DMA is still rising, which favors a successful retest." : slope200 < -0.02 ? "The 200-DMA has turned down, a sign the long-term trend is weakening." : "The 200-DMA has flattened.");
+            if (spx50 != null && spx200 != null) {
+              const g50 = ((spx50 - spx200) / spx200) * 100;
+              if (g50 < 0) lines.push("The 50-DMA is below the 200 (death cross in place).");
+              else if (slope50 != null && slope50 < -0.02 && g50 < 5) lines.push(`The 50-DMA is rolling over, ${g50.toFixed(1)}% above the 200. A cross below it would be a death cross.`);
+            }
+
+            const ck = marketData?.weekly_view?.clock;
+            const reclaimed = spx200 != null && px >= spx200;
+            const ckColor = reclaimed ? "#4ade80" : ck?.expired ? "#ff6b88" : "#fbbf24";
+            const deadline = ck ? new Date(ck.deadline + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" }) : "";
+
+            return (
+              <section className="panel">
+                <div className="panelHeader">
+                  <div><div className="panelTitle">Market Structure</div><div className="panelSub">S&amp;P 500 against its key moving averages</div></div>
                 </div>
-              </div>
 
-              {/* Tile 2: 200-DMA — stacked rows with a slope arrow to the
-                  left of Today, then Gap (this tile's own differentiator).
-                  YTD dropped — it repeated the same index-level number
-                  across every DMA tile without adding anything unique.
-                  Arrow direction only, not scaled by magnitude. */}
-              {(() => {
-                const isNear = spx200Pct != null && spx200Pct >= 0 && spx200Pct <= 3;
-                const tileClass = is200Broken ? "tile tile200Red" : isNear ? "tile tile200" : "tile";
-                const badgeBg = is200Broken ? "#ef4444" : "#f59e0b";
-                const statusColor = is200Broken ? "#ff6b88" : isNear ? "#fbbf24" : "#4ade80";
-                const subColor = is200Broken ? "#ff6b88" : isNear ? "#f59e0b" : "#4ade80";
-                const arrow = slope200 == null ? null : slope200 > 0.02 ? "↗" : slope200 < -0.02 ? "↘" : "→";
-                const arrowColor = slope200 == null ? "#475569" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24";
-                return (
-                  <div className={tileClass} style={{ cursor:"pointer" }} onClick={() => setModal("dma200")}>
-                    <div className="tileTop">
-                      <span className="lbl">200-DMA</span>
-                      {(is200Broken || isNear) && <span className="badge" style={{ background: badgeBg, color:"#000" }}>!</span>}
-                    </div>
-                    <div className="valHero">{fmtWhole(spx200)}</div>
-                    <div className="status" style={{ color: statusColor }}>
-                      {dmaState(spx200Pct, slope200, true)}
-                    </div>
-                    <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:3, marginTop:8, alignItems:"center" }}>
-                      <span style={{ fontSize:12, fontWeight:700, color: arrowColor }}>{arrow ?? ""}</span>
-                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
-                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: subColor }}>{spx200Pct != null ? fmtSigned1(spx200Pct) : "—"}</div>
-                    </div>
-                    {spxPrice != null && <div style={{ fontSize:11, color:"#94a3b8", marginTop:6 }}>{is200Broken ? `Needs +${Math.round(spx200 - spxPrice)} pts` : `${Math.round(spxPrice - spx200)} pts cushion`}</div>}
-                    <div style={{ fontSize:11, color: arrowColor, marginTop:2 }}>Slope {slope200 == null ? "—" : `${slope200 > 0 ? "+" : ""}${slope200.toFixed(1)}%`} {slope200 != null && slope200 > 0.02 ? "· still rising" : slope200 != null && slope200 < -0.02 ? "· falling" : ""}</div>
-                  </div>
-                );
-              })()}
+                {/* Price line */}
+                <div style={{ display:"flex", alignItems:"baseline", flexWrap:"wrap", gap:"4px 18px", marginBottom:6 }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:"#94a3b8", letterSpacing:"0.04em" }}>S&amp;P 500</span>
+                  <span style={{ fontSize:30, fontWeight:800, color:"#f1f5f9" }}>{fmtWhole(px)}</span>
+                  {spxDailyPct != null && <span style={{ fontSize:14, fontWeight:700, color: spxDailyPct >= 0 ? "#4ade80" : "#ff6b88" }}>{spxDailyPct >= 0 ? "+" : ""}{spxDailyPct.toFixed(1)}% today</span>}
+                  <span style={{ fontSize:13, color:"#94a3b8" }}>YTD <b style={{ color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>{spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%</b></span>
+                  {offHigh != null && <span style={{ fontSize:13, color:"#94a3b8" }}>From high <b style={{ color: offHigh > -5 ? "#cbd5e1" : offHigh > -10 ? "#fbbf24" : "#ff6b88" }}>{offHigh.toFixed(1)}%</b></span>}
+                </div>
 
-              {/* Tiles 3-5: 100 / 50 / 20-DMA — same stacked layout as
-                  tile 2, YTD dropped for the same reason. */}
-              {[
-                { label:"100-DMA", level:spx100, slope:slope100 },
-                { label:"50-DMA",  level:spx50,  slope:slope50  },
-                { label:"20-DMA",  level:spx20,  slope:slope20  },
-              ].map(d => {
-                const pct = spxVs(d.level); const tone = dmaTone(pct, d.slope);
-                const arrow = d.slope == null ? null : d.slope > 0.02 ? "↗" : d.slope < -0.02 ? "↘" : "→";
-                const arrowColor = d.slope == null ? "#475569" : d.slope > 0.02 ? "#4ade80" : d.slope < -0.02 ? "#ff6b88" : "#fbbf24";
-                return (
-                  <div key={d.label} className="tile">
-                    <div className="tileTop"><span className="lbl">{d.label}</span><span className="badge" style={{ background:toneColor(tone), color:tone==="warning"?"#000":"#fff" }}>!</span></div>
-                    <div className="valHero">{fmtWhole(d.level)}</div>
-                    <div className="status" style={{ color:toneColor(tone) }}>{dmaState(pct, d.slope)}</div>
-                    <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:3, marginTop:8, alignItems:"center" }}>
-                      <span style={{ fontSize:12, fontWeight:700, color: arrowColor }}>{arrow ?? ""}</span>
-                      <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
-                      <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: toneColor(tone) }}>{pct != null ? fmtSigned1(pct) : "—"}</div>
+                {/* Price ladder */}
+                <div style={{ position:"relative", height:78, margin:"8px 10px 14px" }}>
+                  {/* average labels above the line */}
+                  {groups.map(g => (
+                    <div key={g.names.join("-")} style={{ position:"absolute", left:`${pos(g.level)}%`, top:0, transform:"translateX(-50%)", textAlign:"center", whiteSpace:"nowrap" }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#cbd5e1" }}>{g.names.join("/")}</div>
                     </div>
-                    {spxPrice != null && d.level != null && <div style={{ fontSize:11, color:"#94a3b8", marginTop:6 }}>{pct != null && pct < 0 ? `Needs +${Math.round(d.level - spxPrice)} pts` : `${Math.round(spxPrice - d.level)} pts cushion`}</div>}
-                  </div>
-                );
-              })}
-            </div>
+                  ))}
+                  {/* track: red zone below the 200-DMA, green above */}
+                  <div style={{ position:"absolute", left:0, right:0, top:30, height:6, borderRadius:3,
+                    background: p200 == null ? "rgba(255,255,255,0.1)"
+                      : `linear-gradient(90deg, rgba(255,107,136,0.85) 0%, rgba(255,107,136,0.55) ${p200}%, rgba(251,191,36,0.6) ${p200}%, rgba(74,222,128,0.6) 100%)` }} />
+                  {p200 != null && p200 > 12 && <div style={{ position:"absolute", left:0, top:40, fontSize:9, fontWeight:700, letterSpacing:"0.08em", color:"rgba(255,107,136,0.8)" }}>RED ZONE · BELOW 200-DMA</div>}
+                  {/* ticks */}
+                  {avgs.map(a => (
+                    <div key={a.key} style={{ position:"absolute", left:`${pos(a.level)}%`, top:22, width:2, height:22, marginLeft:-1, background:"#e2e8f0", borderRadius:1 }} />
+                  ))}
+                  {/* level labels under the line */}
+                  {groups.map(g => (
+                    <div key={"l" + g.names.join("-")} style={{ position:"absolute", left:`${pos(g.level)}%`, top:52, transform:"translateX(-50%)", fontSize:11, color:"#94a3b8", whiteSpace:"nowrap" }}>{fmtWhole(g.level)}</div>
+                  ))}
+                  {/* S&P marker */}
+                  <div style={{ position:"absolute", left:`${pos(px)}%`, top:25, width:16, height:16, marginLeft:-8, borderRadius:"50%", background:"#f1f5f9", border:"3px solid #0b1020", boxShadow:"0 0 0 2px #f1f5f9" }} />
+                  <div style={{ position:"absolute", left:`${pos(px)}%`, top:0, transform:"translateX(-50%)", fontSize:11, fontWeight:800, color:"#f1f5f9", whiteSpace:"nowrap" }}>S&amp;P</div>
+                </div>
 
-            {/* 200-DMA clock (Roberts): 4-week window after the first break.
-                Replaces the old red "Critical" strip. */}
-            {(() => {
-              const ck = marketData?.weekly_view?.clock;
-              if (!ck || spxPrice == null || spx200 == null) return null;
-              const reclaimed = !is200Broken;
-              const pctNeeded = ((spx200 - spxPrice) / spxPrice) * 100;
-              const color = reclaimed ? "#4ade80" : ck.expired ? "#ff6b88" : "#fbbf24";
-              const deadline = new Date(ck.deadline + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" });
-              return (
-                <div style={{ border:`1px solid ${color}55`, background:`${color}0f`, borderRadius:10, padding:"10px 14px" }}>
-                  <div style={{ display:"flex", flexWrap:"wrap", alignItems:"baseline", gap:"4px 14px" }}>
-                    <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", color }}>200-DMA CLOCK</span>
-                    <span style={{ fontSize:13, color:"#cbd5e1", fontWeight:600 }}>Day {ck.day} of {ck.total} trading days · deadline {deadline}</span>
-                    <span style={{ fontSize:13, color, fontWeight:700, marginLeft:"auto" }}>
-                      {reclaimed ? `Reclaimed · ${Math.round(spxPrice - spx200)} pts above` : `Needs +${Math.round(spx200 - spxPrice)} pts (+${pctNeeded.toFixed(1)}%)`}
+                {/* Role tiles, nearest first */}
+                <div className="grid4" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:10, marginBottom:12 }}>
+                  {withRole.map(a => (
+                    <div key={a.key} className="tile" style={{ borderTop:`3px solid ${a.color}`, cursor: a.key === "200" ? "pointer" : "default" }} onClick={a.key === "200" ? () => setModal("dma200") : undefined}>
+                      <div className="lbl">{a.label}</div>
+                      <div style={{ fontSize:26, fontWeight:800, color:"#f1f5f9", marginTop:4 }}>{fmtWhole(a.level)}</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:4 }}>
+                        <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.06em", color:a.color, textTransform:"uppercase" }}>{a.role}</span>
+                        <span style={{ fontSize:14, fontWeight:700, color:a.arrowColor }}>{a.arrow}</span>
+                      </div>
+                      <div style={{ fontSize:12, color:"#94a3b8", marginTop:4 }}>{a.gap > 0 ? `${fmtPct(a.gap)} above the S&P` : `${fmtPct(a.gap)} below the S&P`}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Insight */}
+                <div style={{ fontSize:13, color:"#cbd5e1", lineHeight:1.55, marginBottom: ck ? 12 : 0 }}>{lines.join(" ")}</div>
+
+                {/* 200-DMA clock, one line */}
+                {ck && spx200 != null && (
+                  <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"6px 14px", borderTop:"1px solid rgba(255,255,255,0.06)", paddingTop:10 }}>
+                    <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", color:ckColor }}>200-DMA CLOCK</span>
+                    <span style={{ fontSize:12, color:"#cbd5e1" }}>Day {ck.day} of {ck.total} · {deadline}</span>
+                    <div style={{ display:"flex", gap:2, flex:"1 1 160px", minWidth:120 }}>
+                      {Array.from({ length: ck.total }).map((_, i) => (
+                        <div key={i} style={{ flex:1, height:5, borderRadius:2, background: i < ck.day ? ckColor : "rgba(255,255,255,0.08)" }} />
+                      ))}
+                    </div>
+                    <span style={{ fontSize:12, fontWeight:700, color:ckColor }}>
+                      {reclaimed ? "Reclaimed" : ck.expired ? "Expired below" : `Needs +${Math.round(spx200 - px)} pts`}
                     </span>
                   </div>
-                  <div style={{ display:"flex", gap:3, margin:"8px 0 6px" }}>
-                    {Array.from({ length: ck.total }).map((_, i) => (
-                      <div key={i} style={{ flex:1, height:6, borderRadius:2, background: i < ck.day ? color : "rgba(255,255,255,0.08)" }} />
-                    ))}
-                  </div>
-                  <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.45 }}>
-                    {ck.expired
-                      ? (reclaimed ? "Clock closed with the 200-DMA reclaimed. The first break healed." : "Clock expired below the 200-DMA. Historically a deeper correction becomes more likely (Roberts).")
-                      : "Reclaim by the deadline and the first break likely heals. Miss it and a deeper correction becomes more likely (Roberts)."}
-                  </div>
-                </div>
-              );
-            })()}
-          </section>
+                )}
+              </section>
+            );
+          })()}
 
 
           {/* WEEKLY VIEW · FIVE SIGNALS + CONTEXT. The first three (trend,
