@@ -1158,33 +1158,73 @@ export default function Page() {
             const TONE: Record<string, string> = { green:"#4ade80", yellow:"#fbbf24", red:"#ff6b88" };
             const dirColor = (d: string) => d === "better" ? "#4ade80" : d === "worse" ? "#ff6b88" : "#94a3b8";
             const dirArrow = (d: string) => d === "better" ? "▲" : d === "worse" ? "▼" : "•";
-            const Tile = ({ s, core }: { s: AnyObj; core: boolean }) => (
-              <div style={{ background:"#050a35", borderRadius:12, padding:14, borderTop:`3px solid ${TONE[s.tone] ?? "#94a3b8"}`, display:"flex", flexDirection:"column", gap:4 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <span style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#64748b" }}>{s.title}{core ? " · core" : ""}</span>
-                  <span style={{ width:9, height:9, borderRadius:9999, background:TONE[s.tone] ?? "#94a3b8" }} />
+            const Gauge = ({ v }: { v: AnyObj }) => {
+              const span = v.max - v.min;
+              const pc = (x: number) => ((x - v.min) / span) * 100;
+              let from = 0;
+              const stops = (v.zones ?? []).map((z: AnyObj) => { const f = from; from = pc(z.to); return `${TONE[z.tone]}55 ${f}%, ${TONE[z.tone]}55 ${from}%`; }).join(", ");
+              return (
+                <div style={{ marginTop:8 }}>
+                  <div style={{ position:"relative", height:8, borderRadius:4, background:`linear-gradient(90deg, ${stops})` }}>
+                    {(v.ticks ?? []).map((t: number) => <div key={t} style={{ position:"absolute", left:`${pc(t)}%`, top:-2, width:1, height:12, background:"rgba(255,255,255,0.35)" }} />)}
+                    {v.value != null && <div style={{ position:"absolute", left:`${pc(v.value)}%`, top:-3, width:14, height:14, marginLeft:-7, borderRadius:"50%", background:"#f1f5f9", border:"3px solid #050a35", boxShadow:"0 0 0 1px #f1f5f9" }} />}
+                  </div>
+                  <div style={{ position:"relative", height:14, marginTop:3 }}>
+                    {(v.ticks ?? []).map((t: number) => <span key={t} style={{ position:"absolute", left:`${pc(t)}%`, transform:"translateX(-50%)", fontSize:10, color:"#64748b" }}>{t}</span>)}
+                  </div>
                 </div>
-                {s.question && <div style={{ fontSize:11, color:"#475569" }}>{s.question}</div>}
-                <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
-                  <span style={{ fontSize:26, fontWeight:800, color:"#fff" }}>{s.value}</span>
+              );
+            };
+            const Viz = ({ s }: { s: AnyObj }) => {
+              const v = s.viz; if (!v) return null;
+              if (v.type === "gauge") return <Gauge v={v} />;
+              if (v.type === "chip") return (
+                <div style={{ marginTop:8 }}><span style={{ display:"inline-block", fontSize:13, fontWeight:800, color:"#050a35", background:TONE[s.tone] ?? "#94a3b8", borderRadius:6, padding:"3px 10px" }}>{v.text}</span></div>
+              );
+              if (v.type === "steps") return (
+                <div style={{ display:"flex", gap:4, marginTop:8 }}>
+                  {v.steps.map((st: string, i: number) => (
+                    <span key={st} style={{ flex:1, textAlign:"center", fontSize:11, fontWeight:800, padding:"4px 0", borderRadius:5,
+                      color: i === v.active ? "#050a35" : "#64748b",
+                      background: i === v.active ? (i === 2 ? TONE.red : i === 1 ? TONE.yellow : TONE.green) : "rgba(255,255,255,0.06)" }}>{st}</span>
+                  ))}
+                </div>
+              );
+              if (v.type === "pair") return (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:8 }}>
+                  {v.items.map((it: AnyObj) => (
+                    <div key={it.label}>
+                      <div style={{ fontSize:16, fontWeight:800, color: it.tone === "up" ? TONE.green : it.tone === "down" ? TONE.red : "#cbd5e1" }}>{it.value}</div>
+                      <div style={{ fontSize:10, color:"#64748b" }}>{it.label}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+              return null;
+            };
+            const Tile = ({ s }: { s: AnyObj }) => (
+              <div title={s.detail ?? ""} style={{ background:"#050a35", borderRadius:12, padding:"12px 14px", borderTop:`3px solid ${TONE[s.tone] ?? "#94a3b8"}`, display:"flex", flexDirection:"column", minWidth:0 }}>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#64748b" }}>{s.title}</div>
+                {s.viz?.type !== "pair" && <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:4, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:24, fontWeight:800, color:"#fff" }}>{s.value}</span>
                   <span style={{ fontSize:11, color:"#64748b" }}>{s.unit}</span>
-                </div>
-                <div style={{ fontSize:13, fontWeight:700, color:TONE[s.tone] ?? "#94a3b8" }}>{s.label}</div>
-                {s.weekChange && <div style={{ fontSize:11, fontWeight:600, color:dirColor(s.direction) }}>{dirArrow(s.direction)} {s.weekChange}</div>}
-                <div style={{ fontSize:11, color:"#94a3b8", lineHeight:1.5, marginTop:2 }}>{s.detail}</div>
+                </div>}
+                <div style={{ fontSize:12, fontWeight:700, color:TONE[s.tone] ?? "#94a3b8", marginTop: s.viz?.type === "pair" ? 6 : 0 }}>{s.label}</div>
+                <Viz s={s} />
+                {s.sub && <div style={{ fontSize:11, color: s.direction === "worse" ? TONE.red : s.direction === "better" ? TONE.green : "#94a3b8", marginTop:4 }}>{s.direction === "worse" ? "▼ " : s.direction === "better" ? "▲ " : ""}{s.sub}</div>}
               </div>
             );
             return (
               <section className="panel" style={{ marginBottom:16 }}>
                 <div className="panelHeader">
-                  <div><div className="panelTitle">The Five Signals</div><div className="panelSub">Trend, credit and economy are the core. Earnings and the Fed fill in the picture.</div></div>
+                  <div><div className="panelTitle">The Five Signals</div><div className="panelSub">Hover any tile for detail</div></div>
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(190px, 1fr))", gap:10 }}>
-                  {wv.signals.map((s: AnyObj, i: number) => <Tile key={s.key} s={s} core={i < 3} />)}
+                <div className="signalsRow" style={{ display:"grid", gridTemplateColumns:"repeat(5, minmax(0, 1fr))", gap:10 }}>
+                  {wv.signals.map((s: AnyObj) => <Tile key={s.key} s={s} />)}
                 </div>
-                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#475569", margin:"16px 0 8px" }}>Context · explains the story, never triggers a call</div>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#475569", margin:"16px 0 8px" }}>Context</div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(190px, 1fr))", gap:10 }}>
-                  {wv.context.map((s: AnyObj) => <Tile key={s.key} s={s} core={false} />)}
+                  {wv.context.map((s: AnyObj) => <Tile key={s.key} s={s} />)}
                 </div>
               </section>
             );
@@ -2509,10 +2549,11 @@ export default function Page() {
         .ivyTable td{padding:9px 12px;border-bottom:0.5px solid rgba(255,255,255,0.05);}
         .sumBar{background:#030720;border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
         .sumBarLabel{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;flex-shrink:0;}
-        @media(max-width:900px){.title{font-size:22px;}.valHero{font-size:28px;}}
+        @media(max-width:900px){.title{font-size:22px;}.valHero{font-size:28px;}.signalsRow{grid-template-columns:repeat(3,minmax(0,1fr)) !important;}}
         @media(max-width:700px){
           .topBar,.panelHeader{flex-direction:column;align-items:flex-start;}
           .grid5,.grid4{grid-template-columns:repeat(2,minmax(0,1fr));}
+          .signalsRow{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}
           .allocGrid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}
           .grid3{grid-template-columns:1fr;}
           .alertStrip,.alertStripCritical{flex-direction:column;align-items:flex-start;gap:4px;}
