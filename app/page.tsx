@@ -1001,7 +1001,9 @@ export default function Page() {
             const withRole = avgs.map(a => {
               const gap = ((a.level - px) / px) * 100; // + means the average is above the S&P
               const role = Math.abs(gap) <= TEST_BAND ? "Testing" : gap > 0 ? "Resistance" : "Support";
-              const color = role === "Testing" ? "#fbbf24" : role === "Resistance" ? "#ff6b88" : "#4ade80";
+              // Color follows position: an average above the S&P is red
+              // (overhead), below is green (underneath), even while testing.
+              const color = gap > 0 ? "#ff6b88" : "#4ade80";
               const arrow = a.slope == null ? "" : a.slope > 0.02 ? "↗" : a.slope < -0.02 ? "↘" : "→";
               const arrowColor = a.slope == null ? "#475569" : a.slope > 0.02 ? "#4ade80" : a.slope < -0.02 ? "#ff6b88" : "#fbbf24";
               return { ...a, gap, role, color, arrow, arrowColor };
@@ -1085,7 +1087,7 @@ export default function Page() {
                   {/* track: red zone below the 200-DMA, green above */}
                   <div style={{ position:"absolute", left:0, right:0, top:30, height:6, borderRadius:3,
                     background: p200 == null ? "rgba(255,255,255,0.1)"
-                      : `linear-gradient(90deg, rgba(255,107,136,0.85) 0%, rgba(255,107,136,0.55) ${p200}%, rgba(251,191,36,0.6) ${p200}%, rgba(74,222,128,0.6) 100%)` }} />
+                      : `linear-gradient(90deg, rgba(255,107,136,0.85) 0%, rgba(255,107,136,0.55) ${p200}%, rgba(255,255,255,0.12) ${p200}%, rgba(255,255,255,0.12) 100%)` }} />
                   {p200 != null && p200 > 12 && <div style={{ position:"absolute", left:0, top:40, fontSize:9, fontWeight:700, letterSpacing:"0.08em", color:"rgba(255,107,136,0.8)" }}>RED ZONE · BELOW 200-DMA</div>}
                   {/* ticks */}
                   {avgs.map(a => (
