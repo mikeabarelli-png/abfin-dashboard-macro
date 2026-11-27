@@ -1889,16 +1889,27 @@ export async function GET() {
 
   // What to watch: the live numbers behind the story.
   const deadlineLabel = new Date(CLOCK_200.deadline + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  // One line per signal: where it stands and what to watch.
   const watchList: { label: string; text: string; tone: Tone }[] = [];
-  if (spxPrice != null && spx200dma != null) {
-    const pts = Math.round(Math.abs(spx200dma - spxPrice));
-    watchList.push(spxPrice < spx200dma
-      ? { label: "200-DMA", text: clock.expired ? `${pts} pts below. The 4-week clock has expired` : `needs +${pts} pts to reclaim ${Math.round(spx200dma).toLocaleString()} by ${deadlineLabel}`, tone: "red" }
-      : { label: "200-DMA", text: `${pts} pts above ${Math.round(spx200dma).toLocaleString()}, trend repairing`, tone: "green" });
+  {
+    const t40 = pctVs40w == null ? "n/a" : `${pctVs40w >= 0 ? "+" : ""}${pctVs40w.toFixed(1)}%`;
+    let tText = `S&P ${t40} vs its 40-week average.`;
+    if (spxPrice != null && spx200dma != null) {
+      const pts = Math.round(Math.abs(spx200dma - spxPrice));
+      tText += spxPrice < spx200dma
+        ? (clock.expired ? ` Still ${pts} pts below the 200-DMA after the 4-week clock expired.` : ` Needs +${pts} pts to reclaim the 200-DMA (${Math.round(spx200dma).toLocaleString()}) by ${deadlineLabel}.`)
+        : ` Back above the 200-DMA by ${pts} pts. Watch that it holds.`;
+    }
+    watchList.push({ label: "Trend", text: tText, tone: trend.tone });
   }
-  watchList.push({ label: "Credit", text: `HY ${Math.round(hyBps)} bps${credit.weekChange ? `, ${credit.weekChange}` : ""}. Stress starts at 450`, tone: credit.tone });
-  if (fed.tone !== "green") watchList.push({ label: "Fed", text: `${MANUAL_FED_NEXT_MOVE.hikeOdds}% odds of a ${MANUAL_FED_NEXT_MOVE.meeting} hike · core PCE ${MANUAL_CORE_PCE.value}%`, tone: fed.tone });
-  if (economy.tone !== "green") watchList.push({ label: "Economy", text: economy.label, tone: economy.tone });
+  watchList.push({ label: "Credit", text: `HY ${Math.round(hyBps)} bps${credit.weekChange ? `, ${credit.weekChange}` : ""}. Stress starts at 450.`, tone: credit.tone });
+  {
+    const jobs = MANUAL_CALENDAR.find(c => c.date >= todayEt && /jobs/i.test(c.item));
+    const jobsLabel = jobs ? new Date(jobs.date + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : null;
+    watchList.push({ label: "Economy", text: `Sahm ${MANUAL_SAHM.value.toFixed(2)} (recession signal at 0.50)${claimsK != null ? `, claims ${Math.round(claimsK)}k` : ""}.${jobsLabel ? ` Next read: ${jobsLabel} jobs report.` : ""}`, tone: economy.tone });
+  }
+  watchList.push({ label: "Earnings", text: `Forward EPS $${MANUAL_EARNINGS.fwdEps.toFixed(0)}, ${earnings.tone === "green" ? "estimates still rising" : earnings.tone === "yellow" ? "estimates flat" : "estimates being cut"}. Watch Q4 guidance into January.`, tone: earnings.tone });
+  watchList.push({ label: "Fed", text: `${MANUAL_FED_NEXT_MOVE.hikeOdds}% odds of a ${MANUAL_FED_NEXT_MOVE.meeting} hike, core PCE ${MANUAL_CORE_PCE.value}%.${fed.tone === "red" ? " A 50 bp move is the risk." : ""}`, tone: fed.tone });
   const weeklyView = {
     story: storyParts.join(" "),
     badge,
