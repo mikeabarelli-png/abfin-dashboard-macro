@@ -983,14 +983,13 @@ export default function Page() {
             );
           })()}
 
-          {/* ① MARKET STRUCTURE: price ladder, four role tiles, one insight,
+          {/* ① MARKET STRUCTURE: price ladder, three role tiles, one insight,
               the 200-DMA clock. Tiles are ordered nearest first, so the
               first tile is always the next test. */}
           {(() => {
             const px = spxPrice;
             const avgs = [
               { key: "200", label: "200-DMA", level: spx200, slope: slope200 },
-              { key: "100", label: "100-DMA", level: spx100, slope: slope100 },
               { key: "50",  label: "50-DMA",  level: spx50,  slope: slope50  },
               { key: "20",  label: "20-DMA",  level: spx20,  slope: slope20  },
             ].filter(a => a.level != null) as { key: string; label: string; level: number; slope: number | null }[];
@@ -1016,7 +1015,7 @@ export default function Page() {
             const min = lo - pad, max = hi + pad;
             const pos = (v: number) => ((v - min) / (max - min)) * 100;
             const p200 = spx200 != null ? pos(spx200) : null;
-            // Green starts at the highest average: above it, the S&P is above all four.
+            // Green starts at the highest average: above it, the S&P is above all three.
             const pTop = pos(Math.max(...avgs.map(a => a.level)));
 
             // Merge labels for averages that sit on top of each other
@@ -1034,14 +1033,15 @@ export default function Page() {
             const below = withRole.filter(a => a.level <= px).sort((a, b) => b.level - a.level);
             const nearest = withRole[0];
             const lines: string[] = [];
+            let deathCross = false;
             if (nearest.role === "Testing") {
               lines.push(`Testing the ${nearest.label} from ${nearest.level > px ? "below" : "above"} at ${fmtWhole(nearest.level)}.`);
               const nextUp = above.find(a => a.key !== nearest.key);
               if (nearest.level > px && nextUp) lines.push(`Clear it and the next resistance is the ${nextUp.label} at ${fmtWhole(nextUp.level)}.`);
             } else if (below.length === 0) {
-              lines.push(`Below all four averages. Nearest resistance is the ${above[0].label} at ${fmtWhole(above[0].level)}, ${fmtPct(above[0].gap)} overhead.`);
+              lines.push(`Below all three averages. Nearest resistance is the ${above[0].label} at ${fmtWhole(above[0].level)}, ${fmtPct(above[0].gap)} overhead.`);
             } else if (above.length === 0) {
-              lines.push(`Above all four averages. Nearest support is the ${below[0].label} at ${fmtWhole(below[0].level)}, ${fmtPct(below[0].gap)} below.`);
+              lines.push(`Above all three averages. Nearest support is the ${below[0].label} at ${fmtWhole(below[0].level)}, ${fmtPct(below[0].gap)} below.`);
             } else {
               lines.push(`Between support at the ${below[0].label} (${fmtWhole(below[0].level)}) and resistance at the ${above[0].label} (${fmtWhole(above[0].level)}).`);
             }
@@ -1054,7 +1054,7 @@ export default function Page() {
             if (slope200 != null) lines.push(slope200 > 0.02 ? "The 200-DMA is still rising, which favors a successful retest." : slope200 < -0.02 ? "The 200-DMA has turned down, a sign the long-term trend is weakening." : "The 200-DMA has flattened.");
             if (spx50 != null && spx200 != null) {
               const g50 = ((spx50 - spx200) / spx200) * 100;
-              if (g50 < 0) lines.push("The 50-DMA is below the 200 (death cross in place).");
+              if (g50 < 0) deathCross = true;
               else if (slope50 != null && slope50 < -0.02 && g50 < 5) lines.push(`The 50-DMA is rolling over, ${g50.toFixed(1)}% above the 200. A cross below it would be a death cross.`);
             }
 
@@ -1119,8 +1119,15 @@ export default function Page() {
                   ))}
                 </div>
 
-                {/* Insight */}
-                <div style={{ fontSize:13, color:"#cbd5e1", lineHeight:1.55, marginBottom: ck ? 12 : 0 }}>{lines.join(" ")}</div>
+                {/* Insight, with a death cross alert when the 50 is below the 200 */}
+                <div style={{ fontSize:13, color:"#cbd5e1", lineHeight:1.55, marginBottom: ck ? 12 : 0 }}>
+                  {deathCross && spx50 != null && spx200 != null && (
+                    <span style={{ display:"inline-block", fontSize:11, fontWeight:800, letterSpacing:"0.06em", color:"#0b1020", background:"#ff6b88", borderRadius:4, padding:"1px 7px", marginRight:8 }}>
+                      DEATH CROSS · 50-DMA {Math.abs(((spx50 - spx200) / spx200) * 100).toFixed(1)}% below the 200
+                    </span>
+                  )}
+                  {lines.join(" ")}
+                </div>
 
                 {/* 200-DMA clock, one line */}
                 {ck && spx200 != null && (
