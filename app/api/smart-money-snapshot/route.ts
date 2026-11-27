@@ -1900,6 +1900,7 @@ export async function GET() {
         ? (clock.expired ? ` Still ${pts} pts below the 200-DMA after the 4-week clock expired.` : ` Needs +${pts} pts to reclaim the 200-DMA (${Math.round(spx200dma).toLocaleString()}) by ${deadlineLabel}.`)
         : ` Back above the 200-DMA by ${pts} pts. Watch that it holds.`;
     }
+    if (spx50dma != null && spx200dma != null && spx50dma < spx200dma) tText += " Death cross in place (50-DMA below the 200).";
     watchList.push({ label: "Trend", text: tText, tone: trend.tone });
   }
   watchList.push({ label: "Credit", text: `HY ${Math.round(hyBps)} bps${credit.weekChange ? `, ${credit.weekChange}` : ""}. Stress starts at 450.`, tone: credit.tone });
