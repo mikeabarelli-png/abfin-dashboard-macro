@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { Fragment, useEffect, useState, useRef } from "react";
 
 type AnyObj = Record<string, any>;
 type Modal = "vix" | "hy" | "yc" | "real10y" | "dma200" | "erp" | "nom10y" | "cape" | "dxy" | "ad" | "roberts40w" | "portfolioDetail" | null;
@@ -679,6 +679,12 @@ export default function Page() {
   // ── 200-DMA breach state ──────────────────────────────────────────────────
   const spx200Pct = spxVs(spx200);
   const is200Broken = spx200Pct != null && spx200Pct < 0;
+  // The lowest average still above the S&P is the next one it can reclaim.
+  const nextReclaim = spxPrice == null ? null : [
+    { label: "20-DMA", level: spx20 }, { label: "50-DMA", level: spx50 },
+    { label: "100-DMA", level: spx100 }, { label: "200-DMA", level: spx200 },
+  ].filter(d => d.level != null && d.level > spxPrice).sort((a, b) => a.level - b.level)[0] ?? null;
+  const offHigh: number | null = marketData?.weekly_view?.spxOffHigh ?? null;
   // ─────────────────────────────────────────────────────────────────────────
 
   const sparkline = (points: number[], color: string) => {
@@ -913,7 +919,7 @@ export default function Page() {
                 </span>
               </div>
               <div className="meta">
-                <div className="sourceLabel">LIVE_YAHOO_FRED</div>
+                <div className="sourceLabel">{feedError ? "Data unavailable" : "Live data"}</div>
                 <div>{feedError ? "Feed error" : lastUpdated ? `Refreshed ${lastUpdated}` : "Loading..."}</div>
               </div>
             </div>
@@ -938,7 +944,7 @@ export default function Page() {
           })()}
 
 
-          {/* WEEKLY VIEW · STORY LINE. Plan: hold M2 and rebalance. A call to
+          {/* WEEKLY VIEW · STORY LINE. Plan: hold M26 and rebalance. A call to
               Chris is worth it only when trend, credit and economy turn
               together. All logic lives in route.ts (weekly_view). */}
           {(() => {
@@ -951,10 +957,38 @@ export default function Page() {
               <section className="panel" style={{ marginBottom:16, borderLeft:`4px solid ${callColor}` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", marginBottom:8 }}>
                   <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.1em", padding:"3px 10px", borderRadius:20, color:"#0b1020", background:callColor }}>{callBadge}</span>
-                  <span style={{ fontSize:11, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>This week&apos;s read</span>
+                  <span style={{ fontSize:11, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>This week&apos;s read · {new Date().toLocaleDateString("en-US", { month:"short", day:"numeric" })}</span>
                 </div>
                 <div style={{ fontSize:20, fontWeight:700, color:"#f1f5f9", lineHeight:1.4 }}>{wv.story}</div>
-                <div style={{ fontSize:13, color:callColor, marginTop:6, fontWeight:600 }}>{wv.call?.text}</div>
+
+                {/* Signal dots: the five signals at a glance */}
+                <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 16px", marginTop:12 }}>
+                  {(wv.signals ?? []).map((sg: any) => (
+                    <span key={sg.key} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13, color:"#cbd5e1", fontWeight:600 }}>
+                      <span style={{ width:9, height:9, borderRadius:"50%", background: sg.tone === "red" ? "#ff6b88" : sg.tone === "yellow" ? "#fbbf24" : "#4ade80" }} />
+                      {sg.title}
+                    </span>
+                  ))}
+                </div>
+
+                {/* What would change the call */}
+                {(wv.tripwires ?? []).length > 0 && (
+                  <div style={{ marginTop:12, display:"grid", gridTemplateColumns:"auto 1fr", columnGap:10, rowGap:4, fontSize:13, lineHeight:1.45 }}>
+                    {(wv.tripwires ?? []).map((t: any) => (
+                      <Fragment key={t.level}>
+                        <span style={{ fontWeight:800, fontSize:11, letterSpacing:"0.06em", color: t.level === "WATCH" ? "#fbbf24" : "#ff6b88", paddingTop:2 }}>{t.level}</span>
+                        <span style={{ color:"#94a3b8" }}>{t.text}</span>
+                      </Fragment>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid rgba(255,255,255,0.06)", display:"flex", flexWrap:"wrap", gap:"4px 20px", fontSize:12, color:"#94a3b8" }}>
+                  {(wv.keyDates ?? []).length > 0 && (
+                    <span><b style={{ color:"#cbd5e1" }}>Key dates:</b> {(wv.keyDates ?? []).map((k: any) => `${new Date(k.date + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" })} ${k.item.replace(/\s*\(.*\)/, "")}`).join(" · ")}</span>
+                  )}
+                  <span style={{ color:callColor, fontWeight:600 }}>{wv.call?.text}</span>
+                </div>
               </section>
             );
           })()}
@@ -963,35 +997,10 @@ export default function Page() {
           <section className="panel">
             <div className="panelHeader">
               <div><div className="panelTitle">Market Structure</div><div className="panelSub">Price vs Key Moving Averages</div></div>
-              <div className="damage">{damageCount} / 4 short-term trends broken</div>
-            </div>
-
-            {/* ── Regime Banner ── */}
-            <div style={{
-              display:"flex", alignItems:"center", gap:12,
-              background: regime==="bull" ? "rgba(74,222,128,0.07)" : regime==="bear" ? "rgba(239,68,68,0.07)" : "rgba(245,158,11,0.07)",
-              border: `1px solid ${regime==="bull" ? "rgba(74,222,128,0.3)" : regime==="bear" ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.3)"}`,
-              borderRadius:10, padding:"10px 14px", marginBottom:10
-            }}>
-              {/* Regime pill */}
-              <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontSize:16 }}>{regimeEmoji ?? "🟡"}</span>
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>Market Regime</div>
-                  <div style={{ fontSize:14, fontWeight:700, color: regimeColor }}>{regimeLabel ?? "Calculating…"}</div>
-                </div>
-              </div>
-              <div className="hideMobile" style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0 }} />
-              {/* Description — hidden on mobile, the Gap/Slope numbers below
-                  already cover the same ground more concisely there. */}
-              <div className="hideMobile" style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{regimeDesc ?? "Computing 200-DMA slope from price history…"}</div>
-              <div className="hideMobile" style={{ width:1, height:32, background:"rgba(255,255,255,0.08)", flexShrink:0, marginLeft:"auto" }} />
-              {/* 200-DMA slope readout */}
-              <div style={{ flexShrink:0, textAlign:"right", marginLeft:"auto" }}>
-                <div style={{ fontSize:10, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:"0.07em" }}>200-DMA Slope</div>
-                <div style={{ fontSize:14, fontWeight:700, color: slope200 == null ? "#475569" : slope200 > 0.02 ? "#4ade80" : slope200 < -0.02 ? "#ff6b88" : "#fbbf24" }}>
-                  {slope200 == null ? "—" : `${slope200 > 0 ? "↗" : slope200 < 0 ? "↘" : "→"} ${slope200 > 0 ? "+" : ""}${slope200.toFixed(1)}%`}
-                </div>
+              <div className="damage" style={{ color: nextReclaim ? "#fbbf24" : "#4ade80" }}>
+                {spxPrice == null ? "" : nextReclaim
+                  ? `Next level to reclaim: ${nextReclaim.label} ${fmtWhole(nextReclaim.level)} (+${(((nextReclaim.level - spxPrice) / spxPrice) * 100).toFixed(1)}%)`
+                  : "Above all 4 averages"}
               </div>
             </div>
 
@@ -1011,6 +1020,10 @@ export default function Page() {
                   <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>YTD</div>
                   <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: spxYtd >= 0 ? "#4ade80" : "#ff6b88" }}>
                     {spxYtd >= 0 ? "+" : ""}{spxYtd.toFixed(1)}%
+                  </div>
+                  <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>From high</div>
+                  <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: offHigh == null ? "#cbd5e1" : offHigh > -5 ? "#cbd5e1" : offHigh > -10 ? "#fbbf24" : "#ff6b88" }}>
+                    {offHigh != null ? `${offHigh.toFixed(1)}%` : "—"}
                   </div>
                 </div>
               </div>
@@ -1043,7 +1056,8 @@ export default function Page() {
                       <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
                       <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: subColor }}>{spx200Pct != null ? fmtSigned1(spx200Pct) : "—"}</div>
                     </div>
-                    <div style={{ fontSize:10, color:"#64748b", marginTop:8 }}>Click for detail</div>
+                    {spxPrice != null && <div style={{ fontSize:11, color:"#94a3b8", marginTop:6 }}>{is200Broken ? `Needs +${Math.round(spx200 - spxPrice)} pts` : `${Math.round(spxPrice - spx200)} pts cushion`}</div>}
+                    <div style={{ fontSize:11, color: arrowColor, marginTop:2 }}>Slope {slope200 == null ? "—" : `${slope200 > 0 ? "+" : ""}${slope200.toFixed(1)}%`} {slope200 != null && slope200 > 0.02 ? "· still rising" : slope200 != null && slope200 < -0.02 ? "· falling" : ""}</div>
                   </div>
                 );
               })()}
@@ -1068,32 +1082,43 @@ export default function Page() {
                       <div style={{ fontSize:9, color:"#475569", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase" }}>Gap</div>
                       <div style={{ fontSize:15, fontWeight:700, textAlign:"right", color: toneColor(tone) }}>{pct != null ? fmtSigned1(pct) : "—"}</div>
                     </div>
+                    {spxPrice != null && d.level != null && <div style={{ fontSize:11, color:"#94a3b8", marginTop:6 }}>{pct != null && pct < 0 ? `Needs +${Math.round(d.level - spxPrice)} pts` : `${Math.round(spxPrice - d.level)} pts cushion`}</div>}
                   </div>
                 );
               })}
             </div>
 
-            {is200Broken ? (
-              <div className="alertStripCritical">
-                <span className="alertDotRed" />
-                <span className="alertTitleRed">⚠ 200-DMA Breached — Critical</span>
-                <span className="alertBodyRed">
-                  {spxPrice != null
-                    ? `SPX ${fmtSigned1(spx200Pct!)} below 200-DMA (${fmtWhole(spx200)}) · ${Math.abs(spxPrice - spx200).toFixed(0)} pts below · About half of first breaks heal within 4 weeks. Deep, fast breaks like this one usually don't (Roberts)`
-                    : "Waiting..."}
-                </span>
-              </div>
-            ) : spx200Pct != null && spx200Pct <= 3 ? (
-              <div className="alertStrip">
-                <span className="alertDot" />
-                <span className="alertTitle">200-DMA Proximity — Immediate Watch</span>
-                <span className="alertBody">
-                  {spxPrice != null
-                    ? `Only ${spx200Pct.toFixed(1)}% above (${fmtWhole(spx200)}) · ${Math.abs(spxPrice-spx200).toFixed(0)} pts gap · Trigger: 2 Friday closes below + VIX >30 or HY >400bps`
-                    : "Waiting..."}
-                </span>
-              </div>
-            ) : null}
+            {/* 200-DMA clock (Roberts): 4-week window after the first break.
+                Replaces the old red "Critical" strip. */}
+            {(() => {
+              const ck = marketData?.weekly_view?.clock;
+              if (!ck || spxPrice == null || spx200 == null) return null;
+              const reclaimed = !is200Broken;
+              const pctNeeded = ((spx200 - spxPrice) / spxPrice) * 100;
+              const color = reclaimed ? "#4ade80" : ck.expired ? "#ff6b88" : "#fbbf24";
+              const deadline = new Date(ck.deadline + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" });
+              return (
+                <div style={{ border:`1px solid ${color}55`, background:`${color}0f`, borderRadius:10, padding:"10px 14px" }}>
+                  <div style={{ display:"flex", flexWrap:"wrap", alignItems:"baseline", gap:"4px 14px" }}>
+                    <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", color }}>200-DMA CLOCK</span>
+                    <span style={{ fontSize:13, color:"#cbd5e1", fontWeight:600 }}>Day {ck.day} of {ck.total} trading days · deadline {deadline}</span>
+                    <span style={{ fontSize:13, color, fontWeight:700, marginLeft:"auto" }}>
+                      {reclaimed ? `Reclaimed · ${Math.round(spxPrice - spx200)} pts above` : `Needs +${Math.round(spx200 - spxPrice)} pts (+${pctNeeded.toFixed(1)}%)`}
+                    </span>
+                  </div>
+                  <div style={{ display:"flex", gap:3, margin:"8px 0 6px" }}>
+                    {Array.from({ length: ck.total }).map((_, i) => (
+                      <div key={i} style={{ flex:1, height:6, borderRadius:2, background: i < ck.day ? color : "rgba(255,255,255,0.08)" }} />
+                    ))}
+                  </div>
+                  <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.45 }}>
+                    {ck.expired
+                      ? (reclaimed ? "Clock closed with the 200-DMA reclaimed. The first break healed." : "Clock expired below the 200-DMA. Historically a deeper correction becomes more likely (Roberts).")
+                      : "Reclaim by the deadline and the first break likely heals. Miss it and a deeper correction becomes more likely (Roberts)."}
+                  </div>
+                </div>
+              );
+            })()}
           </section>
 
 
