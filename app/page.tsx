@@ -1016,6 +1016,8 @@ export default function Page() {
             const min = lo - pad, max = hi + pad;
             const pos = (v: number) => ((v - min) / (max - min)) * 100;
             const p200 = spx200 != null ? pos(spx200) : null;
+            // Green starts at the highest average: above it, the S&P is above all four.
+            const pTop = pos(Math.max(...avgs.map(a => a.level)));
 
             // Merge labels for averages that sit on top of each other
             const sortedByLevel = [...avgs].sort((a, b) => a.level - b.level);
@@ -1087,7 +1089,7 @@ export default function Page() {
                   {/* track: red zone below the 200-DMA, green above */}
                   <div style={{ position:"absolute", left:0, right:0, top:30, height:6, borderRadius:3,
                     background: p200 == null ? "rgba(255,255,255,0.1)"
-                      : `linear-gradient(90deg, rgba(255,107,136,0.85) 0%, rgba(255,107,136,0.55) ${p200}%, rgba(255,255,255,0.12) ${p200}%, rgba(255,255,255,0.12) 100%)` }} />
+                      : `linear-gradient(90deg, rgba(255,107,136,0.85) 0%, rgba(255,107,136,0.55) ${p200}%, rgba(255,255,255,0.12) ${p200}%, rgba(255,255,255,0.12) ${pTop}%, rgba(74,222,128,0.6) ${pTop}%, rgba(74,222,128,0.85) 100%)` }} />
                   {p200 != null && p200 > 12 && <div style={{ position:"absolute", left:0, top:40, fontSize:9, fontWeight:700, letterSpacing:"0.08em", color:"rgba(255,107,136,0.8)" }}>RED ZONE · BELOW 200-DMA</div>}
                   {/* ticks */}
                   {avgs.map(a => (
