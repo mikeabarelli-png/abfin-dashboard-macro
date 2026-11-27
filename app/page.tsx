@@ -944,15 +944,14 @@ export default function Page() {
           })()}
 
 
-          {/* WEEKLY VIEW · STORY LINE. Plan: hold M26 and rebalance. A call to
-              Chris is worth it only when trend, credit and economy turn
-              together. All logic lives in route.ts (weekly_view). */}
+          {/* WEEKLY VIEW · STORY LINE. Paints the picture: badge, story,
+              what to watch, key dates. All logic lives in route.ts. */}
           {(() => {
             const wv = marketData?.weekly_view;
             if (!wv) return null;
-            const lvl = wv.call?.level;
-            const callColor = lvl === "call_worse" ? "#ff6b88" : lvl === "call_better" ? "#4ade80" : lvl === "watch" ? "#fbbf24" : "#94a3b8";
-            const callBadge = lvl === "call_worse" || lvl === "call_better" ? "CALL CHRIS" : lvl === "watch" ? "WATCH" : "HOLD";
+            const TC: Record<string, string> = { red: "#ff6b88", yellow: "#fbbf24", green: "#4ade80" };
+            const callColor = TC[wv.badge?.tone] ?? "#94a3b8";
+            const callBadge = wv.badge?.text ?? "";
             return (
               <section className="panel" style={{ marginBottom:16, borderLeft:`4px solid ${callColor}` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap", marginBottom:8 }}>
@@ -961,13 +960,15 @@ export default function Page() {
                 </div>
                 <div style={{ fontSize:20, fontWeight:700, color:"#f1f5f9", lineHeight:1.4 }}>{wv.story}</div>
 
-                {/* What would change the call */}
-                {(wv.tripwires ?? []).length > 0 && (
-                  <div style={{ marginTop:12, display:"grid", gridTemplateColumns:"auto 1fr", columnGap:10, rowGap:4, fontSize:13, lineHeight:1.45 }}>
-                    {(wv.tripwires ?? []).map((t: any) => (
-                      <Fragment key={t.level}>
-                        <span style={{ fontWeight:800, fontSize:11, letterSpacing:"0.06em", color: t.level === "WATCH" ? "#fbbf24" : "#ff6b88", paddingTop:2 }}>{t.level}</span>
-                        <span style={{ color:"#94a3b8" }}>{t.text}</span>
+                {/* What to watch: live numbers behind the story */}
+                {(wv.watchList ?? []).length > 0 && (
+                  <div style={{ marginTop:12, display:"grid", gridTemplateColumns:"auto 1fr", columnGap:12, rowGap:4, fontSize:13, lineHeight:1.45 }}>
+                    {(wv.watchList ?? []).map((w: any) => (
+                      <Fragment key={w.label}>
+                        <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontWeight:700, color:"#cbd5e1" }}>
+                          <span style={{ width:8, height:8, borderRadius:"50%", background: TC[w.tone] ?? "#94a3b8" }} />{w.label}
+                        </span>
+                        <span style={{ color:"#94a3b8" }}>{w.text}</span>
                       </Fragment>
                     ))}
                   </div>
@@ -1139,7 +1140,7 @@ export default function Page() {
             return (
               <section className="panel" style={{ marginBottom:16 }}>
                 <div className="panelHeader">
-                  <div><div className="panelTitle">The Five Signals</div><div className="panelSub">Trend, credit and economy are the core. All three turning together is worth a call to Chris.</div></div>
+                  <div><div className="panelTitle">The Five Signals</div><div className="panelSub">Trend, credit and economy are the core. Earnings and the Fed fill in the picture.</div></div>
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(190px, 1fr))", gap:10 }}>
                   {wv.signals.map((s: AnyObj, i: number) => <Tile key={s.key} s={s} core={i < 3} />)}
