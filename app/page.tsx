@@ -961,16 +961,6 @@ export default function Page() {
                 </div>
                 <div style={{ fontSize:20, fontWeight:700, color:"#f1f5f9", lineHeight:1.4 }}>{wv.story}</div>
 
-                {/* Signal dots: the five signals at a glance */}
-                <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 16px", marginTop:12 }}>
-                  {(wv.signals ?? []).map((sg: any) => (
-                    <span key={sg.key} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13, color:"#cbd5e1", fontWeight:600 }}>
-                      <span style={{ width:9, height:9, borderRadius:"50%", background: sg.tone === "red" ? "#ff6b88" : sg.tone === "yellow" ? "#fbbf24" : "#4ade80" }} />
-                      {sg.title}
-                    </span>
-                  ))}
-                </div>
-
                 {/* What would change the call */}
                 {(wv.tripwires ?? []).length > 0 && (
                   <div style={{ marginTop:12, display:"grid", gridTemplateColumns:"auto 1fr", columnGap:10, rowGap:4, fontSize:13, lineHeight:1.45 }}>
@@ -983,12 +973,11 @@ export default function Page() {
                   </div>
                 )}
 
-                <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid rgba(255,255,255,0.06)", display:"flex", flexWrap:"wrap", gap:"4px 20px", fontSize:12, color:"#94a3b8" }}>
-                  {(wv.keyDates ?? []).length > 0 && (
-                    <span><b style={{ color:"#cbd5e1" }}>Key dates:</b> {(wv.keyDates ?? []).map((k: any) => `${new Date(k.date + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" })} ${k.item.replace(/\s*\(.*\)/, "")}`).join(" · ")}</span>
-                  )}
-                  <span style={{ color:callColor, fontWeight:600 }}>{wv.call?.text}</span>
-                </div>
+                {(wv.keyDates ?? []).length > 0 && (
+                  <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid rgba(255,255,255,0.06)", fontSize:12, color:"#94a3b8" }}>
+                    <b style={{ color:"#cbd5e1" }}>Key dates:</b> {(wv.keyDates ?? []).map((k: any) => `${new Date(k.date + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" })} ${k.item.replace(/\s*\(.*\)/, "")}`).join(" · ")}
+                  </div>
+                )}
               </section>
             );
           })()}
