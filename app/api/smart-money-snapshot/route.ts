@@ -1848,13 +1848,6 @@ export async function GET() {
   // Call-Chris logic and story line
   const core = [trend, credit, economy];
   const coreReds = core.filter(c => c.tone === "red").length;
-  const opportunity = MANUAL_BUFFETT_SIGMA < 1 && trend.tone !== "red" && credit.tone !== "red" && (spxOffHigh ?? 0) < -15;
-  const callLevel = coreReds === 3 ? "call_worse" : opportunity ? "call_better" : coreReds === 2 ? "watch" : "none";
-  const callText =
-    callLevel === "call_worse" ? "Worth a call to Chris: trend, credit and the economy are turning together." :
-    callLevel === "call_better" ? "Worth a call to Chris: after a big decline, the trend is repairing, credit is calm and valuations are reasonable." :
-    callLevel === "watch" ? "Watch closely: two of the three core signals have turned. A third would be worth a call." :
-    "No call needed. Hold M26 and rebalance on Jan 2.";
   const wvRegime =
     coreReds === 3 ? "Broad deterioration" :
     trend.tone === "red" && coreReds === 2 ? "Correction with stress spreading" :
@@ -1868,22 +1861,6 @@ export async function GET() {
   const storyParts = [`${wvRegime}.`];
   if (trend.tone === "red" && notConfirming.length) storyParts.push(`${cap(notConfirming.join(" and "))} ${notConfirming.length > 1 ? "are" : "is"} not confirming.`);
   if (fed.tone === "red") storyParts.push("The Fed is the main risk.");
-  if (watching.length) storyParts.push(`Watch ${watching.map(w => `${w.title.toLowerCase()} (${w.label.toLowerCase()}${w.weekChange ? `, ${w.weekChange}` : ""})`).join(" and ")}.`);
-
-  // Tripwires: what would move the call up a level, with live distances.
-  const coreCond: Record<string, string> = {
-    trend: `trend turns red (S&P below its 40-week average, now ${sgn(pctVs40w)}%)`,
-    credit: `credit turns red (HY at 450 bps, now ${Math.round(hyBps)})`,
-    economy: "the economy turns red (Sahm at 0.5 or jobless claims up 25%)",
-  };
-  const notRedCore = core.filter(c => c.tone !== "red").map(c => coreCond[c.key]);
-  const tripwires: { level: string; text: string }[] = [];
-  if (callLevel === "none" && coreReds < 2) {
-    tripwires.push({ level: "WATCH", text: coreReds === 1 ? `if ${notRedCore.join(" or ")}` : `if two of trend, credit and the economy turn red` });
-  }
-  if (callLevel !== "call_worse") {
-    tripwires.push({ level: "CALL CHRIS", text: callLevel === "watch" ? `if ${notRedCore.join(" or ")}` : "if trend, credit and the economy are all red" });
-  }
 
   // Lance's 4-week 200-day clock: trading days elapsed since the first break.
   const CLOCK_200 = { start: "2026-11-18", deadline: "2026-12-16" };
@@ -1900,10 +1877,32 @@ export async function GET() {
   const clock = { start: CLOCK_200.start, deadline: CLOCK_200.deadline, day: clockDay, total: clockTotal, expired: todayEt > CLOCK_200.deadline };
 
   const keyDates = MANUAL_CALENDAR.filter(c => c.kind === "market" && c.date >= todayEt && !/closed|half day/i.test(c.item)).slice(0, 3);
+
+  // Badge: a one-word read of the market, not an instruction.
+  const badge =
+    coreReds === 3 ? { text: "DETERIORATING", tone: "red" } :
+    coreReds === 2 ? { text: "STRESS SPREADING", tone: "red" } :
+    trend.tone === "red" ? { text: "CORRECTION", tone: "yellow" } :
+    coreReds === 1 ? { text: "MIXED", tone: "yellow" } :
+    trend.tone === "yellow" ? { text: "THIN CUSHION", tone: "yellow" } :
+    { text: "UPTREND", tone: "green" };
+
+  // What to watch: the live numbers behind the story.
+  const deadlineLabel = new Date(CLOCK_200.deadline + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const watchList: { label: string; text: string; tone: Tone }[] = [];
+  if (spxPrice != null && spx200dma != null) {
+    const pts = Math.round(Math.abs(spx200dma - spxPrice));
+    watchList.push(spxPrice < spx200dma
+      ? { label: "200-DMA", text: clock.expired ? `${pts} pts below. The 4-week clock has expired` : `needs +${pts} pts to reclaim ${Math.round(spx200dma).toLocaleString()} by ${deadlineLabel}`, tone: "red" }
+      : { label: "200-DMA", text: `${pts} pts above ${Math.round(spx200dma).toLocaleString()}, trend repairing`, tone: "green" });
+  }
+  watchList.push({ label: "Credit", text: `HY ${Math.round(hyBps)} bps${credit.weekChange ? `, ${credit.weekChange}` : ""}. Stress starts at 450`, tone: credit.tone });
+  if (fed.tone !== "green") watchList.push({ label: "Fed", text: `${MANUAL_FED_NEXT_MOVE.hikeOdds}% odds of a ${MANUAL_FED_NEXT_MOVE.meeting} hike · core PCE ${MANUAL_CORE_PCE.value}%`, tone: fed.tone });
+  if (economy.tone !== "green") watchList.push({ label: "Economy", text: economy.label, tone: economy.tone });
   const weeklyView = {
     story: storyParts.join(" "),
-    call: { level: callLevel, text: callText },
-    tripwires,
+    badge,
+    watchList,
     clock,
     keyDates,
     spxOffHigh,
