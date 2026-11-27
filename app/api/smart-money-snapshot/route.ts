@@ -692,7 +692,7 @@ export async function GET() {
 
     { date: "2026-12-04", item: "November jobs report · Sahm update", kind: "market" },
     { date: "2026-12-09", item: "FOMC decision (Dec 8-9)", kind: "market" },
-    { date: "2026-12-16", item: "Lance's 4-week 200-day clock expires", kind: "market" },
+    { date: "2026-12-16", item: "200-DMA clock deadline (Roberts)", kind: "market" },
     { date: "2026-12-31", item: "Last trading day for TOD sales to count in 2026", kind: "plan" },
     { date: "2027-01-02", item: "Quarterly rebalance", kind: "plan" },
     { date: "2027-01-15", item: "Q4 estimated tax check", kind: "plan" },
@@ -1854,7 +1854,7 @@ export async function GET() {
     callLevel === "call_worse" ? "Worth a call to Chris: trend, credit and the economy are turning together." :
     callLevel === "call_better" ? "Worth a call to Chris: after a big decline, the trend is repairing, credit is calm and valuations are reasonable." :
     callLevel === "watch" ? "Watch closely: two of the three core signals have turned. A third would be worth a call." :
-    "No call needed. Hold M2 and rebalance on schedule.";
+    "No call needed. Hold M26 and rebalance on Jan 2.";
   const wvRegime =
     coreReds === 3 ? "Broad deterioration" :
     trend.tone === "red" && coreReds === 2 ? "Correction with stress spreading" :
@@ -1867,10 +1867,47 @@ export async function GET() {
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   const storyParts = [`${wvRegime}.`];
   if (trend.tone === "red" && notConfirming.length) storyParts.push(`${cap(notConfirming.join(" and "))} ${notConfirming.length > 1 ? "are" : "is"} not confirming.`);
+  if (fed.tone === "red") storyParts.push("The Fed is the main risk.");
   if (watching.length) storyParts.push(`Watch ${watching.map(w => `${w.title.toLowerCase()} (${w.label.toLowerCase()}${w.weekChange ? `, ${w.weekChange}` : ""})`).join(" and ")}.`);
+
+  // Tripwires: what would move the call up a level, with live distances.
+  const coreCond: Record<string, string> = {
+    trend: `trend turns red (S&P below its 40-week average, now ${sgn(pctVs40w)}%)`,
+    credit: `credit turns red (HY at 450 bps, now ${Math.round(hyBps)})`,
+    economy: "the economy turns red (Sahm at 0.5 or jobless claims up 25%)",
+  };
+  const notRedCore = core.filter(c => c.tone !== "red").map(c => coreCond[c.key]);
+  const tripwires: { level: string; text: string }[] = [];
+  if (callLevel === "none" && coreReds < 2) {
+    tripwires.push({ level: "WATCH", text: coreReds === 1 ? `if ${notRedCore.join(" or ")}` : `if two of trend, credit and the economy turn red` });
+  }
+  if (callLevel !== "call_worse") {
+    tripwires.push({ level: "CALL CHRIS", text: callLevel === "watch" ? `if ${notRedCore.join(" or ")}` : "if trend, credit and the economy are all red" });
+  }
+
+  // Lance's 4-week 200-day clock: trading days elapsed since the first break.
+  const CLOCK_200 = { start: "2026-11-18", deadline: "2026-12-16" };
+  const MARKET_HOLIDAYS = ["2026-11-26", "2026-12-25", "2027-01-01"];
+  const tradingDaysBetween = (a: string, b: string) => {
+    let n = 0; const d = new Date(a + "T12:00:00Z"); const end = new Date(b + "T12:00:00Z");
+    while (d <= end) { const dow = d.getUTCDay(); const iso = d.toISOString().slice(0, 10);
+      if (dow !== 0 && dow !== 6 && !MARKET_HOLIDAYS.includes(iso)) n++; d.setUTCDate(d.getUTCDate() + 1); }
+    return n;
+  };
+  const todayEt = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const clockTotal = tradingDaysBetween(CLOCK_200.start, CLOCK_200.deadline);
+  const clockDay = Math.min(clockTotal, tradingDaysBetween(CLOCK_200.start, todayEt));
+  const clock = { start: CLOCK_200.start, deadline: CLOCK_200.deadline, day: clockDay, total: clockTotal, expired: todayEt > CLOCK_200.deadline };
+
+  const keyDates = MANUAL_CALENDAR.filter(c => c.kind === "market" && c.date >= todayEt && !/closed|half day/i.test(c.item)).slice(0, 3);
   const weeklyView = {
     story: storyParts.join(" "),
     call: { level: callLevel, text: callText },
+    tripwires,
+    clock,
+    keyDates,
+    spxOffHigh,
+    spxHigh52,
     signals: [trend, credit, economy, earnings, fed],
     context,
     calendar: MANUAL_CALENDAR,
