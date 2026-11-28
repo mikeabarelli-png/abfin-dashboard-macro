@@ -108,6 +108,14 @@ const DBMF_ROOTS: Record<string, { bucket: "bonds" | "fx" | "stocks" | "commod";
   HG: { bucket: "commod", name: "copper" }, NG: { bucket: "commod", name: "nat gas" },
 };
 type DbmfLine = { root: string; bucket: string; name: string; weight: number };
+// Rough typical yearly volatility (%) per contract. Used only to turn raw
+// exposure into risk, so conviction reflects what actually moves the fund.
+const DBMF_VOL: Record<string, number> = {
+  TU: 2, FV: 4, TY: 6, TN: 8, US: 12, UB: 14,
+  EC: 8, JY: 10, BP: 8, AD: 10, CD: 6, SF: 8, MP: 12,
+  ES: 18, NQ: 22, RTY: 22, YM: 16, MES: 18, MFS: 16,
+  GC: 15, SI: 25, CL: 32, HG: 22, NG: 50,
+};
 async function fetchDbmfHoldings(): Promise<{ asOf: string; nav: number; lines: DbmfLine[]; unknown: string[] } | { error: string }> {
   try {
     const res = await fetch(DBMF_URL, {
@@ -776,7 +784,8 @@ export async function GET() {
 const MANUAL_SMART_MONEY = {
   // Net weights by bucket from the last reviewed reading. Live readings show
   // change arrows against this. fx = net foreign currency (negative = long dollar).
-  baseline: { asOf: "Nov 27", bonds: -129, fx: -23, stocks: 7, commod: 1, oil: 9, gold: -8, fxMixed: true },
+  baseline: { asOf: "Nov 27", bonds: -129, fx: -23, stocks: 7, commod: 1, oil: 9, gold: -8, fxMixed: true,
+    risk: { stocks: 1.3, bonds: 6.8, dollar: 1.3, oil: 2.9, gold: 1.2 } },
   asOf: "Nov 27",
   source: "DBMF holdings",
   summary: "Trend followers are betting on higher rates: heavy short Treasuries and long the dollar against the euro. Stocks are a small bet.",
@@ -2075,15 +2084,27 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
   // Plain-English read of DBMF positioning: what the big money expects
   // prices to do, plus a one-paragraph takeaway. Same rules for live and
   // manual readings.
-  const plainView = (n: { bonds: number; fx: number; stocks: number; oil: number; gold: number; fxMixed: boolean }) => {
+  const plainView = (n: { bonds: number; fx: number; stocks: number; oil: number; gold: number; fxMixed: boolean;
+      risk: { stocks: number; bonds: number; dollar: number; oil: number; gold: number } }) => {
     const dir = (v: number, t: number) => v >= t ? "up" : v <= -t ? "down" : "flat";
-    const lines = [
+    // Conviction from risk (% of fund value a typical year's move would swing)
+    const conv = (r: number) => r >= 4 ? { level: 3, label: "High" } : r >= 2 ? { level: 2, label: "Medium" } : { level: 1, label: "Low" };
+    const expo = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v)}%`;
+    const extra: Record<string, any> = {
+      Stocks: { ...conv(n.risk.stocks), exposure: expo(n.stocks) },
+      Bonds: { ...conv(n.risk.bonds), exposure: expo(n.bonds) },
+      Dollar: { ...conv(n.risk.dollar), exposure: n.fxMixed ? "mixed" : expo(-n.fx) },
+      Oil: { ...conv(n.risk.oil), exposure: expo(n.oil) },
+      Gold: { ...conv(n.risk.gold), exposure: expo(n.gold) },
+    };
+    const lines0 = [
       { label: "Stocks", dir: dir(n.stocks, 15), text: n.stocks >= 15 ? "Expect stocks to rise" : n.stocks <= -15 ? "Expect stocks to fall" : "On the fence. No big bet either way" },
       { label: "Bonds", dir: dir(n.bonds, 10), text: n.bonds <= -10 ? "Expect bond prices to fall, with rates staying high or rising" : n.bonds >= 10 ? "Expect bond prices to rise, with rates coming down" : "No strong view on rates" },
       { label: "Dollar", dir: n.fxMixed ? "flat" : dir(-n.fx, 10), text: n.fxMixed ? "Mixed. Stronger against some currencies, weaker against others" : n.fx <= -10 ? "Expect a stronger dollar" : n.fx >= 10 ? "Expect a weaker dollar" : "No strong view" },
       { label: "Oil", dir: dir(n.oil, 5), text: n.oil >= 5 ? "Expect oil to rise" : n.oil <= -5 ? "Expect oil to fall" : "No strong view" },
       { label: "Gold", dir: dir(n.gold, 5), text: n.gold >= 5 ? "Expect gold to rise" : n.gold <= -5 ? "Expect gold to keep falling" : "No strong view" },
     ];
+    const lines = lines0.map(l => ({ ...l, conviction: extra[l.label] }));
     const biggest = Math.abs(n.bonds) >= Math.abs(n.stocks) ? "bonds" : "stocks";
     const parts: string[] = [];
     if (biggest === "bonds") parts.push(n.bonds < 0 ? "The big money's main worry is interest rates, not a stock market crash." : "The big money is bracing for a slowdown and betting rates come down.");
@@ -2158,8 +2179,12 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
       const d = new Date(dbmf.asOf + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
       const stale = ageDays(dbmf.asOf) > 7;
       const wOf = (root: string) => dbmf.lines.filter(l => l.root === root).reduce((a, l) => a + l.weight, 0);
+      // Net risk per bucket: positions within a bucket move together, so signed sum
+      const riskOf = (b: string) => Math.abs(by(b).reduce((a, l) => a + l.weight * ((DBMF_VOL[l.root] ?? 10) / 100), 0));
       Object.assign(smartMoney, {
-        plain: plainView({ bonds: nb, fx: nf, stocks: ns, oil: wOf("CL"), gold: wOf("GC"), fxMixed: mixed("fx") }),
+        plain: plainView({ bonds: nb, fx: nf, stocks: ns, oil: wOf("CL"), gold: wOf("GC"), fxMixed: mixed("fx"), risk: {
+          stocks: riskOf("stocks"), bonds: riskOf("bonds"), dollar: riskOf("fx"),
+          oil: Math.abs(wOf("CL")) * (DBMF_VOL.CL / 100), gold: Math.abs(wOf("GC")) * (DBMF_VOL.GC / 100) } }),
         live: true, stale, asOf: d, items,
         summary: `Trend followers' biggest bet: ${top.phrase}.${stockNote}`,
         status: stale ? `Holdings dated ${d}, more than a week old. Check the iMGP page` : `Live from iMGP`,
