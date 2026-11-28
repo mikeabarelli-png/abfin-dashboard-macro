@@ -1239,7 +1239,7 @@ export default function Page() {
             return (
               <section className="panel" style={{ marginBottom:16 }}>
                 <div className="panelHeader">
-                  <div><div className="panelTitle">Smart Money Positioning</div><div className="panelSub">Where trend-following funds are leaning. Context, not a driver.</div></div>
+                  <div><div className="panelTitle">Smart Money Positioning</div><div className="panelSub">What the big money expects, then the positions behind it. Context, not a driver.</div></div>
                   <div className="pstamp" style={{ textAlign:"right", color: sm.live && !sm.stale ? "#64748b" : "#fbbf24" }}>
                     {sm.live && !sm.stale ? `LIVE · DBMF holdings ${sm.asOf}` : sm.live ? `STALE · DBMF holdings ${sm.asOf}` : `MANUAL · ${sm.asOf}`}
                   </div>
@@ -1249,7 +1249,27 @@ export default function Page() {
                     {sm.status}. <a href="https://www.imgp.com/us/fund/US53700T8273-imgp-dbi-managed-futures-strategy-etf/#portfolio" target="_blank" rel="noreferrer" style={{ color:"#fbbf24", textDecoration:"underline" }}>Open holdings</a>
                   </div>
                 )}
-                <div style={{ fontSize:15, fontWeight:700, color:"#f1f5f9", lineHeight:1.45, marginBottom:12 }}>{sm.summary}</div>
+                {/* Plain-English layer: what the big money expects */}
+                {sm.plain && (
+                  <>
+                    <div style={{ fontSize:16, fontWeight:700, color:"#f1f5f9", lineHeight:1.5, marginBottom:12 }}>{sm.plain.takeaway}</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:8, marginBottom:16 }}>
+                      {sm.plain.lines.map((l: AnyObj) => {
+                        const c = l.dir === "up" ? "#4ade80" : l.dir === "down" ? "#ff6b88" : "#94a3b8";
+                        return (
+                          <div key={l.label} style={{ background:"#050a35", borderRadius:10, padding:"10px 12px", borderTop:`3px solid ${c}` }}>
+                            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                              <span style={{ fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:"#94a3b8" }}>{l.label}</span>
+                              <span style={{ fontSize:20, fontWeight:800, color:c, lineHeight:1 }}>{l.dir === "up" ? "↑" : l.dir === "down" ? "↓" : "→"}</span>
+                            </div>
+                            <div style={{ fontSize:12, color:"#cbd5e1", marginTop:6, lineHeight:1.4 }}>{l.text}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#475569", marginBottom:6 }}>The details · DBMF futures positions</div>
+                  </>
+                )}
                 <div style={{ display:"grid", gridTemplateColumns:"auto auto 1fr", columnGap:14, rowGap:7, fontSize:13, lineHeight:1.45, alignItems:"baseline" }}>
                   {sm.items.map((it: AnyObj) => (
                     <Fragment key={it.label}>
