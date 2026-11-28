@@ -145,6 +145,38 @@ async function fetchDbmfHoldings(): Promise<{ asOf: string; nav: number; lines: 
   }
 }
 
+// ── CFTC Commitments of Traders: leveraged funds (live, weekly) ───────
+// Traders in Financial Futures, futures only. "Leveraged funds" = hedge
+// funds and CTAs. Their raw net is structurally short in S&P and Treasury
+// futures (basis trades), so we score this week against the last 3 years
+// (z-score) rather than reading the level.
+const CFTC_URL = "https://publicreporting.cftc.gov/resource/gpe5-46if.json";
+const CFTC_MARKETS = [
+  { key: "spx", label: "S&P 500 futures", code: "13874A" },
+  { key: "ty", label: "10-yr Treasury futures", code: "043602" },
+];
+async function fetchCftcLevFunds(code: string): Promise<{ date: string; netPctOi: number; z: number; weekChgPct: number | null } | { error: string }> {
+  try {
+    const q = `?$select=report_date_as_yyyy_mm_dd,lev_money_positions_long,lev_money_positions_short,open_interest_all` +
+      `&$where=cftc_contract_market_code='${code}'&$order=report_date_as_yyyy_mm_dd DESC&$limit=156`;
+    const res = await fetch(CFTC_URL + encodeURI(q), { next: { revalidate: 43200 }, signal: AbortSignal.timeout(8000) } as RequestInit);
+    if (!res.ok) return { error: `HTTP ${res.status}` };
+    const rows: any[] = await res.json();
+    const pts = rows.map(r => {
+      const L = +r.lev_money_positions_long, S = +r.lev_money_positions_short, oi = +r.open_interest_all;
+      return { date: String(r.report_date_as_yyyy_mm_dd ?? "").slice(0, 10), v: oi > 0 ? ((L - S) / oi) * 100 : NaN };
+    }).filter(p => p.date && Number.isFinite(p.v));
+    if (pts.length < 52) return { error: `only ${pts.length} weeks returned` };
+    const vals = pts.map(p => p.v);
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const sd = Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length);
+    if (!(sd > 0)) return { error: "no variation in history" };
+    return { date: pts[0].date, netPctOi: pts[0].v, z: (pts[0].v - mean) / sd, weekChgPct: pts[1] ? pts[0].v - pts[1].v : null };
+  } catch (e: any) {
+    return { error: e?.name === "TimeoutError" ? "timeout" : String(e?.message ?? e) };
+  }
+}
+
 async function fetchFred(seriesId: string, limit = 1, compareIndex = 1): Promise<{ value: number | null; prev: number | null; error?: string }> {
   const apiKey = process.env.FRED_API_KEY;
   if (!apiKey) return { value: null, prev: null, error: "FRED_API_KEY not set" };
@@ -755,10 +787,11 @@ const MANUAL_SMART_MONEY = {
     { label: "Commodities", stance: "Mixed", tone: "yellow", change: null, text: "Long crude +9% (Iran), short gold -8%" },
     { label: "Watch",       stance: "",      tone: "",       change: null, text: "If bonds keep rallying, covering those Treasury shorts adds fuel. Good for your bond sleeve" },
   ],
+  // Manual readings from articles. `date` drives the 30-day stale flag.
   strip: [
-    { label: "CTA positioning", value: "-3.3σ", source: "Citadel, Nov 4" },
-    { label: "Hedge fund net leverage", value: "73.4%", source: "Goldman, Oct" },
-    { label: "Retail flows", value: "22 days of net buying", source: "Citadel, early Nov" },
+    { label: "CTA positioning", value: "-3.3σ", source: "Citadel, Nov 4", date: "2026-11-04" },
+    { label: "Hedge fund net leverage", value: "73.4%", source: "Goldman, Oct", date: "2026-10-31" },
+    { label: "Retail flows", value: "22 days of net buying", source: "Citadel, early Nov", date: "2026-11-07" },
   ],
 };
 
@@ -795,7 +828,8 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
   const veaDailyP = fetchChart("VEA", 420);   // Graded Ivy · Intl
   const spxMonthlyP = fetchChart("^GSPC", 5480, "1mo");
   const claimsP = fetchFred("ICSA", 14, 13);
-  const dbmfP = fetchDbmfHoldings();          // weekly jobless claims, latest vs 13 weeks back
+  const dbmfP = fetchDbmfHoldings();
+  const cftcP = Promise.all(CFTC_MARKETS.map(m => fetchCftcLevFunds(m.code)));          // weekly jobless claims, latest vs 13 weeks back
   const tenYrMonthP = fetchFred("DGS10", 23, 21);     // 10-year yield, latest vs ~1 month back (stocks vs bonds)
   const [
     [spx, qqq, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthResult],
@@ -2038,9 +2072,21 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
     asOf: new Date().toISOString(),
   };
 
+  // ── CFTC leveraged-fund positioning ──
+  const cftcRes = await cftcP;
+  const cftc = CFTC_MARKETS.map((m, i) => {
+    const r = cftcRes[i];
+    if ("error" in r) { diagnostics[`cftc_${m.key}`] = r.error; return { key: m.key, label: m.label, live: false, error: r.error }; }
+    const lean = r.z <= -1.5 ? "very short vs normal" : r.z <= -0.5 ? "shorter than normal" : r.z < 0.5 ? "about normal" : r.z < 1.5 ? "longer than normal" : "very long vs normal";
+    const date = new Date(r.date + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+    return { key: m.key, label: m.label, live: true, z: Math.round(r.z * 10) / 10, netPctOi: Math.round(r.netPctOi * 10) / 10,
+      weekChg: r.weekChgPct == null ? null : Math.round(r.weekChgPct * 10) / 10, lean, date,
+      stale: (Date.now() - new Date(r.date + "T12:00:00Z").getTime()) / 86400000 > 14 };
+  });
+
   // ── Smart money: live DBMF read, manual fallback, stale flag ──
   const dbmf = await dbmfP;
-  const smartMoney: any = { ...MANUAL_SMART_MONEY, live: false, stale: false, status: "manual" };
+  const smartMoney: any = { ...MANUAL_SMART_MONEY, live: false, stale: false, status: "manual", cftc };
   {
     const ageDays = (iso: string) => (Date.now() - new Date(iso + "T12:00:00Z").getTime()) / 86400000;
     if ("error" in dbmf) {
