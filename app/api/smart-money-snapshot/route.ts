@@ -713,10 +713,11 @@ export async function GET() {
   // financial press coverage of the next FOMC meeting.
   const MANUAL_FED_NEXT_MOVE = {
     lean: "hawkish" as "hawkish" | "neutral" | "dovish",
-    hikeOdds: 95,                              // CME FedWatch, Dec hike odds ~95% (mostly 25 bp, small 50 bp tail) · Nov 17 2026 close. Recheck Monday after Friday's selloff
+    hikeOdds: 94,                              // Dec hike odds · Roberts Nov 28 (after 4.3% GDP and 3.3% core PCE)
+    janOdds: 57,                               // Kalshi odds of another hike in January · Nov 28
     meeting: "Dec 8-9",
     meetingIso: "2026-12-09",
-    oddsAsOfIso: "2026-11-17",                 // flags "recheck" after 7 days
+    oddsAsOfIso: "2026-11-28",                 // flags "recheck" after 7 days
   };
   // Ivy Portfolio OFFICIAL month-end signals (Faber 10-mo SMA rule).
   // Single source of truth: drives the composite score here AND the Top 10,
@@ -770,15 +771,19 @@ export async function GET() {
   // This is the signal that separates a valuation reset from an earnings
   // recession, and the one Lance asks first ("have the fundamentals changed?").
   const MANUAL_EARNINGS = {
-    fwdEps: 415.82,                            // FactSet forward 12-month EPS · Nov 5 2026
+    fwdEps: 415.82,                            // FactSet forward 12-month EPS · Nov 5 2026 (Roberts: fwd P/E 17.1 at Nov 19)
     trend: "rising" as "rising" | "flat" | "falling",
-    note: "Q4 EPS estimates up 1.1% since Sep 30, Q3 growth about 31% (FactSet)",
-    asOf: "Nov 13",
-    asOfIso: "2026-11-13",                     // drives the "update due" flag after 14 days
-    revisionPct: 1.1, revisionSince: "Sep 30", // Q4 EPS estimate change during the quarter
-    guidancePos: 43, guidanceNeg: 32,          // Q4 guidance count (FactSet via Roberts, Nov 23)
+    note: "Forward 12-month EPS up 4.4% since Sep 30 while the S&P fell 6.2%. Consensus sees growth slowing to 3.6% by Q2 2027, but full-year 2027 still calls for 16.4% (FactSet via Roberts, Nov 28)",
+    asOf: "Nov 19",
+    asOfIso: "2026-11-19",                     // drives the "update due" flag after 14 days
+    revisionPct: 4.4, revisionSince: "Sep 30", // forward 12-month EPS change
+    guidancePos: 183, guidanceNeg: 86,         // companies guiding this year or next (FactSet via Roberts, Nov 28)
     nextSeason: "mid-Jan",                     // Q4 reporting season starts with the big banks
   };
+  // Lance's re-entry test: a close above the 200-DMA with breadth confirming.
+  // Breadth thrust = the 10-day average of advancing stocks above 61.5%
+  // within 10 sessions. Risk line = the Nov 20 intraday low.
+  const MANUAL_BREADTH = { tenDayAdvPct: 40, thrustLine: 61.5, riskLine: 6882.66, asOf: "Nov 27" };
   const MANUAL_SAHM = { value: 0.00, asOf: "Oct" };   // FRED SAHMREALTIME · next release with the Dec 4 jobs report
   const MANUAL_CORE_PCE = { value: 3.3, label: "Oct actual (BEA, Nov 25)" }; // next release with Nov data in Dec
   // Calendar: shown on the main page for the next 3 weeks. Add, never edit history.
@@ -818,7 +823,10 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
     { date: "2026-11-27", item: "Half day, 1 p.m. ET close", kind: "market" },
     { date: "2026-11-30", item: "Month-end: Ivy signals and 10-month trend check", kind: "plan" },
 
-    { date: "2026-12-04", item: "November jobs report · Sahm update", kind: "market" },
+    { date: "2026-12-01", item: "ISM manufacturing, JOLTS, Bowman testimony · Marvell earnings", kind: "market" },
+    { date: "2026-12-02", item: "ADP payrolls · Salesforce, Snowflake earnings", kind: "market" },
+    { date: "2026-12-03", item: "ISM services, jobless claims, Challenger job cuts", kind: "market" },
+    { date: "2026-12-04", item: "November jobs report (consensus +90k) · Sahm update", kind: "market" },
     { date: "2026-12-09", item: "FOMC decision (Dec 8-9)", kind: "market" },
     { date: "2026-12-16", item: "200-DMA clock deadline (Roberts)", kind: "market" },
     { date: "2026-12-31", item: "Last trading day for TOD sales to count in 2026", kind: "plan" },
@@ -2013,7 +2021,7 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
     weekChange: null, direction: "flat",
     asOf: MANUAL_EARNINGS.asOf, stale: earnStale,
     checks: [
-      { icon: MANUAL_EARNINGS.revisionPct > 0 ? "ok" : MANUAL_EARNINGS.revisionPct < -1 ? "bad" : "warn", label: "Revisions", text: `Q4 estimates ${MANUAL_EARNINGS.revisionPct >= 0 ? "up" : "down"} ${Math.abs(MANUAL_EARNINGS.revisionPct)}% since ${MANUAL_EARNINGS.revisionSince}` },
+      { icon: MANUAL_EARNINGS.revisionPct > 0 ? "ok" : MANUAL_EARNINGS.revisionPct < -1 ? "bad" : "warn", label: "Revisions", text: `Forward estimates ${MANUAL_EARNINGS.revisionPct >= 0 ? "up" : "down"} ${Math.abs(MANUAL_EARNINGS.revisionPct)}% since ${MANUAL_EARNINGS.revisionSince}` },
       { icon: guideNet > 0 ? "ok" : guideNet < -10 ? "bad" : "warn", label: "Guidance", text: `${MANUAL_EARNINGS.guidancePos} positive vs ${MANUAL_EARNINGS.guidanceNeg} negative` },
       fwdPE == null ? { icon: "info", label: "Price", text: "n/a" }
         : { icon: fwdPE >= 22 ? "warn" : "info", label: "Price", text: `${fwdPE.toFixed(1)}x forward earnings` },
@@ -2108,12 +2116,21 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
   const notConfirming = [credit, economy, earnings].filter(x => x.tone === "green").map(x => x.title.toLowerCase());
   const watching = [credit, economy, earnings].filter(x => x.tone === "yellow");
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-  const storyParts = [`${wvRegime}.`];
-  if ((trend.tone === "red" || trendState === "pullback") && notConfirming.length) storyParts.push(`${cap(notConfirming.join(" and "))} ${notConfirming.length > 1 ? "are" : "is"} not confirming.`);
-  if (fed.tone === "red") storyParts.push("The Fed is the main risk.");
+  // Story: plain, data-first, rule-based. Says what the evidence shows and
+  // what would change the read.
+  const storyParts: string[] = [];
+  const fundamentalsOk = earnings.tone === "green" && economy.tone !== "red";
+  if (coreReds === 3) storyParts.push("Make no mistake, this is no longer just a price story. Trend, credit and the economy are all saying the same thing.");
+  else if (coreReds === 2) storyParts.push(`The selloff is spreading beyond price. ${core.filter(c => c.tone === "red").map(c => c.title).join(" and ")} have both turned.`);
+  else if (trend.tone === "red" || trendState === "pullback") storyParts.push(fundamentalsOk ? "This is a correction to manage, not a bear market to run from." : "This is a correction, and the fundamentals are starting to wobble.");
+  else if (trend.tone === "yellow") storyParts.push("The uptrend is intact, but the cushion is thin.");
+  else storyParts.push("The trend is up and the fundamentals agree.");
+  if (coreReds < 2 && fundamentalsOk && trend.tone !== "green") storyParts.push("Earnings estimates are still rising and the economy isn't breaking.");
+  if (fed.tone === "red") storyParts.push(economy.tone === "green" ? "The risk is the Fed, hiking into a hot economy. Good news on the economy is now bad news for rates." : "The risk is the Fed, hiking into a slowing economy.");
+  else if (credit.tone !== "green" && coreReds < 2) storyParts.push("Credit is the one to watch.");
 
   // Lance's 4-week 200-day clock: trading days elapsed since the first break.
-  const CLOCK_200 = { start: "2026-11-18", deadline: "2026-12-16" };
+  const CLOCK_200 = { start: "2026-11-17", deadline: "2026-12-16" };  // first close below: Nov 17 (Roberts, Nov 28)
   const MARKET_HOLIDAYS = ["2026-11-26", "2026-12-25", "2027-01-01"];
   const tradingDaysBetween = (a: string, b: string) => {
     let n = 0; const d = new Date(a + "T12:00:00Z"); const end = new Date(b + "T12:00:00Z");
@@ -2126,7 +2143,8 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
   const clockDay = Math.min(clockTotal, tradingDaysBetween(CLOCK_200.start, todayEt));
   const clock = { start: CLOCK_200.start, deadline: CLOCK_200.deadline, day: clockDay, total: clockTotal, expired: todayEt > CLOCK_200.deadline };
 
-  const keyDates = MANUAL_CALENDAR.filter(c => c.kind === "market" && c.date >= todayEt && !/closed|half day/i.test(c.item)).slice(0, 3);
+  // Key dates: the market-moving events (jobs, Fed, inflation, the 200-DMA clock), next three
+  const keyDates = MANUAL_CALENDAR.filter(c => c.kind === "market" && c.date >= todayEt && /jobs report|FOMC|clock|PCE|CPI/i.test(c.item)).slice(0, 3);
 
   // Badge: a one-word read of the market, not an instruction.
   const badge =
@@ -2145,28 +2163,34 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
   const watchList: { label: string; text: string; tone: Tone }[] = [];
   {
     const t40 = pctVs40w == null ? "n/a" : `${pctVs40w >= 0 ? "+" : ""}${pctVs40w.toFixed(1)}%`;
-    let tText = `S&P ${t40} vs its 40-week average.`;
+    let tText = "";
     if (spxPrice != null && spx200dma != null) {
       const pts = Math.round(Math.abs(spx200dma - spxPrice));
-      tText += spxPrice < spx200dma
-        ? (clock.expired ? ` Still ${pts} pts below the 200-DMA after the 4-week clock expired.` : ` Needs +${pts} pts to reclaim the 200-DMA (${Math.round(spx200dma).toLocaleString()}) by ${deadlineLabel}.`)
-        : ` Back above the 200-DMA by ${pts} pts. Watch that it holds.`;
-    }
-    if (spx50dma != null && spx200dma != null && spx50dma < spx200dma) tText += " Death cross in place (50-DMA below the 200).";
+      tText = spxPrice < spx200dma
+        ? (clock.expired
+            ? `Still ${pts} pts below the 200-DMA after the 4-week clock ran out. Rallies are for rebalancing until that changes.`
+            : `The level that matters is the 200-DMA at ${Math.round(spx200dma).toLocaleString()}, ${pts} pts overhead. A close above it by ${deadlineLabel}, with breadth confirming, heals the break.`)
+        : `Back above the 200-DMA by ${pts} pts. Now it has to hold.`;
+    } else tText = `S&P ${t40} vs its 40-week average.`;
     watchList.push({ label: "Trend", text: tText, tone: trend.tone });
   }
-  watchList.push({ label: "Credit", text: `HY ${Math.round(hyBps)} bps${credit.weekChange ? `, ${credit.weekChange}` : ""}. Stress starts at 450.`, tone: credit.tone });
+  watchList.push({ label: "Credit", text: hyBps < 450
+    ? `HY spreads at ${Math.round(hyBps)} bps${credit.weekChange ? `, ${credit.weekChange}` : ""}. Worth watching, but still below the 450 stress line and far from 2008 levels.`
+    : `HY spreads at ${Math.round(hyBps)} bps, above the 450 stress line. Credit is confirming the selloff.`, tone: credit.tone });
   {
     const jobs = MANUAL_CALENDAR.find(c => c.date >= todayEt && /jobs/i.test(c.item));
     const jobsLabel = jobs ? new Date(jobs.date + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : null;
-    watchList.push({ label: "Economy", text: `Sahm ${sahm.toFixed(2)} (recession signal at 0.50)${claimsK != null ? `, claims ${Math.round(claimsK)}k` : ""}.${jobsLabel ? ` Next read: ${jobsLabel} jobs report.` : ""}`, tone: economy.tone });
+    watchList.push({ label: "Economy", text: `${economy.tone === "green" ? "Not breaking." : economy.tone === "yellow" ? "Softening." : "Recession risk is rising."} Sahm ${sahm.toFixed(2)}${claimsK != null ? `, claims ${Math.round(claimsK)}k` : ""}.${jobsLabel ? ` ${jobsLabel} jobs report is the next test. A hot print is bad news for rates.` : ""}`, tone: economy.tone });
   }
-  watchList.push({ label: "Earnings", text: `Forward EPS $${MANUAL_EARNINGS.fwdEps.toFixed(0)}, ${earnings.tone === "green" ? "estimates still rising" : earnings.tone === "yellow" ? "estimates flat" : "estimates being cut"}. Watch Q4 guidance into January.`, tone: earnings.tone });
-  watchList.push({ label: "Fed", text: `${MANUAL_FED_NEXT_MOVE.hikeOdds}% odds of a ${MANUAL_FED_NEXT_MOVE.meeting} hike, core PCE ${MANUAL_CORE_PCE.value}%.${fed.tone === "red" ? " A 50 bp move is the risk." : ""}`, tone: fed.tone });
+  watchList.push({ label: "Earnings", text: earnings.tone === "green"
+    ? `Estimates up ${MANUAL_EARNINGS.revisionPct}% since ${MANUAL_EARNINGS.revisionSince} while prices fell. Bear markets have falling earnings. This one doesn't, yet.`
+    : earnings.tone === "yellow" ? "Estimates have stalled. Watch Q4 guidance into January." : "Analysts are cutting estimates. That's how corrections become bear markets.", tone: earnings.tone });
+  watchList.push({ label: "Fed", text: `${MANUAL_FED_NEXT_MOVE.hikeOdds}% odds of a December hike, ${MANUAL_FED_NEXT_MOVE.janOdds}% for January. Tightening is what popped past bubbles, which is why this is the risk to watch most closely.`, tone: fed.tone });
   const weeklyView = {
     story: storyParts.join(" "),
     badge,
     watchList,
+    breadth: MANUAL_BREADTH,
     clock,
     keyDates,
     spxOffHigh,
