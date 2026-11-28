@@ -1156,6 +1156,9 @@ export default function Page() {
             const wv = marketData?.weekly_view;
             if (!wv) return null;
             const TONE: Record<string, string> = { green:"#4ade80", yellow:"#fbbf24", red:"#ff6b88" };
+            const CHECK: Record<string, { g: string; c: string }> = {
+              ok: { g:"✓", c:"#4ade80" }, bad: { g:"✗", c:"#ff6b88" }, warn: { g:"!", c:"#fbbf24" }, wait: { g:"◷", c:"#93c5fd" }, info: { g:"•", c:"#94a3b8" },
+            };
             const dirColor = (d: string) => d === "better" ? "#4ade80" : d === "worse" ? "#ff6b88" : "#94a3b8";
             const dirArrow = (d: string) => d === "better" ? "▲" : d === "worse" ? "▼" : "•";
             const Gauge = ({ v }: { v: AnyObj }) => {
@@ -1212,6 +1215,24 @@ export default function Page() {
                 <div style={{ fontSize:12, fontWeight:700, color:TONE[s.tone] ?? "#94a3b8", marginTop: s.viz?.type === "pair" ? 6 : 0 }}>{s.label}</div>
                 <Viz s={s} />
                 {s.sub && <div style={{ fontSize:11, color: s.direction === "worse" ? TONE.red : s.direction === "better" ? TONE.green : "#94a3b8", marginTop:4 }}>{s.direction === "worse" ? "▼ " : s.direction === "better" ? "▲ " : ""}{s.sub}</div>}
+                {/* Checks: what is behind the status */}
+                {(s.checks ?? []).length > 0 && (
+                  <div style={{ display:"grid", gridTemplateColumns:"14px auto 1fr", columnGap:6, rowGap:4, marginTop:10, paddingTop:8, borderTop:"1px solid rgba(255,255,255,0.06)", fontSize:11, lineHeight:1.35 }}>
+                    {s.checks.map((c: AnyObj) => (
+                      <Fragment key={c.label}>
+                        <span style={{ fontWeight:800, textAlign:"center", color: CHECK[c.icon]?.c ?? "#94a3b8" }}>{CHECK[c.icon]?.g ?? "•"}</span>
+                        <span style={{ fontWeight:700, color:"#cbd5e1", whiteSpace:"nowrap" }}>{c.label}</span>
+                        <span style={{ color:"#94a3b8" }}>{c.text}</span>
+                      </Fragment>
+                    ))}
+                  </div>
+                )}
+                {(s.weekChange || s.stale) && (
+                  <div style={{ display:"flex", justifyContent:"space-between", gap:8, marginTop:6, fontSize:10 }}>
+                    <span style={{ color: s.direction === "worse" ? TONE.red : s.direction === "better" ? TONE.green : "#64748b", fontWeight:600 }}>{s.weekChange ? `${s.direction === "worse" ? "▼" : s.direction === "better" ? "▲" : "•"} ${s.weekChange}` : ""}</span>
+                    {s.stale && <span style={{ color:TONE.yellow, fontWeight:700 }}>as of {s.asOf} · update due</span>}
+                  </div>
+                )}
               </div>
             );
             return (
