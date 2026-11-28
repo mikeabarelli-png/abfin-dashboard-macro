@@ -1263,11 +1263,46 @@ export default function Page() {
                     </Fragment>
                   ))}
                 </div>
+                {/* CFTC: live weekly leveraged-fund positioning, scored vs 3 years */}
+                {(sm.cftc ?? []).length > 0 && (
+                  <div style={{ marginTop:14, paddingTop:10, borderTop:"1px solid rgba(255,255,255,0.06)" }}>
+                    <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#475569", marginBottom:6 }}>
+                      Hedge funds and CTAs in futures · CFTC, weekly
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))", gap:"6px 24px" }}>
+                      {sm.cftc.map((c: AnyObj) => {
+                        if (!c.live) return <div key={c.key} style={{ fontSize:12, color:"#fbbf24" }}><b>{c.label}</b> unavailable ({c.error})</div>;
+                        const zc = Math.abs(c.z) >= 1.5 ? (c.z < 0 ? "#ff6b88" : "#4ade80") : "#cbd5e1";
+                        const pc = Math.max(0, Math.min(100, ((c.z + 3) / 6) * 100));
+                        return (
+                          <div key={c.key} title={`Net ${c.netPctOi}% of open interest. Leveraged funds are usually net short these contracts (basis trades), so the reading is scored against the last 3 years.`}>
+                            <div style={{ display:"flex", alignItems:"baseline", gap:8, fontSize:12, color:"#94a3b8" }}>
+                              <b style={{ color:"#cbd5e1" }}>{c.label}</b>
+                              <span style={{ fontWeight:800, color:zc }}>{c.z > 0 ? "+" : ""}{c.z.toFixed(1)}σ</span>
+                              <span>{c.lean}</span>
+                              <span style={{ color: c.stale ? "#fbbf24" : "#64748b", marginLeft:"auto" }}>{c.stale ? "stale · " : ""}{c.date}</span>
+                            </div>
+                            <div style={{ position:"relative", height:6, borderRadius:3, marginTop:5, background:"linear-gradient(90deg, rgba(255,107,136,0.45) 0%, rgba(255,255,255,0.10) 25%, rgba(255,255,255,0.10) 75%, rgba(74,222,128,0.45) 100%)" }}>
+                              <div style={{ position:"absolute", left:"50%", top:-2, width:1, height:10, background:"rgba(255,255,255,0.3)" }} />
+                              <div style={{ position:"absolute", left:`${pc}%`, top:-3, width:12, height:12, marginLeft:-6, borderRadius:"50%", background:"#f1f5f9", border:"2px solid #0b1020" }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {/* Manual readings from articles; greyed once older than 30 days */}
                 {(sm.strip ?? []).length > 0 && (
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 24px", marginTop:14, paddingTop:10, borderTop:"1px solid rgba(255,255,255,0.06)", fontSize:12, color:"#94a3b8" }}>
-                    {sm.strip.map((x: AnyObj) => (
-                      <span key={x.label}><b style={{ color:"#cbd5e1" }}>{x.label}</b> {x.value} <span style={{ color:"#64748b" }}>({x.source})</span></span>
-                    ))}
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 24px", marginTop:12, fontSize:12, color:"#94a3b8" }}>
+                    {sm.strip.map((x: AnyObj) => {
+                      const old = x.date ? (Date.now() - new Date(x.date + "T12:00:00").getTime()) / 86400000 > 30 : false;
+                      return (
+                        <span key={x.label} style={{ opacity: old ? 0.45 : 1 }}>
+                          <b style={{ color:"#cbd5e1" }}>{x.label}</b> {x.value} <span style={{ color:"#64748b" }}>({x.source}{old ? ", over 30 days old" : ""})</span>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </section>
