@@ -1239,7 +1239,7 @@ export default function Page() {
             return (
               <section className="panel" style={{ marginBottom:16 }}>
                 <div className="panelHeader">
-                  <div><div className="panelTitle">Smart Money Positioning</div><div className="panelSub">What the big money expects, then the positions behind it. Context, not a driver.</div></div>
+                  <div><div className="panelTitle">Smart Money Positioning</div></div>
                   <div className="pstamp" style={{ textAlign:"right", color: sm.live && !sm.stale ? "#64748b" : "#fbbf24" }}>
                     {sm.live && !sm.stale ? `LIVE · DBMF holdings ${sm.asOf}` : sm.live ? `STALE · DBMF holdings ${sm.asOf}` : `MANUAL · ${sm.asOf}`}
                   </div>
@@ -1263,6 +1263,18 @@ export default function Page() {
                               <span style={{ fontSize:20, fontWeight:800, color:c, lineHeight:1 }}>{l.dir === "up" ? "↑" : l.dir === "down" ? "↓" : "→"}</span>
                             </div>
                             <div style={{ fontSize:12, color:"#cbd5e1", marginTop:6, lineHeight:1.4 }}>{l.text}</div>
+                            {l.conviction && (
+                              <div title="Conviction is based on risk: position size times how much that market typically moves. Exposure is the raw position as a share of the fund."
+                                style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, paddingTop:8, borderTop:"1px solid rgba(255,255,255,0.06)" }}>
+                                <div style={{ display:"flex", gap:3 }}>
+                                  {[1, 2, 3].map(i => (
+                                    <span key={i} style={{ width:14, height:6, borderRadius:2, background: i <= l.conviction.level ? (l.dir === "flat" ? "#94a3b8" : c) : "rgba(255,255,255,0.1)" }} />
+                                  ))}
+                                </div>
+                                <span style={{ fontSize:11, fontWeight:700, color: l.conviction.level === 3 ? "#f1f5f9" : "#94a3b8" }}>{l.conviction.label} conviction</span>
+                                <span style={{ fontSize:11, color:"#64748b", marginLeft:"auto" }}>{l.conviction.exposure}</span>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
