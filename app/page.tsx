@@ -1230,6 +1230,50 @@ export default function Page() {
             );
           })()}
 
+          {/* SMART MONEY POSITIONING: context, not a driver. Manual block in
+              route.ts from DBMF holdings plus readings from articles. */}
+          {(() => {
+            const sm = marketData?.smart_money;
+            if (!sm) return null;
+            const TC: Record<string, string> = { green:"#4ade80", yellow:"#fbbf24", red:"#ff6b88" };
+            return (
+              <section className="panel" style={{ marginBottom:16 }}>
+                <div className="panelHeader">
+                  <div><div className="panelTitle">Smart Money Positioning</div><div className="panelSub">Where trend-following funds are leaning. Context, not a driver.</div></div>
+                  <div className="pstamp" style={{ textAlign:"right", color: sm.live && !sm.stale ? "#64748b" : "#fbbf24" }}>
+                    {sm.live && !sm.stale ? `LIVE · DBMF holdings ${sm.asOf}` : sm.live ? `STALE · DBMF holdings ${sm.asOf}` : `MANUAL · ${sm.asOf}`}
+                  </div>
+                </div>
+                {(!sm.live || sm.stale) && (
+                  <div style={{ fontSize:12, color:"#fbbf24", background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.3)", borderRadius:8, padding:"6px 10px", marginBottom:10 }}>
+                    {sm.status}. <a href="https://www.imgp.com/us/fund/US53700T8273-imgp-dbi-managed-futures-strategy-etf/#portfolio" target="_blank" rel="noreferrer" style={{ color:"#fbbf24", textDecoration:"underline" }}>Open holdings</a>
+                  </div>
+                )}
+                <div style={{ fontSize:15, fontWeight:700, color:"#f1f5f9", lineHeight:1.45, marginBottom:12 }}>{sm.summary}</div>
+                <div style={{ display:"grid", gridTemplateColumns:"auto auto 1fr", columnGap:14, rowGap:7, fontSize:13, lineHeight:1.45, alignItems:"baseline" }}>
+                  {sm.items.map((it: AnyObj) => (
+                    <Fragment key={it.label}>
+                      <span style={{ display:"inline-flex", alignItems:"center", gap:7, fontWeight:700, color:"#cbd5e1", whiteSpace:"nowrap" }}>
+                        <span style={{ width:8, height:8, borderRadius:"50%", background: TC[it.tone] ?? "#475569" }} />{it.label}
+                      </span>
+                      <span style={{ fontWeight:800, fontSize:12, color: TC[it.tone] ?? "#94a3b8", whiteSpace:"nowrap" }}>
+                        {it.stance}{it.change ? ` ${it.change}` : ""}
+                      </span>
+                      <span style={{ color:"#94a3b8" }}>{it.text}</span>
+                    </Fragment>
+                  ))}
+                </div>
+                {(sm.strip ?? []).length > 0 && (
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:"6px 24px", marginTop:14, paddingTop:10, borderTop:"1px solid rgba(255,255,255,0.06)", fontSize:12, color:"#94a3b8" }}>
+                    {sm.strip.map((x: AnyObj) => (
+                      <span key={x.label}><b style={{ color:"#cbd5e1" }}>{x.label}</b> {x.value} <span style={{ color:"#64748b" }}>({x.source})</span></span>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
+
           {/* ①-B PORTFOLIO POSITION HEALTH — live per-holding 200-DMA status */}
           <section className="panel">
             <div className="panelHeader">
