@@ -715,6 +715,8 @@ export async function GET() {
     lean: "hawkish" as "hawkish" | "neutral" | "dovish",
     hikeOdds: 95,                              // CME FedWatch, Dec hike odds ~95% (mostly 25 bp, small 50 bp tail) · Nov 17 2026 close. Recheck Monday after Friday's selloff
     meeting: "Dec 8-9",
+    meetingIso: "2026-12-09",
+    oddsAsOfIso: "2026-11-17",                 // flags "recheck" after 7 days
   };
   // Ivy Portfolio OFFICIAL month-end signals (Faber 10-mo SMA rule).
   // Single source of truth: drives the composite score here AND the Top 10,
@@ -772,6 +774,10 @@ export async function GET() {
     trend: "rising" as "rising" | "flat" | "falling",
     note: "Q4 EPS estimates up 1.1% since Sep 30, Q3 growth about 31% (FactSet)",
     asOf: "Nov 13",
+    asOfIso: "2026-11-13",                     // drives the "update due" flag after 14 days
+    revisionPct: 1.1, revisionSince: "Sep 30", // Q4 EPS estimate change during the quarter
+    guidancePos: 43, guidanceNeg: 32,          // Q4 guidance count (FactSet via Roberts, Nov 23)
+    nextSeason: "mid-Jan",                     // Q4 reporting season starts with the big banks
   };
   const MANUAL_SAHM = { value: 0.00, asOf: "Oct" };   // FRED SAHMREALTIME · next release with the Dec 4 jobs report
   const MANUAL_CORE_PCE = { value: 3.3, label: "Oct actual (BEA, Nov 25)" }; // next release with Nov data in Dec
@@ -1861,7 +1867,14 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
   // story line and a "call Chris?" status. Plan: hold M2 and rebalance.
   // A call is worth it only when trend, credit and economy turn together.
   // ═══════════════════════════════════════════════════════════════════
-  const [claims, tenYrMonth] = await Promise.all([claimsP, tenYrMonthP]);
+  const [claims, tenYrMonth, hyMonth, ccc, contClaims, sahmLive, twoYr] = await Promise.all([
+    claimsP, tenYrMonthP,
+    fetchFred("BAMLH0A0HYM2", 23, 21),  // HY spread, latest vs ~1 month back
+    fetchFred("BAMLH0A3HYC", 66, 63),   // CCC & lower spread, latest vs ~3 months back
+    fetchFred("CCSA", 53, 52),          // continuing jobless claims, latest vs 1 year back
+    fetchFred("SAHMREALTIME"),          // Sahm rule, real-time version (monthly)
+    fetchFred("DGS2"),                  // 2-year Treasury yield: where markets expect the Fed to go
+  ]);
   type Tone = "green" | "yellow" | "red";
   const wkCloses = lastClosePerPeriod(spxWeekly.closes, spxWeekly.timestamps, "week");
   const moCloses = lastClosePerPeriod(spxMonthly.closes, spxMonthly.timestamps, "month");
@@ -1890,63 +1903,143 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
   const fmt = (v: number | null, d = 1) => (v == null ? "n/a" : v.toFixed(d));
   const sgn = (v: number | null, d = 1) => (v == null ? "n/a" : `${v >= 0 ? "+" : ""}${v.toFixed(d)}`);
 
-  // 1. Trend: S&P vs 40-week average (live), 10-month average checked at month-end
-  const trendTone: Tone = pctVs40w == null ? "yellow" : pctVs40w < 0 ? "red" : pctVs40w < 3 ? "yellow" : "green";
+  // Each signal carries `checks`: three short lines (ok / bad / warn / wait /
+  // info) that show what is behind the status. Status logic asks for
+  // confirmation, not a single day's level.
+  type Check = { icon: "ok" | "bad" | "warn" | "wait" | "info"; label: string; text: string };
+  const isoDays = (iso: string) => (Date.now() - new Date(iso + "T12:00:00Z").getTime()) / 86400000;
+  const shortDate = (iso: string) => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+  // 1. Trend: weekly and monthly confirmation (daily detail lives in Market Structure)
+  const sma40At = (i: number) => i >= 39 ? avgOf(wkCloses.slice(i - 39, i + 1)) : null;
+  let weeksBelow = 0;
+  for (let i = wkCloses.length - 1; i >= 39; i--) { const m = sma40At(i); if (m != null && wkCloses[i] < m) weeksBelow++; else break; }
+  const sma40w4ago = wkCloses.length >= 44 ? avgOf(wkCloses.slice(-44, -4)) : null;
+  const slope40 = sma40w != null && sma40w4ago != null ? ((sma40w - sma40w4ago) / sma40w4ago) * 100 : null;
+  const slopeRising = slope40 != null && slope40 > 0.05, slopeFalling = slope40 != null && slope40 < -0.05;
+  // Last COMPLETED month vs its 10-month average (the official Faber reading)
+  const lastMoClose = moCloses.length >= 12 ? moCloses[moCloses.length - 2] : null;
+  const lastMo10 = moCloses.length >= 12 ? avgOf(moCloses.slice(-11, -1)) : null;
+  const lastMonthBelow = lastMoClose != null && lastMo10 != null && lastMoClose < lastMo10;
+  const monthEnd = (() => { const n = new Date(); const d = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() + 1, 0)); while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); })();
+  const below40 = pctVs40w != null && pctVs40w < 0;
+  const deepBreak = pctVs40w != null && pctVs40w < -5;
+  const trendState =
+    pctVs40w == null ? "unknown" :
+    below40 && (slopeFalling || lastMonthBelow || deepBreak) ? "broken" :
+    below40 ? "pullback" :
+    slopeFalling ? "rolling" : pctVs40w < 3 ? "thin" : "uptrend";
+  const trendTone: Tone = trendState === "broken" ? "red" : trendState === "uptrend" ? "green" : "yellow";
+  const trendChecks: Check[] = [
+    below40
+      ? { icon: weeksBelow >= 2 ? "bad" : "warn", label: "Weekly", text: `Below the 40-wk avg, ${weeksBelow} weekly close${weeksBelow === 1 ? "" : "s"} in a row` }
+      : { icon: "ok", label: "Weekly", text: `Above the 40-wk avg by ${sgn(pctVs40w)}%` },
+    slope40 == null ? { icon: "info", label: "Slope", text: "n/a" }
+      : slopeRising ? { icon: "ok", label: "Slope", text: `40-wk avg still rising (${sgn(slope40)}% in 4 wks)` }
+      : slopeFalling ? { icon: "bad", label: "Slope", text: `40-wk avg turning down (${sgn(slope40)}% in 4 wks)` }
+      : { icon: "warn", label: "Slope", text: "40-wk avg has flattened" },
+    sma10m == null || spxPrice == null ? { icon: "info", label: "Monthly", text: "n/a" }
+      : { icon: "wait", label: "Monthly", text: `${shortDate(monthEnd)} close decides it. ${spxPrice >= sma10m ? `${Math.round(spxPrice - sma10m)} pts above` : `Needs +${Math.round(sma10m - spxPrice)} pts to`} the 10-mo avg (${Math.round(sma10m).toLocaleString()})` },
+  ];
   const trend = {
-    key: "trend", title: "Trend", question: "Is the market breaking down?", tone: trendTone,
-    label: trendTone === "red" ? "Broken" : trendTone === "yellow" ? "Thin cushion" : "Uptrend",
+    key: "trend", title: "Trend", question: "Is the long-term trend intact?", tone: trendTone,
+    label: ({ broken: "Broken", pullback: "Pullback in an uptrend", rolling: "Rolling over", thin: "Thin cushion", uptrend: "Uptrend", unknown: "n/a" } as Record<string, string>)[trendState],
     value: pctVs40w == null ? "n/a" : `${sgn(pctVs40w)}%`, unit: "vs 40-wk avg",
-    detail: `10-month avg: ${sgn(pctVs10m)}% (official at month-end) · ${fmt(spxOffHigh)}% off the high`,
+    detail: `Status needs confirmation: a falling 40-wk average, a month-end close below the 10-month average, or a drop of more than 5% below the 40-wk. Last completed month: ${lastMonthBelow ? "below" : "above"} its 10-month average. ${fmt(spxOffHigh)}% off the high.`,
     weekChange: spxWeekPct == null ? null : `${sgn(spxWeekPct)}% this week`,
     direction: spxWeekPct == null ? "flat" : spxWeekPct > 0.5 ? "better" : spxWeekPct < -0.5 ? "worse" : "flat",
+    checks: trendChecks,
   };
 
-  // 2. Credit: HY spread level and weekly change
+  // 2. Credit: level, direction, and stress at the bottom of the ladder (CCC)
   const hyBps = hySpread * 100;
   const hyChg = hyWeekAgo != null ? (hySpread - hyWeekAgo) * 100 : null;
+  const hyMoChg = hyMonth.value != null && hyMonth.prev != null ? (hyMonth.value - hyMonth.prev) * 100 : null;
+  const cccBps = ccc.value != null ? ccc.value * 100 : null;
+  const ccc3mChg = ccc.value != null && ccc.prev != null ? (ccc.value - ccc.prev) * 100 : null;
   const creditTone: Tone = hyBps < 350 ? "green" : hyBps < 450 ? "yellow" : "red";
+  const widening = hyMoChg != null && hyMoChg >= 50;
   const credit = {
     key: "credit", title: "Credit", question: "Are lenders getting worried?", tone: creditTone,
-    label: creditTone === "green" ? "Calm" : creditTone === "yellow" ? "Caution" : "Stress",
+    label: (creditTone === "green" ? "Calm" : creditTone === "yellow" ? "Caution" : "Stress") + (widening && creditTone !== "red" ? ", widening" : ""),
     value: `${Math.round(hyBps)}`, unit: "bps HY spread",
-    detail: "Calm under 350 · stress over 450 · 500+ is a recession-type level",
+    detail: "High-yield spread: the extra yield junk borrowers pay over Treasuries. Calm under 350, stress over 450, 500+ is a recession-type level. CCC is the weakest tier and usually cracks first.",
     weekChange: hyChg == null ? null : `${hyChg >= 0 ? "+" : ""}${Math.round(hyChg)} bps this week`,
     direction: hyChg == null ? "flat" : hyChg > 5 ? "worse" : hyChg < -5 ? "better" : "flat",
+    checks: [
+      { icon: hyBps < 450 ? "ok" : "bad", label: "Level", text: hyBps < 450 ? `${Math.round(450 - hyBps)} bps below the 450 stress line` : `${Math.round(hyBps - 450)} bps above the 450 stress line` },
+      hyMoChg == null ? { icon: "info", label: "Trend", text: "n/a" }
+        : { icon: hyMoChg >= 50 ? "bad" : hyMoChg >= 20 ? "warn" : "ok", label: "Trend", text: `${hyMoChg >= 0 ? "+" : ""}${Math.round(hyMoChg)} bps over the past month` },
+      cccBps == null ? { icon: "info", label: "CCC", text: "n/a" }
+        : { icon: (ccc3mChg ?? 0) >= 200 ? "bad" : (ccc3mChg ?? 0) >= 100 ? "warn" : "ok", label: "CCC", text: `${Math.round(cccBps).toLocaleString()} bps${ccc3mChg != null ? `, ${ccc3mChg >= 0 ? "+" : ""}${Math.round(ccc3mChg)} in 3 months` : ""}` },
+    ] as Check[],
   };
 
-  // 3. Economy: Sahm rule plus the claims trend
+  // 3. Economy: Sahm rule (live), initial claims, continuing claims
+  const sahm = sahmLive.value ?? MANUAL_SAHM.value;
   const claimsK = claims.value != null ? claims.value / 1000 : null;
   const claimsChgPct = claims.value != null && claims.prev ? ((claims.value - claims.prev) / claims.prev) * 100 : null;
+  const contM = contClaims.value != null ? contClaims.value / 1e6 : null;
+  const contYoY = contClaims.value != null && contClaims.prev ? ((contClaims.value - contClaims.prev) / contClaims.prev) * 100 : null;
   const econTone: Tone =
-    MANUAL_SAHM.value >= 0.5 || (claimsChgPct != null && claimsChgPct > 25) ? "red" :
-    MANUAL_SAHM.value >= 0.3 || (claimsChgPct != null && claimsChgPct > 10) ? "yellow" : "green";
+    sahm >= 0.5 || (claimsChgPct != null && claimsChgPct > 25) ? "red" :
+    sahm >= 0.3 || (claimsChgPct != null && claimsChgPct > 10) || (contYoY != null && contYoY > 15) ? "yellow" : "green";
+  const jobsNext = MANUAL_CALENDAR.find(c => c.date >= new Date().toISOString().slice(0, 10) && /jobs/i.test(c.item));
   const economy = {
     key: "economy", title: "Economy", question: "Is a recession starting?", tone: econTone,
     label: econTone === "green" ? "Healthy" : econTone === "yellow" ? "Softening" : "Recession risk",
-    value: MANUAL_SAHM.value.toFixed(2), unit: `Sahm rule (${MANUAL_SAHM.asOf})`,
-    detail: claimsK == null ? "Jobless claims unavailable" : `Jobless claims ${Math.round(claimsK)}k · ${sgn(claimsChgPct, 0)}% vs 13 weeks ago`,
+    value: sahm.toFixed(2), unit: "Sahm rule",
+    detail: "Sahm rule: recession signal when the 3-month average unemployment rate rises 0.5 points above its 12-month low. It has flagged every recession since 1970. Continuing claims show how hard it is to find a new job once laid off.",
     weekChange: null, direction: "flat",
+    checks: [
+      { icon: sahm >= 0.5 ? "bad" : sahm >= 0.3 ? "warn" : "ok", label: "Sahm", text: sahm >= 0.5 ? "Recession signal triggered (0.50)" : `${(0.5 - sahm).toFixed(2)} below the 0.50 recession signal${sahmLive.value == null ? ` (${MANUAL_SAHM.asOf}, manual)` : ""}` },
+      claimsK == null ? { icon: "info", label: "Layoffs", text: "Jobless claims unavailable" }
+        : { icon: (claimsChgPct ?? 0) > 25 ? "bad" : (claimsChgPct ?? 0) > 10 ? "warn" : "ok", label: "Layoffs", text: `Claims ${Math.round(claimsK)}k, ${sgn(claimsChgPct, 0)}% vs 13 wks` },
+      contM == null ? { icon: "info", label: "Hiring", text: jobsNext ? `Next read: ${shortDate(jobsNext.date)} jobs report` : "n/a" }
+        : { icon: (contYoY ?? 0) > 15 ? "bad" : (contYoY ?? 0) > 5 ? "warn" : "ok", label: "Hiring", text: `Continuing claims ${contM.toFixed(2)}M, ${sgn(contYoY, 0)}% vs a year ago` },
+    ] as Check[],
   };
 
-  // 4. Earnings: are analysts raising or cutting estimates?
+  // 4. Earnings: revisions, guidance, and what the market pays for them
   const earnTone: Tone = MANUAL_EARNINGS.trend === "rising" ? "green" : MANUAL_EARNINGS.trend === "flat" ? "yellow" : "red";
+  const fwdPE = spxPrice != null ? spxPrice / MANUAL_EARNINGS.fwdEps : null;
+  const earnStale = isoDays(MANUAL_EARNINGS.asOfIso) > 14;
+  const guideNet = MANUAL_EARNINGS.guidancePos - MANUAL_EARNINGS.guidanceNeg;
   const earnings = {
     key: "earnings", title: "Earnings", question: "Are the fundamentals changing?", tone: earnTone,
     label: earnTone === "green" ? "Estimates rising" : earnTone === "yellow" ? "Estimates flat" : "Estimates being cut",
-    value: `$${MANUAL_EARNINGS.fwdEps.toFixed(0)}`, unit: `fwd 12-mo EPS (${MANUAL_EARNINGS.asOf})`,
-    detail: MANUAL_EARNINGS.note,
+    value: `$${MANUAL_EARNINGS.fwdEps.toFixed(0)}`, unit: "fwd 12-mo EPS",
+    detail: `${MANUAL_EARNINGS.note}. Rising estimates while prices fall means a valuation reset, not an earnings recession. Next: Q4 reporting season ${MANUAL_EARNINGS.nextSeason}.`,
     weekChange: null, direction: "flat",
+    asOf: MANUAL_EARNINGS.asOf, stale: earnStale,
+    checks: [
+      { icon: MANUAL_EARNINGS.revisionPct > 0 ? "ok" : MANUAL_EARNINGS.revisionPct < -1 ? "bad" : "warn", label: "Revisions", text: `Q4 estimates ${MANUAL_EARNINGS.revisionPct >= 0 ? "up" : "down"} ${Math.abs(MANUAL_EARNINGS.revisionPct)}% since ${MANUAL_EARNINGS.revisionSince}` },
+      { icon: guideNet > 0 ? "ok" : guideNet < -10 ? "bad" : "warn", label: "Guidance", text: `${MANUAL_EARNINGS.guidancePos} positive vs ${MANUAL_EARNINGS.guidanceNeg} negative` },
+      fwdPE == null ? { icon: "info", label: "Price", text: "n/a" }
+        : { icon: fwdPE >= 22 ? "warn" : "info", label: "Price", text: `${fwdPE.toFixed(1)}x forward earnings` },
+    ] as Check[],
   };
 
-  // 5. Fed: policy direction plus the real rate
+  // 5. Fed: stance, what markets expect (2-yr vs fed funds), real rate, next meeting
   const realFed = fedFunds - MANUAL_CORE_PCE.value;
   const fedTone: Tone = MANUAL_FED_STANCE === "tightening" ? "red" : MANUAL_FED_STANCE === "holding" ? "yellow" : "green";
+  const twoYrGap = twoYr.value != null ? twoYr.value - fedFunds : null;
+  const daysToMeeting = Math.ceil(-isoDays(MANUAL_FED_NEXT_MOVE.meetingIso));
+  const oddsStale = isoDays(MANUAL_FED_NEXT_MOVE.oddsAsOfIso) > 7;
   const fed = {
     key: "fed", title: "Fed", question: "Is policy helping or hurting?", tone: fedTone,
     label: fedTone === "red" ? "Headwind (hiking)" : fedTone === "yellow" ? "On hold" : "Tailwind (cutting)",
     value: `${fedFunds.toFixed(2)}%`, unit: "fed funds",
-    detail: `${MANUAL_FED_NEXT_MOVE.hikeOdds}% odds of a ${MANUAL_FED_NEXT_MOVE.meeting} hike · real rate about ${realFed.toFixed(1)}% (core PCE ${MANUAL_CORE_PCE.value}%, ${MANUAL_CORE_PCE.label})`,
+    detail: `The 2-year Treasury yield is the market's best guess of where the Fed is headed. Above fed funds means more hikes expected, below means cuts. Real rate = fed funds minus core PCE (${MANUAL_CORE_PCE.value}%, ${MANUAL_CORE_PCE.label}).`,
     weekChange: null, direction: "flat",
+    checks: [
+      twoYrGap == null ? { icon: "info", label: "Market", text: "2-yr yield unavailable" }
+        : { icon: twoYrGap > 0.15 ? "bad" : twoYrGap < -0.15 ? "ok" : "warn", label: "Market", text: `2-yr at ${twoYr.value!.toFixed(2)}%, ${twoYrGap > 0.15 ? "pricing more hikes" : twoYrGap < -0.15 ? "pricing cuts" : "pricing a hold"}` },
+      { icon: realFed > 1.5 ? "bad" : realFed > 0.5 ? "warn" : "ok", label: "Real rate", text: `${realFed >= 0 ? "+" : ""}${realFed.toFixed(1)}% after inflation${realFed > 1.5 ? ", restrictive" : realFed > 0.5 ? ", mildly restrictive" : ", not restrictive"}` },
+      daysToMeeting >= 0
+        ? { icon: "wait", label: "Next", text: `${MANUAL_FED_NEXT_MOVE.meeting} (${daysToMeeting} days) · ${MANUAL_FED_NEXT_MOVE.hikeOdds}% hike odds${oddsStale ? ` as of ${shortDate(MANUAL_FED_NEXT_MOVE.oddsAsOfIso)}, recheck` : ""}` }
+        : { icon: "warn", label: "Next", text: "Meeting passed. Update the Fed stance and next meeting" },
+    ] as Check[],
   };
 
   // Context row: explains, never triggers a call
@@ -1974,17 +2067,17 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
   const clampv = (v: number | null, lo: number, hi: number) => v == null ? null : Math.max(lo, Math.min(hi, v));
   (trend as any).viz = { type: "gauge", min: -10, max: 10, value: clampv(pctVs40w, -10, 10), ticks: [0, 3],
     zones: [{ to: 0, tone: "red" }, { to: 3, tone: "yellow" }, { to: 10, tone: "green" }] };
-  (trend as any).sub = trend.weekChange;
+  
   (credit as any).viz = { type: "gauge", min: 250, max: 600, value: clampv(hyBps, 250, 600), ticks: [350, 450],
     zones: [{ to: 350, tone: "green" }, { to: 450, tone: "yellow" }, { to: 600, tone: "red" }] };
-  (credit as any).sub = credit.weekChange;
-  (economy as any).viz = { type: "gauge", min: 0, max: 0.8, value: clampv(MANUAL_SAHM.value, 0, 0.8), ticks: [0.3, 0.5],
+  
+  (economy as any).viz = { type: "gauge", min: 0, max: 0.8, value: clampv(sahm, 0, 0.8), ticks: [0.3, 0.5],
     zones: [{ to: 0.3, tone: "green" }, { to: 0.5, tone: "yellow" }, { to: 0.8, tone: "red" }] };
-  (economy as any).sub = claimsK == null ? null : `Claims ${Math.round(claimsK)}k · ${sgn(claimsChgPct, 0)}% vs 13 wks`;
+
   (earnings as any).viz = { type: "chip", text: MANUAL_EARNINGS.trend === "rising" ? "▲ Rising" : MANUAL_EARNINGS.trend === "flat" ? "→ Flat" : "▼ Being cut" };
-  (earnings as any).sub = MANUAL_EARNINGS.note.split(",")[0];
+
   (fed as any).viz = { type: "steps", steps: ["Cut", "Hold", "Hike"], active: MANUAL_FED_STANCE === "tightening" ? 2 : MANUAL_FED_STANCE === "holding" ? 1 : 0 };
-  (fed as any).sub = `Real rate ${realFed.toFixed(1)}% · ${MANUAL_FED_NEXT_MOVE.hikeOdds}% hike odds`;
+
   {
     const [val, sb, st] = context as any[];
     val.viz = { type: "gauge", min: -1, max: 3, value: clampv(MANUAL_BUFFETT_SIGMA, -1, 3), ticks: [1, 2],
@@ -2007,6 +2100,8 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
     coreReds === 3 ? "Broad deterioration" :
     trend.tone === "red" && coreReds === 2 ? "Correction with stress spreading" :
     trend.tone === "red" ? "Market-led correction" :
+    trendState === "pullback" && coreReds === 0 ? "Pullback inside an uptrend" :
+    trendState === "rolling" && coreReds === 0 ? "Uptrend rolling over" :
     trend.tone === "yellow" && coreReds === 0 ? "Uptrend losing cushion" :
     coreReds >= 1 ? `Market holding up while ${core.filter(c => c.tone === "red").map(c => c.title.toLowerCase()).join(" and ")} weakens` :
     "Healthy uptrend";
@@ -2014,7 +2109,7 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
   const watching = [credit, economy, earnings].filter(x => x.tone === "yellow");
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   const storyParts = [`${wvRegime}.`];
-  if (trend.tone === "red" && notConfirming.length) storyParts.push(`${cap(notConfirming.join(" and "))} ${notConfirming.length > 1 ? "are" : "is"} not confirming.`);
+  if ((trend.tone === "red" || trendState === "pullback") && notConfirming.length) storyParts.push(`${cap(notConfirming.join(" and "))} ${notConfirming.length > 1 ? "are" : "is"} not confirming.`);
   if (fed.tone === "red") storyParts.push("The Fed is the main risk.");
 
   // Lance's 4-week 200-day clock: trading days elapsed since the first break.
@@ -2039,6 +2134,8 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
     coreReds === 2 ? { text: "STRESS SPREADING", tone: "red" } :
     trend.tone === "red" ? { text: "CORRECTION", tone: "yellow" } :
     coreReds === 1 ? { text: "MIXED", tone: "yellow" } :
+    trendState === "pullback" ? { text: "PULLBACK", tone: "yellow" } :
+    trendState === "rolling" ? { text: "ROLLING OVER", tone: "yellow" } :
     trend.tone === "yellow" ? { text: "THIN CUSHION", tone: "yellow" } :
     { text: "UPTREND", tone: "green" };
 
@@ -2062,7 +2159,7 @@ const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[]
   {
     const jobs = MANUAL_CALENDAR.find(c => c.date >= todayEt && /jobs/i.test(c.item));
     const jobsLabel = jobs ? new Date(jobs.date + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : null;
-    watchList.push({ label: "Economy", text: `Sahm ${MANUAL_SAHM.value.toFixed(2)} (recession signal at 0.50)${claimsK != null ? `, claims ${Math.round(claimsK)}k` : ""}.${jobsLabel ? ` Next read: ${jobsLabel} jobs report.` : ""}`, tone: economy.tone });
+    watchList.push({ label: "Economy", text: `Sahm ${sahm.toFixed(2)} (recession signal at 0.50)${claimsK != null ? `, claims ${Math.round(claimsK)}k` : ""}.${jobsLabel ? ` Next read: ${jobsLabel} jobs report.` : ""}`, tone: economy.tone });
   }
   watchList.push({ label: "Earnings", text: `Forward EPS $${MANUAL_EARNINGS.fwdEps.toFixed(0)}, ${earnings.tone === "green" ? "estimates still rising" : earnings.tone === "yellow" ? "estimates flat" : "estimates being cut"}. Watch Q4 guidance into January.`, tone: earnings.tone });
   watchList.push({ label: "Fed", text: `${MANUAL_FED_NEXT_MOVE.hikeOdds}% odds of a ${MANUAL_FED_NEXT_MOVE.meeting} hike, core PCE ${MANUAL_CORE_PCE.value}%.${fed.tone === "red" ? " A 50 bp move is the risk." : ""}`, tone: fed.tone });
