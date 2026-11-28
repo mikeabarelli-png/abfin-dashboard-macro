@@ -1035,9 +1035,13 @@ export default function Page() {
             const lines: string[] = [];
             let deathCross = false;
             if (nearest.role === "Testing") {
-              lines.push(`Testing the ${nearest.label} from ${nearest.level > px ? "below" : "above"} at ${fmtWhole(nearest.level)}.`);
               const nextUp = above.find(a => a.key !== nearest.key);
-              if (nearest.level > px && nextUp) lines.push(`Clear it and the next resistance is the ${nextUp.label} at ${fmtWhole(nextUp.level)}.`);
+              if (nearest.level > px) {
+                lines.push(`The single level that matters is the ${nearest.label} at ${fmtWhole(nearest.level)}.`);
+                if (nextUp) lines.push(`A close above it opens a run at the ${nextUp.label} near ${fmtWhole(nextUp.level)}. Another rejection keeps this a bear-market rally until proven otherwise.`);
+              } else {
+                lines.push(`The S&P is sitting right on the ${nearest.label} at ${fmtWhole(nearest.level)}. That's support until it isn't.`);
+              }
             } else if (below.length === 0) {
               lines.push(`Below all three averages. Nearest resistance is the ${above[0].label} at ${fmtWhole(above[0].level)}, ${fmtPct(above[0].gap)} overhead.`);
             } else if (above.length === 0) {
@@ -1051,13 +1055,21 @@ export default function Page() {
                 lines.push(`The ${a.key} and ${b.key}-DMAs are stacked near ${fmtWhole((a.level + b.level) / 2)}, a heavier ${(a.level + b.level) / 2 > px ? "ceiling" : "floor"}.`);
               }
             }
-            if (slope200 != null) lines.push(slope200 > 0.02 ? "The 200-DMA is still rising, which favors a successful retest." : slope200 < -0.02 ? "The 200-DMA has turned down, a sign the long-term trend is weakening." : "The 200-DMA has flattened.");
+            if (slope200 != null) lines.push(slope200 > 0.02 ? "The good news is the 200-DMA is still rising. That's what a correction looks like, not a bear market." : slope200 < -0.02 ? "The 200-DMA has turned down. That's a warning that the long-term trend is weakening, not just pulling back." : "The 200-DMA has flattened, so the long-term trend is at a decision point.");
             if (spx50 != null && spx200 != null) {
               const g50 = ((spx50 - spx200) / spx200) * 100;
               if (g50 < 0) deathCross = true;
-              else if (slope50 != null && slope50 < -0.02 && g50 < 5) lines.push(`The 50-DMA is rolling over, ${g50.toFixed(1)}% above the 200. A cross below it would be a death cross.`);
+              else if (slope50 != null && slope50 < -0.02 && g50 < 5) lines.push(`The 50-DMA is rolling over, ${Math.round(spx50 - spx200)} pts above the 200. A death cross isn't imminent, but it's the trend to watch.`);
             }
 
+            // Breadth and risk line (manual, from Roberts)
+            const br = marketData?.weekly_view?.breadth;
+            if (br) {
+              if (br.tenDayAdvPct < br.thrustLine) lines.push(`Breadth isn't confirming yet. About ${br.tenDayAdvPct}% of stocks are advancing on a 10-day basis, and it takes ${br.thrustLine}% to confirm a breadth thrust.`);
+              else lines.push(`Breadth is confirming. ${br.tenDayAdvPct}% of stocks are advancing on a 10-day basis, above the ${br.thrustLine}% thrust line.`);
+              if (px > br.riskLine) lines.push(`The risk line is the Nov 20 low at ${fmtWhole(br.riskLine)}. A close below it voids the healing thesis.`);
+              else lines.push(`The S&P has closed below the Nov 20 low at ${fmtWhole(br.riskLine)}. The healing thesis is off the table.`);
+            }
             const ck = marketData?.weekly_view?.clock;
             const reclaimed = spx200 != null && px >= spx200;
             const ckColor = reclaimed ? "#4ade80" : ck?.expired ? "#ff6b88" : "#fbbf24";
