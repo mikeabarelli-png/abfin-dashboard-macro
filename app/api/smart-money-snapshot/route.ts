@@ -91,6 +91,60 @@ async function fetchChart(
   }
 }
 
+// ── DBMF holdings (live) ─────────────────────────────────────────────
+// Reads iMGP's public holdings table. Built to fail loudly: if the page
+// can't be parsed or fails validation, the route falls back to the manual
+// block and says so on the dashboard. Contract codes roll every quarter
+// (ESZ6 -> ESH7), so rows are matched by contract root, not full ticker.
+const DBMF_URL = "https://www.imgp.com/us/fund/US53700T8273-imgp-dbi-managed-futures-strategy-etf/";
+const DBMF_ROOTS: Record<string, { bucket: "bonds" | "fx" | "stocks" | "commod"; name: string }> = {
+  TU: { bucket: "bonds", name: "2-yr" }, FV: { bucket: "bonds", name: "5-yr" }, TY: { bucket: "bonds", name: "10-yr" },
+  TN: { bucket: "bonds", name: "ultra 10-yr" }, US: { bucket: "bonds", name: "30-yr" }, UB: { bucket: "bonds", name: "ultra bond" },
+  EC: { bucket: "fx", name: "euro" }, JY: { bucket: "fx", name: "yen" }, BP: { bucket: "fx", name: "pound" },
+  AD: { bucket: "fx", name: "Aussie dollar" }, CD: { bucket: "fx", name: "Canadian dollar" }, SF: { bucket: "fx", name: "franc" }, MP: { bucket: "fx", name: "peso" },
+  ES: { bucket: "stocks", name: "S&P" }, NQ: { bucket: "stocks", name: "Nasdaq" }, RTY: { bucket: "stocks", name: "Russell" },
+  YM: { bucket: "stocks", name: "Dow" }, MES: { bucket: "stocks", name: "EM" }, MFS: { bucket: "stocks", name: "EAFE" },
+  GC: { bucket: "commod", name: "gold" }, SI: { bucket: "commod", name: "silver" }, CL: { bucket: "commod", name: "crude" },
+  HG: { bucket: "commod", name: "copper" }, NG: { bucket: "commod", name: "nat gas" },
+};
+type DbmfLine = { root: string; bucket: string; name: string; weight: number };
+async function fetchDbmfHoldings(): Promise<{ asOf: string; nav: number; lines: DbmfLine[]; unknown: string[] } | { error: string }> {
+  try {
+    const res = await fetch(DBMF_URL, {
+      headers: { "User-Agent": "Mozilla/5.0 (personal dashboard)", Accept: "text/html" },
+      next: { revalidate: 21600 }, // the page updates daily, so check every 6 hours at most
+      signal: AbortSignal.timeout(8000),
+    } as RequestInit);
+    if (!res.ok) return { error: `HTTP ${res.status}` };
+    const html = await res.text();
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " | ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#43;/g, "+")
+      .replace(/\s+/g, " ");
+    const navM = text.match(/TOTAL NET ASSETS[^$]{0,80}\$\s*([\d,]+\.\d+)/i);
+    const nav = navM ? parseFloat(navM[1].replace(/,/g, "")) : NaN;
+    if (!(nav > 0)) return { error: "total net assets not found" };
+    const chunks = text.split(/(?=\b\d{2}\/\d{2}\/\d{4}\b)/);
+    const lines: DbmfLine[] = []; const unknown: string[] = []; let asOf = "";
+    for (const c of chunks) {
+      const dm = c.match(/^(\d{2})\/(\d{2})\/(\d{4})/); if (!dm) continue;
+      const tk = c.slice(0, 220).match(/\|\s*([A-Z]{1,4})[FGHJKMNQUVXZ]\d\s*\|/); if (!tk) continue;
+      const mv = c.match(/\$\s*(-?)\s*([\d,]+\.\d+)/); if (!mv) continue;
+      const value = (mv[1] === "-" ? -1 : 1) * parseFloat(mv[2].replace(/,/g, ""));
+      if (!asOf) asOf = `${dm[3]}-${dm[1]}-${dm[2]}`;
+      const meta = DBMF_ROOTS[tk[1]];
+      if (!meta) { unknown.push(tk[1]); continue; }
+      lines.push({ root: tk[1], bucket: meta.bucket, name: meta.name, weight: (value / nav) * 100 });
+    }
+    if (!asOf) return { error: "holdings date not found" };
+    if (lines.length < 4) return { error: `only ${lines.length} futures lines matched` };
+    if (lines.some(l => Math.abs(l.weight) > 300)) return { error: "weights failed sanity check" };
+    return { asOf, nav, lines, unknown };
+  } catch (e: any) {
+    return { error: e?.name === "TimeoutError" ? "timeout" : String(e?.message ?? e) };
+  }
+}
+
 async function fetchFred(seriesId: string, limit = 1, compareIndex = 1): Promise<{ value: number | null; prev: number | null; error?: string }> {
   const apiKey = process.env.FRED_API_KEY;
   if (!apiKey) return { value: null, prev: null, error: "FRED_API_KEY not set" };
@@ -682,7 +736,33 @@ export async function GET() {
   const MANUAL_SAHM = { value: 0.00, asOf: "Oct" };   // FRED SAHMREALTIME · next release with the Dec 4 jobs report
   const MANUAL_CORE_PCE = { value: 3.3, label: "Oct actual (BEA, Nov 25)" }; // next release with Nov data in Dec
   // Calendar: shown on the main page for the next 3 weeks. Add, never edit history.
-  const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[] = [
+  // ── Smart money positioning (manual) ─────────────────────────────────
+// Source: DBMF daily holdings (www.imgpfunds.com). DBMF replicates the big
+// trend-following CTAs, so its futures lines are a lagged read on where
+// that crowd is leaning. Weights are a share of NAV. Update weekly or after
+// big moves. Keep `prior` as the previous reading so arrows show change.
+const MANUAL_SMART_MONEY = {
+  // Net weights by bucket from the last reviewed reading. Live readings show
+  // change arrows against this. fx = net foreign currency (negative = long dollar).
+  baseline: { asOf: "Nov 27", bonds: -129, fx: -23, stocks: 7, commod: 1 },
+  asOf: "Nov 27",
+  source: "DBMF holdings",
+  summary: "Trend followers are betting on higher rates: heavy short Treasuries and long the dollar against the euro. Stocks are a small bet.",
+  items: [
+    { label: "Bonds",       stance: "Short", tone: "red",    change: null, text: "2-yr -56%, 10-yr -51%, 30-yr -22%. Biggest bet by far: rates stay high" },
+    { label: "Dollar",      stance: "Mixed", tone: "yellow", change: null, text: "Long vs the euro (-52% EUR), short vs the yen (+29% JPY)" },
+    { label: "Stocks",      stance: "Small long", tone: "yellow", change: null, text: "S&P +7%, EM +4%, EAFE -4%. Net about +7%, low conviction" },
+    { label: "Commodities", stance: "Mixed", tone: "yellow", change: null, text: "Long crude +9% (Iran), short gold -8%" },
+    { label: "Watch",       stance: "",      tone: "",       change: null, text: "If bonds keep rallying, covering those Treasury shorts adds fuel. Good for your bond sleeve" },
+  ],
+  strip: [
+    { label: "CTA positioning", value: "-3.3σ", source: "Citadel, Nov 4" },
+    { label: "Hedge fund net leverage", value: "73.4%", source: "Goldman, Oct" },
+    { label: "Retail flows", value: "22 days of net buying", source: "Citadel, early Nov" },
+  ],
+};
+
+const MANUAL_CALENDAR: { date: string; item: string; kind: "market" | "plan" }[] = [
     { date: "2026-11-23", item: "Fed's Williams speaks · flash PMIs", kind: "market" },
     { date: "2026-11-24", item: "Consumer confidence", kind: "market" },
     { date: "2026-11-25", item: "Core PCE, Q3 GDP (2nd est.), claims, Beige Book", kind: "market" },
@@ -714,7 +794,8 @@ export async function GET() {
   const spxWeeklyP = fetchChart("^GSPC", 3660, "1wk");
   const veaDailyP = fetchChart("VEA", 420);   // Graded Ivy · Intl
   const spxMonthlyP = fetchChart("^GSPC", 5480, "1mo");
-  const claimsP = fetchFred("ICSA", 14, 13);          // weekly jobless claims, latest vs 13 weeks back
+  const claimsP = fetchFred("ICSA", 14, 13);
+  const dbmfP = fetchDbmfHoldings();          // weekly jobless claims, latest vs 13 weeks back
   const tenYrMonthP = fetchFred("DGS10", 23, 21);     // 10-year yield, latest vs ~1 month back (stocks vs bonds)
   const [
     [spx, qqq, vix, dxy, putCall, fredReal10y, fredNom10y, fredHY, fredYC, fredFedFunds, fredBreakeven, peData, capeData, fearGreedData, ivyVTI, ivyVEU, ivyIEF, ivyVNQ, ivyDBC, fredWALCL, djt, brent, breadthResult],
@@ -1957,6 +2038,65 @@ export async function GET() {
     asOf: new Date().toISOString(),
   };
 
+  // ── Smart money: live DBMF read, manual fallback, stale flag ──
+  const dbmf = await dbmfP;
+  const smartMoney: any = { ...MANUAL_SMART_MONEY, live: false, stale: false, status: "manual" };
+  {
+    const ageDays = (iso: string) => (Date.now() - new Date(iso + "T12:00:00Z").getTime()) / 86400000;
+    if ("error" in dbmf) {
+      smartMoney.status = `Live fetch failed (${dbmf.error}). Showing the ${MANUAL_SMART_MONEY.asOf} manual reading`;
+      diagnostics["dbmf"] = dbmf.error;
+    } else {
+      const w = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v)}%`;
+      const by = (b: string) => dbmf.lines.filter(l => l.bucket === b).sort((a, c) => Math.abs(c.weight) - Math.abs(a.weight));
+      const net = (b: string) => by(b).reduce((a, l) => a + l.weight, 0);
+      const mixed = (b: string) => { const L = by(b).filter(l => Math.abs(l.weight) >= 5); return L.some(l => l.weight > 0) && L.some(l => l.weight < 0); };
+      const stanceOf = (v: number, isMixed: boolean) => isMixed ? "Mixed" : v <= -10 ? "Short" : v >= 10 ? "Long" : Math.abs(v) < 3 ? "Flat" : v > 0 ? "Small long" : "Small short";
+      const toneOf = (st: string) => st === "Short" ? "red" : st === "Long" ? "green" : "yellow";
+      const base = MANUAL_SMART_MONEY.baseline as Record<string, any>;
+      const chg = (key: string, v: number) => { const d = v - base[key]; return Math.abs(d) >= 10 ? `${d > 0 ? "▲" : "▼"} ${w(d)} vs ${base.asOf}` : null; };
+
+      const nb = net("bonds"), nf = net("fx"), ns = net("stocks"), nc = net("commod");
+      const items: any[] = [];
+      if (by("bonds").length) { const st = stanceOf(nb, false);
+        items.push({ label: "Bonds", stance: st, tone: toneOf(st), change: chg("bonds", nb),
+          text: `${by("bonds").map(l => `${l.name} ${w(l.weight)}`).join(", ")}.${nb <= -10 ? " Betting rates stay high" : nb >= 10 ? " Betting rates fall" : ""}` }); }
+      if (by("fx").length) { const m = mixed("fx"); const st = m ? "Mixed" : nf <= -10 ? "Long" : nf >= 10 ? "Short" : "Flat";
+        items.push({ label: "Dollar", stance: st, tone: m ? "yellow" : toneOf(st), change: chg("fx", nf),
+          text: by("fx").map(l => `${l.weight < 0 ? "long vs the" : "short vs the"} ${l.name} (${w(l.weight)})`).join(", ").replace(/^./, c => c.toUpperCase()) }); }
+      if (by("stocks").length) { const st = stanceOf(ns, false);
+        items.push({ label: "Stocks", stance: st, tone: toneOf(st), change: chg("stocks", ns),
+          text: `${by("stocks").map(l => `${l.name} ${w(l.weight)}`).join(", ")}. Net about ${w(ns)}${Math.abs(ns) < 15 ? ", low conviction" : ""}` }); }
+      if (by("commod").length) { const m = mixed("commod"); const st = stanceOf(nc, m);
+        items.push({ label: "Commodities", stance: st, tone: toneOf(st), change: chg("commod", nc),
+          text: by("commod").map(l => `${l.weight >= 0 ? "long" : "short"} ${l.name} ${w(l.weight)}`).join(", ").replace(/^./, c => c.toUpperCase()) }); }
+      const watch = nb <= -40 ? "If bonds keep rallying, covering those Treasury shorts adds fuel. Good for your bond sleeve"
+        : nb >= 40 ? "A rate scare would force these funds to sell bonds, adding to the pressure"
+        : ns <= -20 ? "Heavy short stocks: a rally would force covering and speed it up"
+        : ns >= 40 ? "Crowded long stocks: a trend break would force selling"
+        : "No crowded position. Flows are unlikely to drive the next move";
+      items.push({ label: "Watch", stance: "", tone: "", change: null, text: watch });
+
+      const buckets = [
+        { k: "bonds", v: nb, phrase: nb < 0 ? `short Treasuries (net ${w(nb)}), a bet on higher rates` : `long Treasuries (net ${w(nb)}), a bet on lower rates` },
+        { k: "fx", v: nf, phrase: nf < 0 ? "long the dollar" : "short the dollar" },
+        { k: "stocks", v: ns, phrase: ns < 0 ? `short stocks (net ${w(ns)})` : `long stocks (net ${w(ns)})` },
+        { k: "commod", v: nc, phrase: nc < 0 ? "short commodities" : "long commodities" },
+      ].sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
+      const top = buckets[0];
+      const stockNote = top.k === "stocks" ? "" : Math.abs(ns) < 15 ? " Stocks are a small bet." : ` Stocks: ${ns < 0 ? "short" : "long"} ${w(ns)}.`;
+      const d = new Date(dbmf.asOf + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+      const stale = ageDays(dbmf.asOf) > 7;
+      Object.assign(smartMoney, {
+        live: true, stale, asOf: d, items,
+        summary: `Trend followers' biggest bet: ${top.phrase}.${stockNote}`,
+        status: stale ? `Holdings dated ${d}, more than a week old. Check the iMGP page` : `Live from iMGP`,
+        unknownRoots: dbmf.unknown,
+      });
+      if (dbmf.unknown.length) diagnostics["dbmf_unknown_roots"] = dbmf.unknown.join(",");
+    }
+  }
+
   return NextResponse.json({
     ok: hasPartialData,
     status,
@@ -1973,6 +2113,7 @@ export async function GET() {
     vix: vixPrice,
     fallbacks_in_use: fallbacksInUse,
     weekly_view: weeklyView,
+    smart_money: smartMoney,
     metrics: {
       spx_price: spxPrice,
       spx_change_pct: spxChangePct,
